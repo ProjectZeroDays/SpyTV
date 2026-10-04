@@ -628,3 +628,86 @@ def test_scan_pipeline_reports_monotonic_progress():
     assert seen, "no progress reported"
     assert all(b >= a for a, b in zip(seen, seen[1:])), seen
     assert seen[-1] == 1.0, seen[-1]
+
+
+def test_open_ports_alone_do_not_make_a_host_vulnerable(monkeypatch):
+    """Report: *"a device shows as vuln but doesn't list device type or cve"*.
+
+    scan_network() used to set ``vulnerable: len(open_ports) > 0`` and
+    perform_scan() never revised it, so any host answering on port 80 came back
+    as Vulnerable with ``device_type: "Unknown"`` and no CVEs — while
+    /api/check said "not confirmed" for the same host. The verdict is decided
+    in finalize_findings() and must default to *not proven*.
+    """
+    import c2_ops
+
+    def _fake_scan_network(cidr=None, progress_cb=None):
+        if progress_cb:
+            progress_cb(1.0)
+        # Deliberately prejudged the way the old code prejudged it.
+        return [{"ip": "10.1.10.35", "open_ports": [80],
+                 "device_type": "Unknown", "vulnerable": True,
+                 "detected": True}]
+
+    class _NoFamilyScanner:
+        def scan_network(self, cidr=None, progress_cb=None):
+            if progress_cb:
+                progress_cb(1.0)
+            return []
+
+        def detect_tv_type(self, ip, open_ports):
+            return None, None
+
+    monkeypatch.setattr(c2_ops, "scan_network", _fake_scan_network)
+    monkeypatch.setattr(c2_ops, "probe_many",
+                        lambda jobs, on_progress=None: [False] * len(jobs))
+
+    results = c2_ops.perform_scan("10.1.10.0/24", _NoFamilyScanner())
+
+    assert len(results) == 1
+    finding = results[0]
+    assert finding["vulnerable"] is False, finding
+    assert finding["detected"] is True, finding
+    assert not finding.get("cves"), finding
+    assert not finding.get("cve_ids"), finding
+    assert finding["open_ports"] == [80], finding
+
+
+def test_a_matched_family_still_counts_as_vulnerable(monkeypatch):
+    """The honesty fix must not neuter the real signal: a host whose signature
+    port matches a family keeps vulnerable=True, its CVE ids and severity."""
+    import c2_ops
+
+    def _fake_scan_network(cidr=None, progress_cb=None):
+        if progress_cb:
+            progress_cb(1.0)
+        return [{"ip": "10.2.0.1", "open_ports": [7676],
+                 "device_type": "Unknown", "vulnerable": False,
+                 "detected": True}]
+
+    class _TizenScanner:
+        def scan_network(self, cidr=None, progress_cb=None):
+            if progress_cb:
+                progress_cb(1.0)
+            return []
+
+        def detect_tv_type(self, ip, open_ports):
+            if 7676 in open_ports:
+                return "samsung-tizen", {
+                    "name": "Samsung Tizen TV",
+                    "cves": [{"id": "CVE-2023-0001", "severity": "HIGH"}],
+                }
+            return None, None
+
+    monkeypatch.setattr(c2_ops, "scan_network", _fake_scan_network)
+    monkeypatch.setattr(c2_ops, "probe_many",
+                        lambda jobs, on_progress=None: [False] * len(jobs))
+
+    results = c2_ops.perform_scan("10.2.0.0/24", _TizenScanner())
+
+    finding = results[0]
+    assert finding["vulnerable"] is True, finding
+    assert finding["tv_type"] == "samsung-tizen", finding
+    assert finding["device_type"] == "Samsung Tizen TV", finding
+    assert finding["cve_ids"] == ["CVE-2023-0001"], finding
+    assert finding["severity"] == "HIGH", finding

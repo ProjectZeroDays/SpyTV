@@ -126,7 +126,13 @@ def scan_network(cidr=None, progress_cb=None):
                 "ip": ip,
                 "open_ports": open_ports,
                 "device_type": device_type,
-                "vulnerable": len(open_ports) > 0,
+                # Ports being open proves the host EXISTS, not that it is
+                # vulnerable. This used to be `len(open_ports) > 0`, which
+                # listed any box answering on port 80 as "Vulnerable" with no
+                # device type and no CVEs — and contradicted /api/check, which
+                # reported the same host as "not confirmed".
+                "vulnerable": False,
+                "detected": True,
                 "scanned_at": utc_now_iso()
             })
 
@@ -229,23 +235,49 @@ def perform_scan(cidr, scanner, progress_cb=None):
             by_ip[f["ip"]] = f
             scanned_ips.add(f["ip"])
 
-    # Attach CVE details to every finding that matched a family.
+    # Normalise every finding's verdict against what was actually proven.
+    return finalize_findings(results, scanner)
+
+
+def finalize_findings(results, scanner):
+    """Turn discovery results into findings whose ``vulnerable`` flag is honest.
+
+    ``scan_network()`` only proves a host is up, so it must not decide the
+    verdict. A finding is ``vulnerable`` **only** when a CVE list matched or a
+    family signature was recognised; anything else is merely ``detected`` —
+    ports open, identity unconfirmed.
+
+    This is where the report *"a device shows as vuln but doesn't list device
+    type or cve"* came from: the flag was set by discovery and never revised,
+    so a host with nothing but port 80 on it kept ``vulnerable: true`` while
+    carrying ``device_type: "Unknown"`` and no ``cves`` at all.
+    """
     for r in results:
-        if r.get("cves"):
-            r["vulnerable"] = True
-            r["cve_ids"] = [c["id"] for c in r["cves"]]
-            r["severity"] = max(
-                (c.get("severity") or "LOW" for c in r["cves"]),
-                key=lambda s: ["LOW", "MEDIUM", "HIGH", "CRITICAL"].index(s)
-                if s in ("LOW", "MEDIUM", "HIGH", "CRITICAL") else 0)
-        else:
+        r.setdefault("detected", bool(r.get("open_ports")))
+
+        # No CVE list yet — ask whether the open ports match a known family.
+        if not r.get("cves"):
             tv_type, info = scanner.detect_tv_type(r["ip"], r.get("open_ports", []))
             if info:
                 r["tv_type"] = tv_type
                 r["name"] = info["name"]
                 r["cves"] = info["cves"]
-                r["cve_ids"] = [c["id"] for c in info["cves"]]
-                r["vulnerable"] = True
+                r["device_type"] = info["name"]
+
+        if r.get("cves"):
+            r["vulnerable"] = True
+            r["cve_ids"] = [c["id"] for c in r["cves"]]
+            # Computed for BOTH sources: family detection used to skip this, so
+            # a device found only by its signature port got cve_ids but no
+            # severity and the table could not show how bad it was.
+            r["severity"] = max(
+                (c.get("severity") or "LOW" for c in r["cves"]),
+                key=lambda s: ["LOW", "MEDIUM", "HIGH", "CRITICAL"].index(s)
+                if s in ("LOW", "MEDIUM", "HIGH", "CRITICAL") else 0)
+        else:
+            # Nothing matched: say so instead of inheriting discovery's guess.
+            r["vulnerable"] = False
+            r.setdefault("device_type", "Unknown")
 
     return results
 

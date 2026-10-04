@@ -471,6 +471,9 @@
   .badge-success { background: var(--success-light); color: var(--success); }
   .badge-danger { background: var(--danger-light); color: var(--danger); }
   .badge-warning { background: var(--warning-light); color: var(--warning); }
+  /* "Ports open, nothing proven": deliberately neither green (safe) nor amber
+     (vulnerable) — the scan found a host but matched no family and no CVE. */
+  .badge-muted { background: var(--bg); color: var(--text-muted); border: 1px solid var(--border); }
 
   /* Log */
   .log-container {
@@ -876,6 +879,8 @@
               <option value="roku-ecp">Roku</option>
               <option value="vizio-dial">Vizio SmartCast</option>
               <option value="chromecast-cast">Chromecast / Google TV</option>
+              <option value="hisense">Hisense VIDAA</option>
+              <option value="tcl">TCL Android TV</option>
               <option value="dlna">DLNA (Generic)</option>
             </select>
           </div>
@@ -1535,24 +1540,35 @@ function renderScanResults(results) {
           const chips = cves.length
             ? cves.slice(0, 4).map(c => `<span class="cve-chip ${(c.severity || '').toLowerCase()}">${c.id}</span>`).join('')
               + (cves.length > 4 ? `<span class="cve-chip">+${cves.length - 4}</span>` : '')
-            : '<span style="color:var(--text-muted);font-size:11px">—</span>';
+            : '<span style="color:var(--text-muted);font-size:11px">no CVE match</span>';
+          // "Unknown" was printed literally, which read as a missing field.
+          const rawName = String(r.name || r.device_type || '').trim();
+          const deviceLabel = (!rawName || rawName.toLowerCase() === 'unknown')
+            ? 'Unidentified device' : rawName;
+          // Verdict comes from what was proven: open ports alone are not a
+          // vulnerability, so they must not render as an amber "Vulnerable"
+          // badge with an empty CVE column.
+          const status = r.vulnerable
+            ? `<span class="badge badge-warning">${escapeHtml(r.severity || 'Vulnerable')}</span>`
+            : '<span class="badge badge-muted">Not confirmed</span>';
           return `
           <tr>
             <td class="mono">${r.ip}</td>
-            <td>${r.name || r.device_type}</td>
+            <td>${escapeHtml(deviceLabel)}</td>
             <td class="mono">${(r.open_ports || []).join(', ')}</td>
             <td><div class="cve-chips" style="margin-top:0">${chips}</div></td>
-            <td><span class="badge ${r.vulnerable ? 'badge-warning' : 'badge-success'}">${r.vulnerable ? (r.severity || 'Vulnerable') : 'Safe'}</span></td>
+            <td>${status}</td>
             <td>
-              <button class="btn btn-sm" onclick="checkTarget('${r.ip}')" data-tooltip="Verify device before exploitation">Check</button>
-              <button class="btn btn-sm btn-primary" onclick="exploitTarget('${r.ip}', '${r.name || r.device_type}')" data-tooltip="Generate and deploy exploit">Exploit</button>
-              <button class="btn btn-sm btn-success" onclick="patchScanTarget('${r.ip}', '${r.tv_type || ''}')" data-tooltip="Execute remediation commands for this device family (fixes matched CVEs)">&#128736; Patch</button>
+              <button class="btn btn-sm" onclick="checkTarget('${jsAttr(r.ip)}')" data-tooltip="Verify device before exploitation">Check</button>
+              <button class="btn btn-sm btn-primary" onclick="exploitTarget('${jsAttr(r.ip)}', '${jsAttr(deviceLabel)}', '${jsAttr(r.tv_type || '')}')" data-tooltip="Run this family's exploit module against the target and report the real result">Exploit</button>
+              <button class="btn btn-sm btn-success" onclick="patchScanTarget('${jsAttr(r.ip)}', '${jsAttr(r.tv_type || '')}')" data-tooltip="Execute remediation commands for this device family (fixes matched CVEs)">&#128736; Patch</button>
             </td>
           </tr>`;
         }).join('')}
       </tbody>
     </table>
     </div>
+    <div id="scan-action-status"></div>
   `;
 }
 
@@ -1626,24 +1642,66 @@ function clearScanResults() {
   addLog('Scan results cleared');
 }
 
-function exploitTarget(ip, deviceType) {
-  const familyMap = {
-    'Samsung Tizen': 'tizen-dev',
-    'LG webOS': 'webos-dev',
-    'Android TV/Fire TV': 'adb-net',
-    'Roku': 'roku-ecp',
-    'Vizio': 'vizio-dial',
-    'Chromecast': 'chromecast-cast',
-    'Chromecast / Google TV': 'chromecast-cast',
-    'Unknown': 'dlna'
-  };
-  let family = familyMap[deviceType] || 'dlna';
-  const tvT = familyToTvType(deviceType);
-  if (tvT === 'chromecast') family = 'chromecast-cast';
+// tv_type -> the value #payload-family expects. Keys are taken from
+// TV_CVE_DATABASE, i.e. the same list /api/exploit resolves.
+const TVTYPE_TO_FAMILY = {
+  'samsung-tizen': 'tizen-dev',
+  'lg-webos': 'webos-dev',
+  'android-tv': 'adb-net',
+  'roku': 'roku-ecp',
+  'vizio': 'vizio-dial',
+  'chromecast': 'chromecast-cast',
+  'hisense': 'hisense',
+  'tcl': 'tcl',
+};
+
+// Row button "Exploit".
+//
+// This used to look up a family in a map keyed 'LG webOS' while the row
+// rendered 'LG webOS TV', so the lookup missed and the `|| 'dlna'` fallback
+// won for *every* device — and DLNA has no entry in TV_CVE_DATABASE or
+// CVE_EXPLOITS, so /api/exploit could only answer 404. The click then merely
+// pre-filled a form and switched tabs, with nothing written to the card, so
+// "the exploit button doesn't work" was literally true: nothing ran and
+// nothing said why.
+async function exploitTarget(ip, deviceType, tvType) {
+  const tv = String(tvType || familyToTvType(deviceType) || '').trim();
+  const family = TVTYPE_TO_FAMILY[tv] || null;
+
   document.getElementById('payload-ip').value = ip;
-  document.getElementById('payload-family').value = family;
+  // select.value only sticks when the option exists; otherwise it silently
+  // keeps whatever was chosen before, which would run the wrong family.
+  if (family) document.getElementById('payload-family').value = family;
   switchTab('payload');
-  addLog(`Target selected: ${ip} (${family})`);
+
+  const row = (Array.isArray(lastScanResults) ? lastScanResults : [])
+    .find(r => r && r.ip === ip) || {};
+  const confirmed = !!row.vulnerable
+    && Array.isArray(row.cves) && row.cves.length > 0;
+
+  if (!family) {
+    setPayloadStatus(
+      '<div class="alert alert-warning">No TV family could be identified for '
+      + escapeHtml(ip) + ', so no exploit module can be selected. Press '
+      + '<strong>Check</strong> on that row first — it reports what the host '
+      + 'actually is.</div>');
+    addLog(`Exploit on ${ip}: family unknown — run Check before exploiting`);
+    return;
+  }
+
+  if (!confirmed) {
+    setPayloadStatus(
+      '<div class="alert alert-warning">Loaded ' + escapeHtml(ip)
+      + ' as <strong>' + escapeHtml(family) + '</strong>, but the scan found '
+      + 'no confirmed CVE for it, so nothing was run. Press <strong>Check</strong> '
+      + 'to verify the device, or <strong>Exploit</strong> below to run this '
+      + 'family\'s module anyway.</div>');
+    addLog(`Target selected: ${ip} (${family}) — no confirmed CVE, exploit not run`);
+    return;
+  }
+
+  addLog(`Target selected: ${ip} (${family}) — running the exploit module...`);
+  await deployPayload();
 }
 
 // Payload Generator
@@ -1730,7 +1788,9 @@ async function deployPayload() {
   addLog(`Exploit on ${targetIp} (${family}) — running the exploit module...`);
   try {
     const res = await api('/api/exploit', 'POST',
-                          { ip: targetIp, family, tv_type: tvType });
+                          // `|| ''` not `|| null`: a null tv_type arrives as the
+                          // string 'None' server-side and skips family lookup.
+                          { ip: targetIp, family, tv_type: tvType || '' });
     if (res.error || res.attempted === false) {
       const why = res.error || 'no module available';
       addLog(`Exploit not run on ${targetIp}: ${why}`);
@@ -1889,14 +1949,40 @@ async function patchForCVE(tvType, cveId) {
 }
 
 async function patchScanTarget(ip, tvType) {
-  if (!tvType) { addLog(`No CVE profile for ${ip} — nothing to patch`); return; }
+  // Results land in the panel directly under the table (renderScanResults
+  // recreates it, so a later scan clears it). Writing to setScanStatus() would
+  // erase the whole results table — it targets #scan-results too.
+  const slot = document.getElementById('scan-action-status');
+  const say = (html) => { if (slot) slot.innerHTML = html; };
+
+  if (!tvType) {
+    const msg = `No CVE profile for ${ip} — nothing to patch`;
+    addLog(msg);
+    say('<div class="alert alert-warning" style="margin-top:12px">'
+      + escapeHtml(msg) + '. Only a family match can be remediated — press '
+      + '<strong>Check</strong> on that row first.</div>');
+    return;
+  }
   addLog(`Patching ${ip} (${tvType}) — executing remediation commands...`);
+  say('<p style="color:var(--text-muted);font-size:13px;padding:10px 0">Patching '
+    + escapeHtml(ip) + ' (' + escapeHtml(tvType) + ') — running remediation '
+    + 'commands…</p>');
   try {
     const res = await api('/api/cve/patch', 'POST', { ip, tv_type: tvType });
-    const ok = (res.patches || []).filter(p => p.status === 'ok' || p.status === 'executed').length;
-    addLog(`Patch on ${ip}: ${ok}/${res.total} commands ok — fixed ${(res.cves_fixed || []).join(', ')}`);
+    if (res && res.error) throw new Error((res.errors || [res.error]).join(' '));
+    const patches = Array.isArray(res.patches) ? res.patches : [];
+    const ok = patches.filter(p => p.status === 'ok' || p.status === 'executed').length;
+    const fixed = Array.isArray(res.cves_fixed) ? res.cves_fixed : [];
+    addLog(`Patch on ${ip}: ${ok}/${res.total} commands ok — fixed ${fixed.join(', ')}`);
+    say('<div class="alert alert-success" style="margin-top:12px">Patched '
+      + escapeHtml(ip) + ': ' + ok + '/' + (res.total !== undefined ? res.total : patches.length)
+      + ' commands ok — fixed ' + escapeHtml(fixed.join(', ') || 'no CVE list returned')
+      + '.</div>');
   } catch (e) {
-    addLog(`Patch failed: ${e}`);
+    const msg = (e && e.message) || String(e);
+    addLog(`Patch failed on ${ip}: ${msg}`);
+    say('<div class="alert alert-warning" style="margin-top:12px">Patch failed on '
+      + escapeHtml(ip) + ': ' + escapeHtml(msg) + '</div>');
   }
 }
 
@@ -1954,6 +2040,18 @@ function renderFeed() {
 function escapeHtml(s) {
   return String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+// For values interpolated into an inline `onclick="…'…'"` handler.
+// escapeHtml() deliberately leaves apostrophes alone (they need no escaping in
+// HTML text), but inside a single-quoted JS string one splits the argument
+// list and the handler dies with a SyntaxError — a button that does nothing.
+// Escape the JS string first, then the HTML attribute: the other order lets
+// &#39; decode back to ' before the script is parsed.
+function jsAttr(s) {
+  return String(s == null ? '' : s)
+    .replace(/\\/g, '\\\\').replace(/'/g, "\\'")
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 function inlineMd(s) {
   return s

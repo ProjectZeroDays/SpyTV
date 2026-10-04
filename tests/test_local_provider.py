@@ -23,6 +23,18 @@ class _StubHandler(BaseHTTPRequestHandler):
     def log_message(self, *args):  # keep test output quiet
         pass
 
+    def _drain_body(self):
+        """Read and discard the whole request body before answering."""
+        try:
+            remaining = int(self.headers.get("Content-Length", 0) or 0)
+        except ValueError:
+            return
+        while remaining > 0:
+            chunk = self.rfile.read(min(remaining, 65536))
+            if not chunk:
+                return
+            remaining -= len(chunk)
+
     def _json(self, code, payload):
         body = json.dumps(payload).encode()
         try:
@@ -47,6 +59,12 @@ class _StubHandler(BaseHTTPRequestHandler):
             pass
 
     def do_POST(self):
+        # Answer only after the body has been fully read. Replying first and
+        # closing left the client mid-write, and Windows reports that as
+        # [WinError 10053] "An established connection was aborted" *in the
+        # client* — which is why test_generate_exploit_without_key failed only
+        # some of the time, depending on how fast the response won the race.
+        self._drain_body()
         try:
             if self.path.rstrip("/").endswith("/chat/completions"):
                 self._json(200, {

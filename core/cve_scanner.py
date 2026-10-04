@@ -7,6 +7,7 @@ import ipaddress
 import socket
 import subprocess
 import re
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from colorama import Fore, Style
 
@@ -24,6 +25,21 @@ MAX_SCAN_HOSTS = 1024
 # keeping the fan-out modest enough not to disturb the LAN.
 SCAN_WORKERS = 64
 
+# How many probes may be in flight against ONE host at a time.
+#
+# Measured against a TV simulator that accepts every connection (16 signature
+# ports, sequential reference result 16/16):
+#
+#     workers=64 -> 3/16   workers=8 -> 13/16
+#     workers=16 -> 8/16   workers=4 -> 16/16  (2 and 1 also 16/16)
+#
+# 64 concurrent SYNs to a single device drop more than half of them, and the
+# ports that survive decide which family detect_tv_type() picks. That is how
+# the same television came back as "LG webOS" from the scan (only 3000 was
+# seen) and "Samsung Tizen" from /api/check (which probes sequentially) — two
+# different CVE sets and two different exploit modules for one device.
+PER_HOST_WORKERS = 4
+
 
 def probe_port(ip, port, timeout=0.3):
     """One TCP connect probe. Never raises — a failed probe reads as closed."""
@@ -38,8 +54,14 @@ def probe_port(ip, port, timeout=0.3):
         return False
 
 
-def probe_many(jobs, workers=SCAN_WORKERS, on_progress=None):
+def probe_many(jobs, workers=SCAN_WORKERS, on_progress=None,
+               per_host=PER_HOST_WORKERS):
     """Probe ``(ip, port)`` jobs concurrently and return results in job order.
+
+    Parallelism is spread across hosts, never across the ports of a single
+    host: each address gets its own ``per_host`` semaphore, and the work queue
+    is ordered port-major so the pool doesn't hand its first 64 jobs to four
+    devices and then block on the per-host caps.
 
     ``on_progress(done, total)`` fires only on the calling thread, so callers
     can push it straight through to the UI without extra locking.
@@ -50,9 +72,27 @@ def probe_many(jobs, workers=SCAN_WORKERS, on_progress=None):
             on_progress(0, 0)
         return results
     workers = max(1, min(int(workers), len(jobs)))
+    per_host = max(1, int(per_host))
+
+    # One semaphore per address, created up front so the workers never race to
+    # build them. Dict insertion order is stable, which keeps runs repeatable.
+    limits = {}
+    for ip, _port in jobs:
+        if ip not in limits:
+            limits[ip] = threading.Semaphore(per_host)
+
+    # Port-major: with a host-major list the first `workers` jobs all belong to
+    # the first few addresses, so every pool thread sits on the same device and
+    # the caps leave most of the pool idle.
+    order = sorted(range(len(jobs)), key=lambda i: (jobs[i][1], jobs[i][0]))
+
+    def _run(idx):
+        ip, port = jobs[idx]
+        with limits[ip]:
+            return probe_port(ip, port)
+
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        pending = {pool.submit(probe_port, ip, port): idx
-                   for idx, (ip, port) in enumerate(jobs)}
+        pending = {pool.submit(_run, idx): idx for idx in order}
         done = 0
         for fut in as_completed(pending):
             results[pending[fut]] = bool(fut.result())

@@ -1,5 +1,140 @@
 # SpyTV Code Changes Log
 
+## [2026-10-04] — A host could be "Vulnerable" with no CVEs, and every row's Exploit button targeted DLNA (v1.0.7)
+
+### "A device shows as vuln but doesn't list device type or cve"
+- `c2_ops.scan_network()` set `"vulnerable": len(open_ports) > 0`. Any host
+  answering on **any** of the twelve probe ports was therefore marked
+  vulnerable — the flag meant "this host exists". `perform_scan()` then only
+  ever *raised* it (`if r.get("cves"): r["vulnerable"] = True`, and the same
+  after `detect_tv_type()`), never lowered it, so a host that matched **no**
+  family and **no** CVE kept discovery's guess: `device_type: "Unknown"`,
+  `vulnerable: true`, `cves` absent.
+- It also contradicted the read-only control sitting next to it:
+  `check_target()` already computed `vulnerable: bool(finding) and
+  bool(cves)`, so **Check said "not confirmed" for a device Scan had just
+  called vulnerable**. That disagreement is what made the report sound
+  impossible.
+- `scan_network()` now records `"vulnerable": False, "detected": True`, and
+  the verdict is decided in one place — `finalize_findings(results, scanner)`:
+  a finding is `vulnerable` **only** if a CVE list matched or a family
+  signature was recognised; otherwise it is merely `detected`.
+- `severity` is now computed for **both** sources. A device found only by its
+  signature port got `cve_ids` but no `severity`, so the table could not show
+  how bad it was.
+- `device_type` is set to the matched family's name instead of staying
+  `Unknown`, and the dashboard renders an unmatched host as *Unidentified
+  device* with a neutral `Not confirmed` badge (new `.badge-muted`) rather
+  than an amber *Vulnerable* with an empty CVE column that read as *Safe*.
+- Verified live against the real pipeline (`perform_scan("10.2.0.0/30")`,
+  then the same via `POST /api/scan`):
+  | host | open ports | device_type | vulnerable | CVEs |
+  |---|---|---|---|---|
+  | `10.2.0.1` (TV) | 16 | LG webOS TV → Samsung Tizen TV | `true` | 4 → 5 |
+  | `10.2.0.2` (this machine, :80) | 1 | Unidentified | **`false`** | 0 |
+  Findings claiming `vulnerable` with zero CVEs: **0** (was 1).
+
+### The row "Exploit" button never ran anything — and always chose DLNA
+- `exploitTarget()` looked the device up in a `familyMap` keyed
+  `'Samsung Tizen'`, `'LG webOS'`, `'Roku'`… while `renderScanResults()`
+  passes `r.name || r.device_type`, i.e. `'Samsung Tizen TV'`,
+  `'LG webOS TV'`, `'Roku TV'`. **No key ever matched**, so the
+  `|| 'dlna'` fallback won for every device (only `chromecast` was rescued by
+  a special case). Confirmed by driving the real script in Node:
+  `exploitTarget('10.1.10.41','LG webOS TV')` → `payload-family: "dlna"`.
+- DLNA has no entry in `TV_CVE_DATABASE` or `CVE_EXPLOITS`, so
+  `/api/exploit` could only answer `404 no exploit module`. Even that 404 was
+  never shown, because the function **only pre-filled a form and switched
+  tabs** — nothing was written to `#payload-output`, so a click produced no
+  visible effect at all. That is the report: *"the exploit button doesn't
+  work"*.
+- It now resolves the family from the row's **`tv_type`** through a new
+  `TVTYPE_TO_FAMILY` table (keys taken from `TV_CVE_DATABASE`), and:
+  - a recognised family + confirmed CVEs → **runs the module** and reports the
+    real outcome on the card;
+  - a recognised family with **no confirmed CVE** → loads the target, does
+    *not* run, and says why (offer: Check to verify, Exploit to run anyway);
+  - **no identifiable family** → refuses and leaves the `<select>` alone
+    rather than silently claiming DLNA.
+- `select.value` only sticks when the option exists, so **Hisense and TCL were
+  unreachable** — they are in `TV_CVE_DATABASE`, `CVE_EXPLOITS` and both
+  family maps, but had no `<option>`, so a row could not target them. Added.
+- `deployPayload()` posted `tv_type: null`, which arrived server-side as the
+  literal string `'None'` (truthy) and skipped family lookup. Both it and
+  `/api/exploit` now normalise `null` → `""`.
+
+### Scan and Check disagreed about which television a host was
+- Measured on the same host, seconds apart: `/api/scan` said **LG webOS**
+  (4 CVEs), `/api/check` said **Samsung Tizen** (5 CVEs) — two different CVE
+  sets and two different exploit modules for one device.
+- `detect_tv_type()` is first-match over `TV_CVE_DATABASE` order, so the
+  winner depends entirely on which ports the caller happened to see. The scan
+  gets its ports from `probe_many()` (pooled); Check uses `probe_ports()`
+  (sequential).
+- Root cause was the pool's fan-out. Against a device that accepts every
+  connection (16 signature ports, sequential reference **16/16**):
+  ```
+  workers=64 -> 3/16     workers=8 -> 13/16
+  workers=16 -> 8/16     workers=4 -> 16/16   (2 and 1 also 16/16)
+  ```
+  64 concurrent SYNs to one device drop most of them, and the ports that
+  survive decide the family. Here every Tizen port (26101, 7676, 8001, 8002)
+  was lost and only 3000 survived — hence "LG webOS".
+- `probe_many()` now takes a per-host semaphore (`PER_HOST_WORKERS = 4`) and
+  builds its work queue **port-major**, so parallelism is spread across hosts
+  instead of piling onto the first few addresses. Results are still returned
+  in job order, which every caller maps back by index. Re-measured: **16/16**,
+  and `scan_network()` now reports `samsung-tizen`, matching the sequential
+  reference — in 1.4s, i.e. no slowdown.
+- Regression tests pin the cap, the cross-host spread, job ordering and the
+  progress invariant (`tests/test_probe_pool.py`).
+
+### Controls audited: family / CVE / TV type / connection type
+| control | route | Samsung | LG | Android/Fire | Roku | Vizio | Chromecast | Hisense | TCL | DLNA |
+|---|---|---|---|---|---|---|---|---|---|---|
+| CVE DB (`TV_CVE_DATABASE`) | — | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| exploit module (`CVE_EXPLOITS`) | `/api/exploit` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ none |
+| `FAMILY_TO_TV_TYPE` (server) | — | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| `familyToTvType` (dashboard) | — | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `null` |
+| payload `<select>` | `/api/payload` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | **added** | **added** | ✅ (payload only) |
+| row Check / Exploit / Patch | `/api/check`, `/api/exploit`, `/api/cve/patch` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | refused, honestly |
+| Devices-tab CVE chips + Patch | `familyToTvType(d.family)` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | n/a |
+
+- **DLNA has no exploit module** — `/api/exploit` refuses it with
+  `404 {error, attempted:false, known_families:[…]}`. Verified live. Payload
+  *generation* for DLNA does work (generic connect-back), so it stays in the
+  select; the refusal now happens where it is visible.
+- `generate_payload()`'s fallback was labelled *"Generic DLNA Exploit
+  Payload"* and registered `family:"Unknown"` for **every** family without a
+  dedicated install vector — which is what left connected Hisense/TCL/
+  Chromecast devices with no device type and no CVE profile on the Devices
+  tab. It now names the requested family and registers it as such.
+- `patchScanTarget()` only wrote to the activity log, and it could not use
+  `setScanStatus()` because that targets `#scan-results` (the results table
+  itself). It now writes to a dedicated `#scan-action-status` slot rendered
+  under the table, so Patch reports its outcome where it can be seen.
+
+### Inline handlers: one apostrophe away from a dead button
+- `escapeHtml()` escapes `&`, `<`, `>` and deliberately nothing else — correct
+  for HTML text, wrong inside `onclick="…'…'"`, where an apostrophe splits the
+  single-quoted argument list and the handler dies with a `SyntaxError`. The
+  device name goes into exactly that position.
+- Added `jsAttr()`, which escapes the **JS string first and the HTML
+  attribute second** — the other order lets `&#39;` decode back to `'` before
+  the script is parsed — and used it for every value interpolated into the
+  row's Check / Exploit / Patch handlers.
+
+### Test infrastructure: a flaky failure that made the suite non-deterministic
+- `test_local_provider.py::test_generate_exploit_without_key` failed roughly
+  half of full-suite runs with `[WinError 10053] An established connection was
+  aborted`, and passed in isolation. The stub handler answered
+  `POST /chat/completions` **without ever reading the request body**, then
+  closed the connection — leaving the client mid-write. Windows reports that
+  on the *client* side. `_drain_body()` now consumes `Content-Length` bytes
+  before responding.
+- **114 passed, 3 consecutive full-suite runs** (was 109, with one random
+  failure).
+
 ## [2026-10-04] — C2 died during its own startup; Scan and Audit buttons failed without a message (v1.0.6)
 
 ### The C2 could exit before it ever served a request

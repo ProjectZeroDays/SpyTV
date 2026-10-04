@@ -107,6 +107,7 @@ spytv/
 │   ├── test_c2_server.py / test_cve_monitor.py / test_detectors.py
 │   ├── test_drill_report.py / test_hardening.py
 │   ├── test_dashboard_ui.py    # Dashboard inline script driven in Node (stub DOM)
+│   ├── test_probe_pool.py      # Probe pool: per-host fan-out cap + job ordering
 │   └── generated/              # Auto-generated exploit tests (test_CVE-*.py)
 │
 ├── tools/

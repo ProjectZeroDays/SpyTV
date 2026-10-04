@@ -163,6 +163,10 @@ Flags on each feed entry: `whitepaper_generated`, `tests_generated`, `signature_
 ### Network Scan
 - Scans generic ports **plus** every CVE-database family signature port
 - Results show CVE chips (severity-colored), Check / Exploit / **Patch** buttons per device
+- **Status reports what was proven.** A host whose ports are open but which matched no family and no CVE renders as *Not confirmed* (neutral `.badge-muted`) with an *Unidentified device* label, never as an amber *Vulnerable* over an empty CVE column. `vulnerable` is `true` only when a CVE list or a family signature matched — the same rule `/api/check` applies, so the two controls can no longer disagree
+- **Check** — read-only `/api/check`: open ports, family, CVEs, exploit availability and a dry-run verification; transmits no payloads
+- **Exploit** — resolves the row's `tv_type` through `TVTYPE_TO_FAMILY` and runs that family's module, reporting the real outcome. With no confirmed CVE it loads the target and explains why nothing ran (Check to verify, or Exploit to run anyway); with no identifiable family it refuses rather than guessing DLNA
+- **Patch** — runs `/api/cve/patch` for the row's family and reports into a status slot under the table, not just the activity log
 
 ### Audit & Patch All (T-03)
 Toolbar buttons in Network Discovery (after Scan | Save | Clear), with a shared `#engagement-status` banner under the navigation:

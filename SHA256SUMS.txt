@@ -1,2 +1,2 @@
 6395ff97891500c8b53067b28a3a4f4574af2dce4f405c13f24c3daba1deca1f  SpyTV.apk
-2e6302c0d6ebad2adb1ea18f116cf17eeeede9352c3b75be4559f8087598be36  SpyTV-C2-1.0.6-portable.exe
+061eb2d3fbb5307336982f004e320b537f2667b2417afaecacd3fd81ce826e5b  SpyTV-C2-1.0.7-portable.exe

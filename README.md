@@ -59,7 +59,7 @@ GitHub releases ship three assets:
 | `SpyTV-C2-<ver>-portable.exe` | Desktop C2 — Electron wrapper around the dashboard (offline fallback page included) |
 | `SHA256SUMS.txt` | SHA-256 checksum manifest for the attached assets |
 
-Latest: [v1.0.6](https://github.com/ProjectZeroDays/SpyTV/releases/tag/v1.0.6).
+Latest: [v1.0.7](https://github.com/ProjectZeroDays/SpyTV/releases/tag/v1.0.7).
 
 ## Repository layout
 
@@ -93,7 +93,7 @@ SpyTV/
 │   └── audits/<auth_id>/           # Authorization PDFs (unsigned/signed) + reports
 ├── data/signatures/                # Detection-signature proposals (assessor-validated)
 ├── data/patch_checks/              # Patch verification checks
-└── tests/                          # pytest suite — 107 tests (generated: tests/generated/)
+└── tests/                          # pytest suite — 114 tests (generated: tests/generated/)
 ```
 
 ## Quickstart — C2 dashboard
@@ -105,7 +105,7 @@ run_c2.bat                           # prompts for AI provider keys (or skip), s
 # …or run directly:
 python c2_server.py
 
-# Dashboard:  http://127.0.0.1:8443/   (desktop: electron\dist\SpyTV-C2-1.0.6-portable.exe)
+# Dashboard:  http://127.0.0.1:8443/   (desktop: electron\dist\SpyTV-C2-1.0.7-portable.exe)
 # 1. Network Discovery → Scan → Check / Patch / Exploit per device
 # 2. Audit  → client details → e-sign authorization → scan/check/exploit/kill → PDF report
 # 3. Patch All → patches everything → client details → remediation proof PDF

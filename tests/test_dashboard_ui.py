@@ -385,6 +385,125 @@ function jsonResponse(obj, status = 200) {
      'failure shown on the card');
   ok(__el('payload-exploit').textContent === 'Exploit', 'button restored after failure');
 
+  console.log('--- 14. scan verdicts, row Exploit button, Patch feedback ----------');
+  const panel = __el('scan-results');
+
+  // a) open ports alone must not be presented as a vulnerability
+  panel.innerHTML = '';
+  renderScanResults([
+    { ip: '10.1.10.35', open_ports: [80], device_type: 'Unknown',
+      vulnerable: false, detected: true },
+  ]);
+  ok(!panel.innerHTML.includes('>Vulnerable<'),
+     'open ports alone do not render as "Vulnerable"', panel.innerHTML.slice(0, 200));
+  ok(panel.innerHTML.includes('Not confirmed'), 'neutral "Not confirmed" badge shown');
+  ok(panel.innerHTML.includes('Unidentified device'),
+     '"Unknown" is presented as Unidentified device');
+  ok(panel.innerHTML.includes('no CVE match'), 'empty CVE column says there was no match');
+
+  // b) a confirmed row still renders as vulnerable, with its device type
+  panel.innerHTML = '';
+  renderScanResults([
+    { ip: '10.2.0.1', name: 'LG webOS TV', tv_type: 'lg-webos', open_ports: [80, 3000],
+      cves: [{ id: 'CVE-2023-0001', severity: 'High' }], vulnerable: true, severity: 'High' },
+  ]);
+  ok(panel.innerHTML.includes('badge-warning'), 'confirmed row gets the warning badge');
+  ok(panel.innerHTML.includes('LG webOS TV'), 'device type listed');
+
+  // b2) an apostrophe in a device name must not split the inline handler
+  panel.innerHTML = '';
+  renderScanResults([
+    { ip: '10.2.0.3', name: "Bob's TV", tv_type: 'roku', open_ports: [8060],
+      cves: [{ id: 'CVE-1', severity: 'HIGH' }], vulnerable: true, severity: 'HIGH' },
+  ]);
+  const inline = (panel.innerHTML.match(/onclick="exploitTarget\([^"]*\)"/) || ['none'])[0];
+  ok(panel.innerHTML.includes("exploitTarget('10.2.0.3', 'Bob\\'s TV', 'roku')"),
+     "apostrophe escaped for the inline onclick (otherwise it is a SyntaxError and the button dies)",
+     inline);
+  ok(panel.innerHTML.includes("Bob's TV"), 'but rendered unescaped in the cell text');
+
+  // c) the row Exploit button must take the row's family, not the DLNA fallback
+  lastScanResults = [
+    { ip: '10.2.0.1', name: 'LG webOS TV', tv_type: 'lg-webos', vulnerable: true,
+      cves: [{ id: 'CVE-2023-0001' }] },
+  ];
+  __el('payload-ip').value = '';
+  __el('payload-family').value = 'dlna';   // stale choice left by an earlier row
+  out.innerHTML = '';
+  let exploitCalls = 0;
+  globalThis.__fetchImpl = async () => {
+    exploitCalls++;
+    return jsonResponse({ status: 'ok', attempted: true, success: true,
+                          tv_type: 'lg-webos', duration_s: 0.4 });
+  };
+  await exploitTarget('10.2.0.1', 'LG webOS TV', 'lg-webos');
+  ok(__el('payload-family').value === 'webos-dev',
+     'LG row resolves to webos-dev (was always dlna)',
+     __el('payload-family').value);
+  ok(__el('payload-ip').value === '10.2.0.1', 'target IP loaded');
+  ok(__el('tab-payload').added.includes('active'), 'payload tab opened');
+  ok(exploitCalls === 1, 'a confirmed device actually runs the exploit module',
+     'calls=' + exploitCalls);
+  ok(out.innerHTML.includes('Exploit succeeded'), 'outcome reported on the card',
+     out.innerHTML.slice(0, 180));
+
+  // d) every family resolves to its own <select> option
+  const expectFamily = {
+    'samsung-tizen': 'tizen-dev', 'lg-webos': 'webos-dev', 'android-tv': 'adb-net',
+    'roku': 'roku-ecp', 'vizio': 'vizio-dial', 'chromecast': 'chromecast-cast',
+    'hisense': 'hisense', 'tcl': 'tcl',
+  };
+  const famBad = [];
+  for (const tv of Object.keys(expectFamily)) {
+    __el('payload-family').value = 'dlna';
+    await exploitTarget('10.9.0.1', 'Unidentified device', tv);
+    if (__el('payload-family').value !== expectFamily[tv]) {
+      famBad.push(tv + ' -> ' + __el('payload-family').value);
+    }
+  }
+  ok(famBad.length === 0, 'every TV family resolves to its own select option',
+     famBad.join('; '));
+
+  // e) a family it knows, but nothing confirmed: load it, do not run it
+  lastScanResults = [{ ip: '10.1.10.36', open_ports: [8060], device_type: 'Roku TV',
+                       vulnerable: false, detected: true }];
+  out.innerHTML = '';
+  exploitCalls = 0;
+  await exploitTarget('10.1.10.36', 'Roku TV', 'roku');
+  ok(__el('payload-family').value === 'roku-ecp', 'row family still applied');
+  ok(exploitCalls === 0, 'an unconfirmed host is not exploited automatically',
+     'calls=' + exploitCalls);
+  ok(out.innerHTML.includes('no confirmed CVE'), 'reason shown on the card',
+     out.innerHTML.slice(0, 200));
+
+  // f) no identifiable family: say so, and do not silently pick DLNA
+  __el('payload-family').value = 'webos-dev';
+  out.innerHTML = '';
+  exploitCalls = 0;
+  await exploitTarget('10.1.10.37', 'Unidentified device', '');
+  ok(exploitCalls === 0, 'no family means no exploit runs');
+  ok(__el('payload-family').value === 'webos-dev',
+     'select left untouched when the family is unknown',
+     __el('payload-family').value);
+  ok(out.innerHTML.includes('No TV family could be identified'),
+     'family-unknown explained', out.innerHTML.slice(0, 200));
+
+  // g) Patch reports where it can be seen — the old version only logged
+  const patchSlot = __el('scan-action-status');
+  patchSlot.innerHTML = '';
+  await patchScanTarget('10.1.10.36', '');
+  ok(patchSlot.innerHTML.includes('No CVE profile'),
+     'Patch with no family explains itself in the panel',
+     patchSlot.innerHTML.slice(0, 200));
+  globalThis.__fetchImpl = async () => jsonResponse(
+    { patches: [{ status: 'ok' }, { status: 'ok' }], total: 3,
+      cves_fixed: ['CVE-2023-0001'] });
+  await patchScanTarget('10.2.0.1', 'lg-webos');
+  ok(patchSlot.innerHTML.includes('Patched'), 'Patch result shown in the panel',
+     patchSlot.innerHTML.slice(0, 200));
+  ok(log.children.some(c => String(c.innerHTML).includes('Patch on 10.2.0.1: 2/3')),
+     'patch progress logged');
+
   console.log(failures ? `\n${failures} FAILURE(S)` : '\nall checks passed');
   process.exit(failures ? 1 : 0);
 })().catch(e => {
