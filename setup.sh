@@ -96,10 +96,11 @@ mkdir -p /opt/spytv/{exploits,implants,tools,logs}
 cd /opt/spytv
 
 # Download framework components
-wget -q https://github.com/anonymous/spytv/archive/main.zip -O spytv.zip
+wget -q https://github.com/ProjectZeroDays/SpyTV/archive/main.zip -O spytv.zip
 unzip -q spytv.zip
-mv spytv-main/* .
-rm -rf spytv-main spytv.zip
+# GitHub archives extract as <repo>-<branch> -> SpyTV-main
+mv SpyTV-main/* .
+rm -rf SpyTV-main spytv.zip
 
 # Set executable permissions
 chmod +x tv_fingerprint.py tv_install.py tv_withdraw.py build_widget.py

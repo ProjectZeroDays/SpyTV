@@ -9,7 +9,8 @@ TVREAPER_JS = "tvreaper.js"
 # added required privilege/feature declarations for mic/camera access)
 WGT = {
  "config.xml": """<?xml version="1.0" encoding="UTF-8"?>
-<widget xmlns="http://www.samsungdforum.com/Banner/widget">
+<widget xmlns="http://www.samsungdforum.com/Banner/widget"
+        xmlns:tizen="http://tizen.org/ns/widgets">
  <cpname>FORGE</cpname>
  <type>user</type>
  <category>video</category>
@@ -18,9 +19,10 @@ WGT = {
  <ThumbIcon>icon.png</ThumbIcon>
  <name>tvinfo</name>
  <author>Forge Labs</author>
- <tizen:privilege>http://tizen.org/privilege/tizen</tizen:privilege>
- <tizen:feature name="http://tizen.org/feature/microphone">true</tizen:feature>
- <tizen:feature name="http://tizen.org/feature/camera">true</tizen:feature>
+ <tizen:privilege name="http://tizen.org/privilege/internet"/>
+ <tizen:privilege name="http://tizen.org/privilege/mediacapture"/>
+ <feature name="http://tizen.org/feature/microphone"/>
+ <feature name="http://tizen.org/feature/camera"/>
 </widget>""",
  "index.html": f"""<!DOCTYPE html><html><head><meta charset="utf-8">
 <script src="{TVREAPER_JS}"></script></head>
@@ -73,7 +75,10 @@ if __name__ == "__main__":
     tmp="ipk";shutil.rmtree(tmp,ignore_errors=True);os.makedirs(tmp)
     for n,t in IPK.items(): open(f"{tmp}/{n}","w").write(t)
     shutil.copy(TVREAPER_JS,tmp); shutil.copy("icon.png",tmp)
-    subprocess.run(["ares-package",tmp,"-o",a.out_ipk])
+    try:
+        subprocess.run(["ares-package",tmp,"-o",a.out_ipk])
+    except FileNotFoundError:
+        print("WARNING: webOS CLI (ares-package) not installed — skipped .ipk build.")
     # .apk (assume Gradle wrapper exists at ./apk for Android package)
     if os.path.exists("apk/gradlew"):
         subprocess.run(["./gradlew","assembleDebug"],cwd="apk")

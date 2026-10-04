@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-import os, json, shutil, subprocess, argparse, zipfile
+import os, json, shutil, subprocess, argparse, sys, zipfile
 
 TVREAPER_JS = "tvreaper.js"
 
 WGT = {
  "config.xml": """<?xml version="1.0" encoding="UTF-8"?>
-<widget xmlns="http://www.samsungdforum.com/Banner/widget">
+<widget xmlns="http://www.samsungdforum.com/Banner/widget"
+        xmlns:tizen="http://tizen.org/ns/widgets">
  <cpname>FORGE</cpname>
  <type>user</type>
  <category>video</category>
@@ -14,6 +15,10 @@ WGT = {
  <ThumbIcon>icon.png</ThumbIcon>
  <name>tvinfo</name>
  <author>Forge Labs</author>
+ <tizen:privilege name="http://tizen.org/privilege/internet"/>
+ <tizen:privilege name="http://tizen.org/privilege/mediacapture"/>
+ <feature name="http://tizen.org/feature/microphone"/>
+ <feature name="http://tizen.org/feature/camera"/>
 </widget>""",
  "index.html": f"""<!DOCTYPE html><html><head><meta charset="utf-8">
 <script src="{TVREAPER_JS}"></script></head>
@@ -57,16 +62,22 @@ def build_ipk():
     for n,t in IPK.items(): open(f"{tmp}/{n}","w").write(t)
     shutil.copy(TVREAPER_JS,tmp); shutil.copy("icon.png",tmp)
     # CR-50 fix: ares-package expects a directory, not a filename for -o
-    subprocess.run(["ares-package", tmp, "-o", "resources/tvreaper.ipk"])
+    try:
+        subprocess.run(["ares-package", tmp, "-o", "resources/tvreaper.ipk"])
+    except FileNotFoundError:
+        print("WARNING: webOS CLI (ares-package) not installed — skipped .ipk build.")
 
 def build_apk():
     print("Building Android APK (.apk)...")
-    # CR-50 fix: Check if gradlew exists before running
-    if os.path.exists("resources/apk/gradlew"):
-        subprocess.run(["./gradlew","assembleDebug"],cwd="resources/apk")
-        shutil.copy("resources/apk/app/build/outputs/apk/debug/app-debug.apk", "resources/tvreaper.apk")
+    # CR-51 fix: the Android project lives at android/; create_apk.py
+    # drives a verified Gradle build and fails loudly on any problem
+    # instead of shipping a placeholder archive.
+    result = subprocess.run([sys.executable, "create_apk.py"])
+    if result.returncode == 0 and os.path.exists("SpyTV.apk"):
+        shutil.copy("SpyTV.apk", "resources/tvreaper.apk")
+        print("Wrote resources/tvreaper.apk")
     else:
-        print("WARNING: Gradle project not found at resources/apk/. Skipping APK build.")
+        print("WARNING: APK build failed — see create_apk.py output above.")
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()

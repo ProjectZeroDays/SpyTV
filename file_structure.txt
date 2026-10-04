@@ -1,13 +1,23 @@
 spytv/
 ├── README.md
 ├── LICENSE
+├── TODO.md
 ├── requirements.txt            # colorama, pyyaml, requests, reportlab (C2 PDFs)
 ├── setup.py                    # Unified setup script (installs python deps + system tools)
+├── setup.sh                    # Linux/WSL bootstrap (downloads repo from ProjectZeroDays/SpyTV)
 ├── run_c2.bat                  # C2 launcher (AI-key prompt, starts the server)
-├── create_apk.py               # Release builder → SpyTV.apk
+├── .env.example                # AI / NVD key template (copy to .env)
+├── .gitignore
+├── create_apk.py               # Real Gradle build + verification → SpyTV.apk
 ├── SpyTV.apk                   # Release asset (regenerated per release)
 ├── SHA256SUMS.txt              # Release asset checksum manifest
 ├── CVE_UPDATES.log             # Root JSONL CVE log (replayed into the C2 feed)
+├── registry.yaml               # Exploit / device-family registry
+├── config.yaml                 # Top-level configuration
+├── install_and_launch.bat / .sh # One-shot install + launch helpers
+├── icon.png                    # Widget/app icon used by both widget builders
+├── logo.png                    # Branding asset
+├── spytv_tagger.py             # Release tagging helper
 │
 ├── c2_server.py                # C2 HTTP server (port 8443) — all API endpoints
 ├── c2_ops.py                   # Shared ops: scan, read-only check, exploit, patch, teardown
@@ -16,42 +26,58 @@ spytv/
 ├── c2_dashboard.html           # Web dashboard (served at /)
 ├── tvreaper.js                 # Implant payload (C2 polling)
 │
+├── main.py                     # Entry-point runner
+├── tv_fingerprint.py           # Discovery CLI
+├── tv_install.py               # Family install CLI (tizen / webos / android / nettv)
+├── tv_withdraw.py              # Implant withdrawal CLI
+├── tv_flow_receiver.py         # Media-flow receiver helper
+├── build_widget.py             # Legacy packager (.wgt / .ipk / NetTV page)
+│
+├── .opencode/
+│   └── commands/push.md        # /Push pipeline: cleanup · file_structure · vulns · test · ship
+│
+├── android/                    # Gradle project — SpyTV Android console (the real APK)
+│   ├── settings.gradle.kts / build.gradle.kts / gradle.properties
+│   ├── gradlew / gradlew.bat   # Wrapper (Gradle 8.2)
+│   ├── gradle/wrapper/         # gradle-wrapper.jar + gradle-wrapper.properties
+│   └── app/
+│       ├── build.gradle.kts    # applicationId com.authenticated.spytv · minSdk 24
+│       └── src/main/           # MainActivity.kt (WebView → :8443) · manifest · layout · res
+│
 ├── electron/                   # Desktop wrapper → SpyTV-C2-<ver>-portable.exe
 │   ├── main.js / preload.js / offline.html / index.html
-│   ├── package.json
+│   ├── package.json            # electron 44.5 · electron-builder 26.15 (npm audit: 0 vulns)
 │   └── dist/                   # Build output (git-ignored)
 │
 ├── core/                       # Core Logic
 │   ├── __init__.py
 │   ├── discovery.py            # (Refactored tv_fingerprint.py + Port Scan)
 │   ├── exploit_dispatcher.py   # (Refactored tv_install.py - Main Router)
+│   ├── exploit_engine.py       # Dry-run / live exploit orchestration
 │   ├── implant.py              # Python accessor for the JS payload (tvreaper.js)
 │   ├── receiver.py             # (Refactored C4 receiver - Capture Endpoint)
 │   ├── withdrawal.py           # (Refactored tv_withdraw.py)
 │   ├── builder.py              # (Refactored build_widget.py)
 │   ├── cve_scanner.py          # Family/CVE signature database + matching
-│   └── config.py               # (Centralized Yaml Config)
+│   ├── scanner.py / session_manager.py / stealth.py / stream_manager.py
+│   ├── utils.py / config.py    # Helpers + centralized YAML config
+│   └── config.yaml             # Core settings
 │
 ├── families/                   # Family-Specific Exploits
-│   ├── tizen/
-│   │   ├── install.py          # Tizen DevMode/Hotel exploit
-│   │   └── payloads/           # .wgt files
-│   ├── webos/
-│   │   ├── install.py          # Ares-install exploit
-│   │   └── payloads/           # .ipk files
-│   ├── android/
-│   │   ├── install.py          # ADB/Net exploit
-│   │   └── payloads/           # .apk files
-│   ├── dlna/
-│   │   └── install.py          # AVTransport injection
-│   └── hbbtv/
-│       └── install.py          # Red-button injection
+│   ├── tizen/install.py        # Tizen DevMode/Hotel exploit (+ payloads/)
+│   ├── webos/install.py        # Ares-install exploit (+ payloads/)
+│   ├── android/install.py      # ADB/Net exploit (+ payloads/)
+│   └── dlna/install.py         # AVTransport injection
+│
+├── config/                     # Example configs (tracked)
+│   ├── devices.example.json
+│   ├── known_hosts.example.json
+│   └── vlan_policy.example.json
 │
 ├── data/
-│   ├── exploits/generated/     # AI exploit modules: CVE-*.py (tracked)
-│   │                           #   CVE-*.quarantined when its test fails
-│   ├── signatures/             # Detection-signature proposals (CVE-*.md)
-│   └── patch_checks/           # Patch verification checks (CVE-*.md)
+│   ├── exploits/               # Stdlib modules: adb_wireless · ssh_brute · vendor_specific · cve_exploits
+│   └── exploits/generated/     # AI exploit modules: CVE-*.py (tracked)
+│                               #   CVE-*.quarantined when its generated test fails
 │
 ├── defense/                    # Defensive toolkit (stdlib only)
 │   ├── hardening/              # attack_surface · adb_disable · upnp_close
@@ -62,35 +88,34 @@ spytv/
 │
 ├── docs/                       # Wiki + generated documents
 │   ├── WIKI.md / GETTING_STARTED.md / ARCHITECTURE.md
-│   ├── C2_DASHBOARD.md         # Endpoints, features, engagement flows
+│   ├── C2_DASHBOARD.md         # Endpoints, features, engagement flows, AI providers
 │   ├── TROUBLESHOOTING.md      # Served live at /docs/TROUBLESHOOTING.md
 │   ├── CHANGES.md              # Release-by-release change log
-│   ├── whitepapers/            # Generated per-CVE whitepapers (CVE-*.md)
-│   └── …                       # threat model, hardening, detection, etc.
+│   ├── whitepapers/            # Generated per-CVE whitepapers (CVE-*.md, git-ignored)
+│   └── …                       # threat model, hardening, detection, code review, etc.
+│
+├── tests/                      # pytest suite — 97 tests
+│   ├── test_audit_flow.py      # Engagement flows + endpoints
+│   ├── test_cve_artifacts.py   # T-01/T-02 artifact pipeline + viewer
+│   ├── test_local_provider.py  # Keyless local GGUF/MLX provider (probe + completions)
+│   ├── test_c2_server.py / test_cve_monitor.py / test_detectors.py
+│   ├── test_drill_report.py / test_hardening.py
+│   └── generated/              # Auto-generated exploit tests (test_CVE-*.py)
+│
+├── tools/
+│   └── banner.py               # ASCII banner helper
+│
+├── output/                     # Generated reports kept as tracked samples
+│
+├── resources/                  # Runtime assets
+│   └── config.yaml             # Default settings (tvreaper.{apk,wgt,ipk} are build outputs, git-ignored)
 │
 ├── c2_data/                    # Runtime state (git-ignored)
 │   ├── audits/<auth_id>/       # Authorization PDFs (unsigned/signed) + reports
 │   ├── clips/                  # Captured audio/video
 │   ├── cve_state.json          # Feed source of truth
-│   ├── devices.json / commands.json / ai_keys.json
+│   └── devices.json / commands.json / ai_keys.json
 │
-├── tests/                      # pytest suite — 82 tests
-│   ├── test_audit_flow.py      # Engagement flows + endpoints
-│   ├── test_cve_artifacts.py   # T-01/T-02 artifact pipeline + viewer
-│   ├── test_c2_server.py / test_cve_monitor.py / test_detectors.py
-│   ├── test_drill_report.py / test_hardening.py
-│   └── generated/              # Auto-generated exploit tests (test_CVE-*.py)
-│
-├── tools/                      # Utilities
-│   ├── ping_test.py
-│   ├── banner.py
-│   └── utils.py                # Helper functions (b32encode, etc.)
-│
-├── resources/                  # Assets
-│   ├── icon.png
-│   ├── tvreaper.js
-│   └── config.yaml             # Default settings
-│
-└── logs/                       # Runtime Logs
+└── logs/                       # Runtime logs (git-ignored)
     ├── spytv.log
     └── receiver.log

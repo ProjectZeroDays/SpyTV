@@ -918,7 +918,7 @@
       <div class="card-header">
         <span class="card-title">AI Provider Keys (Auto-Exploit Generation)</span>
         <div class="help-icon">?
-          <div class="tooltip">Keys used to generate a working exploit module for each new CVE automatically. Providers: OpenRouter (Uncensored), Venice AI (Uncensored V 1.2 / Qwen 3.6 Plus Uncensored / GLM 4.7 Flash Heretic), and Abliteration.ai (Abliterated Large v2). Keys can also be supplied via .env (checked first by run_c2.bat) or c2_data/ai_keys.json. Keys are masked after saving.</div>
+          <div class="tooltip">Keys used to generate a working exploit module for each new CVE automatically. Providers: OpenRouter (Uncensored), Venice AI (Uncensored V 1.2 / Qwen 3.6 Plus Uncensored / GLM 4.7 Flash Heretic), Abliteration.ai (Abliterated Large v2), and a keyless Local Model — a llama.cpp GGUF or Apple MLX server hosted by the C2 machine (enter its endpoint URL; default http://127.0.0.1:8080/v1/chat/completions). Keys can also be supplied via .env (checked first by run_c2.bat) or c2_data/ai_keys.json. Keys are masked after saving.</div>
         </div>
       </div>
       <div class="card-body">
@@ -938,6 +938,10 @@
           <div class="form-group">
             <label class="form-label">Abliteration.ai (Abliterated Large v2)</label>
             <input type="password" id="key-abliteration" class="form-input" placeholder="Abliteration API key" autocomplete="off">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Local Model (GGUF / MLX — no key)</label>
+            <input type="text" id="key-local" class="form-input" placeholder="http://127.0.0.1:8080/v1/chat/completions" autocomplete="off">
           </div>
         </div>
         <div class="form-row">
@@ -1913,7 +1917,7 @@ async function loadAiKeys() {
 
 async function saveAiKeys() {
   const keys = {};
-  ['openrouter', 'venice', 'abliteration'].forEach(pid => {
+  ['openrouter', 'venice', 'abliteration', 'local'].forEach(pid => {
     const v = (document.getElementById('key-' + pid).value || '').trim();
     if (v) keys[pid] = v;
   });
@@ -1922,7 +1926,7 @@ async function saveAiKeys() {
     return;
   }
   await api('/api/ai-keys', 'POST', keys);
-  ['openrouter', 'venice', 'abliteration'].forEach(pid => {
+  ['openrouter', 'venice', 'abliteration', 'local'].forEach(pid => {
     document.getElementById('key-' + pid).value = '';
   });
   addLog(`AI keys saved for: ${Object.keys(keys).join(', ')}`);

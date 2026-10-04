@@ -22,6 +22,11 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // Sideloaded operator console, not a store listing: sign with the
+            // local debug keystore so the APK is installable without putting
+            // signing secrets in the repo. Stable per machine, so upgrades
+            // over an existing install keep working.
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
     compileOptions {

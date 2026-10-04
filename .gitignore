@@ -21,6 +21,19 @@ certs/
 # Generated AI exploits are tracked; secrets are not
 !data/exploits/generated/*.py
 
+# Packaging outputs (produced by core.builder / build_widget.py on demand)
+resources/tvreaper.apk
+resources/tvreaper.wgt
+resources/tvreaper.ipk
+
+# Agent / tooling state (never tracked)
+.mimosa/
+.v2c/
+.video_agent/
+.zcode/
+.zcodeignore
+*.mimosa*
+
 # Electron C2 wrapper (deps + build output are regenerated)
 electron/node_modules/
 electron/dist/

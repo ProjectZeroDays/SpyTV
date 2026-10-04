@@ -7,7 +7,8 @@ Responsibilities:
   * Append every update to ``CVE_UPDATES.log`` in the repository ROOT so the
     entries can be replayed into the C2 feed.
   * Auto-generate an exploit module for each NEW CVE when an AI provider
-    key is configured (OpenRouter / Venice AI / Abliteration.ai).
+    is configured (OpenRouter / Venice AI / Abliteration.ai, or a keyless
+    local GGUF/MLX server running on this machine).
   * Provide NVD + whitepaper links for every feed entry.
 
 AI keys are resolved in this order:
@@ -26,6 +27,7 @@ import re
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.request
 import urllib.parse
 from datetime import datetime, timedelta, timezone
@@ -94,6 +96,25 @@ AI_PROVIDERS = {
         },
         "default_model": "abliterated_large_v2",
     },
+    # Local OpenAI-compatible server — llama.cpp `llama-server` (GGUF) or
+    # `mlx_lm.server` (Apple MLX) running beside the C2. Keyless: the saved
+    # "key" value may hold the endpoint URL; auto-selection probes the
+    # endpoint and only picks this provider when a server actually answers.
+    "local": {
+        "name": "Local Model (GGUF / MLX)",
+        "endpoint": os.environ.get(
+            "LOCAL_LLM_ENDPOINT", "http://127.0.0.1:8080/v1/chat/completions"
+        ),
+        "key_env": "LOCAL_LLM_API_KEY",
+        "requires_key": False,
+        "models": {
+            "local": os.environ.get("LOCAL_LLM_MODEL", "local-model"),
+        },
+        "model_labels": {
+            "local": "Local (llama.cpp GGUF / Apple MLX)",
+        },
+        "default_model": "local",
+    },
 }
 
 # ---------------------------------------------------------------------------
@@ -141,6 +162,18 @@ def load_env_file(path: Path = ENV_FILE) -> dict:
     return values
 
 
+# The .env file is the operator's config home — honour LOCAL_LLM_* there even
+# though no API key is involved (the local GGUF/MLX provider is keyless).
+_env_at_import = load_env_file()
+AI_PROVIDERS["local"]["endpoint"] = (
+    os.environ.get("LOCAL_LLM_ENDPOINT")
+    or _env_at_import.get("LOCAL_LLM_ENDPOINT")
+    or AI_PROVIDERS["local"]["endpoint"]
+).strip()
+if _env_at_import.get("LOCAL_LLM_MODEL", "").strip():
+    AI_PROVIDERS["local"]["models"]["local"] = _env_at_import["LOCAL_LLM_MODEL"].strip()
+
+
 def load_ai_keys() -> dict:
     """Resolve AI provider keys: ai_keys.json -> .env -> process env."""
     file_keys = {}
@@ -176,16 +209,72 @@ def save_ai_keys(keys: dict):
     AI_KEYS_FILE.write_text(json.dumps(current, indent=2), encoding="utf-8")
 
 
+# Reachability cache for keyless providers: endpoint -> (timestamp, ok).
+_PROBE_TTL = 20.0
+_PROBE_CACHE: dict = {}
+
+
+def _provider_endpoint(pid: str, prov: dict, keys: dict) -> str:
+    """Resolve a provider's endpoint.
+
+    Keyless providers (the `local` GGUF/MLX server) may store their server
+    URL in place of a key — the dashboard "key" field doubles as an
+    endpoint override when its value looks like a URL.
+    """
+    value = (keys.get(pid) or "").strip()
+    if not prov.get("requires_key", True) and value.startswith(("http://", "https://")):
+        return value
+    return prov["endpoint"]
+
+
+def _endpoint_reachable(endpoint: str) -> bool:
+    """True when an OpenAI-compatible server answers at *endpoint*.
+
+    Any HTTP reply (even 4xx/5xx) proves a live server; connection refused
+    or timeout means nothing is listening. Cached for _PROBE_TTL seconds so
+    feed updates and dashboard polls never hammer the endpoint.
+    """
+    now = time.time()
+    cached = _PROBE_CACHE.get(endpoint)
+    if cached and now - cached[0] < _PROBE_TTL:
+        return cached[1]
+    base = endpoint.rsplit("/chat/completions", 1)[0]
+    ok = False
+    try:
+        with urllib.request.urlopen(base + "/models", timeout=0.6):
+            ok = True
+    except Exception as exc:  # noqa: BLE001 — HTTPError still proves a server
+        ok = type(exc).__name__ == "HTTPError"
+    _PROBE_CACHE[endpoint] = (now, ok)
+    return ok
+
+
+def _provider_configured(pid: str, keys: dict) -> bool:
+    """A provider counts as configured when it has a key — or, for a keyless
+    one, when its endpoint answers (a local GGUF/MLX server is auto-detected)."""
+    prov = AI_PROVIDERS[pid]
+    if keys.get(pid):
+        return True
+    if prov.get("requires_key", True):
+        return False
+    return _endpoint_reachable(_provider_endpoint(pid, prov, keys))
+
+
 def ai_key_status() -> dict:
     """Masked status of each provider (for the dashboard)."""
     keys = load_ai_keys()
     status = {}
     for pid, prov in AI_PROVIDERS.items():
         key = keys.get(pid, "")
+        if prov.get("requires_key", True):
+            masked = (key[:4] + "…" + key[-4:]) if len(key) > 8 else ("••••" if key else "")
+        else:
+            # Keyless providers show where they point instead of a mask.
+            masked = _provider_endpoint(pid, prov, keys)
         status[pid] = {
             "name": prov["name"],
-            "configured": bool(key),
-            "masked": (key[:4] + "…" + key[-4:]) if len(key) > 8 else ("••••" if key else ""),
+            "configured": _provider_configured(pid, keys),
+            "masked": masked,
             "models": [
                 {"id": mid, "label": prov["model_labels"].get(mid, mid)}
                 for mid in prov["models"]
@@ -198,7 +287,7 @@ def ai_key_status() -> dict:
 def first_configured_provider(keys: dict | None = None) -> str | None:
     keys = keys if keys is not None else load_ai_keys()
     for pid in AI_PROVIDERS:
-        if keys.get(pid):
+        if _provider_configured(pid, keys):
             return pid
     return None
 
@@ -215,11 +304,10 @@ def generate_exploit_with_ai(cve_info: dict, provider: str | None = None,
     """
     keys = load_ai_keys()
     provider = provider or first_configured_provider(keys)
-    if not provider or not keys.get(provider):
+    prov = AI_PROVIDERS.get(provider) if provider else None
+    if (not provider or not prov
+            or (prov.get("requires_key", True) and not keys.get(provider))):
         return None, "No AI provider API key configured (see AI Provider Keys)"
-    prov = AI_PROVIDERS.get(provider)
-    if not prov:
-        return None, f"Unknown provider: {provider}"
     model = model or prov["default_model"]
     model_id = prov["models"].get(model, model)
 
@@ -249,14 +337,18 @@ Output ONLY raw Python source, no markdown fences, no commentary."""
         "max_tokens": 2500,
     }
     headers = {
-        "Authorization": f"Bearer {keys[provider]}",
         "Content-Type": "application/json",
         "HTTP-Referer": "https://github.com/authenticated-inc/spytv",
         "X-Title": "SpyTV CVE Exploit Generator",
     }
+    auth = (keys.get(provider) or "").strip()
+    if auth and (prov.get("requires_key", True)
+                 or not auth.startswith(("http://", "https://"))):
+        headers["Authorization"] = f"Bearer {auth}"
+    endpoint = _provider_endpoint(provider, prov, keys)
     try:
         req = urllib.request.Request(
-            prov["endpoint"],
+            endpoint,
             data=json.dumps(payload).encode(),
             headers=headers,
             method="POST",
@@ -302,7 +394,8 @@ def _ai_complete(prompt: str, provider: str, model: str | None = None,
     """
     keys = load_ai_keys()
     prov = AI_PROVIDERS.get(provider)
-    if not provider or not prov or not keys.get(provider):
+    if (not provider or not prov
+            or (prov.get("requires_key", True) and not keys.get(provider))):
         return None, "No AI provider API key configured"
     model = model or prov["default_model"]
     model_id = prov["models"].get(model, model)
@@ -313,14 +406,18 @@ def _ai_complete(prompt: str, provider: str, model: str | None = None,
         "max_tokens": max_tokens,
     }
     headers = {
-        "Authorization": f"Bearer {keys[provider]}",
         "Content-Type": "application/json",
         "HTTP-Referer": "https://github.com/authenticated-inc/spytv",
         "X-Title": "SpyTV CVE Artifact Generator",
     }
+    auth = (keys.get(provider) or "").strip()
+    if auth and (prov.get("requires_key", True)
+                 or not auth.startswith(("http://", "https://"))):
+        headers["Authorization"] = f"Bearer {auth}"
+    endpoint = _provider_endpoint(provider, prov, keys)
     try:
         req = urllib.request.Request(
-            prov["endpoint"],
+            endpoint,
             data=json.dumps(payload).encode(),
             headers=headers,
             method="POST",

@@ -111,8 +111,19 @@ Keys for automatic exploit generation on each newly published CVE:
 | OpenRouter | Uncensored |
 | Venice AI | Uncensored V 1.2, Qwen 3.6 Plus Uncensored, GLM 4.7 Flash Heretic |
 | Abliteration.ai | Abliterated Large v2 |
+| Local Model (GGUF / MLX) | whatever the local server is loading — **no key required** |
 
 Resolution order: dashboard-saved `c2_data/ai_keys.json` → `.env` (written by `run_c2.bat`) → process env. Keys display masked after saving.
+
+**Local model (keyless):** run an OpenAI-compatible server on the machine hosting the C2 —
+`llama-server -m model.gguf --port 8080` (llama.cpp, any GGUF — e.g. an *abliterated* or
+*heretic* Llama-3.2-3B / Mistral-7B quant from Hugging Face) or
+`mlx_lm.server --model mlx-community/<model>` (Apple MLX, Apple-silicon Macs only).
+Leave the Local Model field blank to use the default endpoint
+`http://127.0.0.1:8080/v1/chat/completions`, paste a different server URL to override it,
+or set `LOCAL_LLM_ENDPOINT` / `LOCAL_LLM_MODEL` in the environment. The provider is picked
+automatically only while the server answers (20 s reachability cache), so an absent local
+server never displaces the configured cloud providers.
 
 ### CVE Artifact Pipeline (T-02)
 Every **new** CVE gets the full artifact set during `update_cve_database()`, one artifact and one CVE at a time (a partial failure never aborts the run):

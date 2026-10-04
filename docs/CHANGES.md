@@ -1,5 +1,48 @@
 # SpyTV Code Changes Log
 
+## [2026-10-04] — Security sweep: real APK pipeline, dependency remediation, local-model provider, scan fixes
+
+### Vulnerabilities fixed
+- **electron ^33 → 44.5.1 / electron-builder 25.1.8 → 26.15.3** (`electron/`): clears all
+  54 Dependabot alerts (electron CVEs, `tar`, `app-builder-lib`, `builder-util-runtime`);
+  `npm audit` → **0 vulnerabilities**; `pip-audit -r requirements.txt` → clean.
+- `extract-zip@2.0.1`: dev-only dependency with no patched release — accepted residual
+  (not present in shipped artifacts).
+
+### Android APK (the 1 KB placeholder is gone)
+- `create_apk.py` now drives a **real Gradle build** (`android/`, `assembleDebug`) and
+  verifies the artifact (zip integrity, `apksigner verify`, `aapt dump badging`, ≥1 MB)
+  before writing `SpyTV.apk`; any failure exits non-zero and writes nothing.
+- Restored `android/gradle/wrapper/gradle-wrapper.jar`; removed the AGP 8-blocking
+  `package=` attribute from `AndroidManifest.xml`.
+
+### Bug fixes found in the sweep
+- `c2_ops.scan_network` + `core/cve_scanner.scan_network`: CIDR handling silently assumed
+  `/24` (`base_ip + .1-.254`) — now enumerates real hosts via `ipaddress`, capped at 1024.
+- `setup.sh`: dead `github.com/anonymous/spytv` URL → `ProjectZeroDays/SpyTV`; archive
+  directory corrected to `SpyTV-main` (the old `mv spytv-main/*` failed silently).
+- `core/builder.py`: restored the CR-49 Tizen privileges dropped during refactoring (with a
+  declared `xmlns:tizen`), made `ares-package` optional (webOS CLI), and pointed `build_apk()`
+  at the verified `create_apk.py` pipeline instead of the nonexistent `resources/apk/`.
+- `build_widget.py`: declared `xmlns:tizen` (undeclared XML prefix), schema-correct
+  `<tizen:privilege name=…/>` + `<feature>` elements, guarded `ares-package`.
+- Added the missing `icon.png` (referenced by both widget builders — previously a hard
+  crash); removed the dead duplicate `resources/tvreaper.js` (canonical implant is root
+  `tvreaper.js`).
+
+### Local model provider (GGUF / MLX)
+- New keyless **`local`** provider in `AI_PROVIDERS`: point `LOCAL_LLM_ENDPOINT`
+  (default `http://127.0.0.1:8080/v1/chat/completions`) at `llama-server` (GGUF) or
+  `mlx_lm.server` (MLX) running on the C2 host. Auto-selection probes the endpoint
+  (20 s cache) and only picks it while a server answers; the dashboard shows the endpoint
+  instead of a masked key, and the saved "key" value doubles as an endpoint override.
+
+### Repo hygiene / `/Push`
+- Untracked agent-state junk (`.mimosa/`, `.v2c/`, `.video_agent/`, `.zcodeignore`) and
+  hardened `.gitignore`; regenerated `file_structure.txt`.
+- `/Push` extended with cleanup, `file_structure.txt` regeneration, and
+  vulnerability-sweep phases.
+
 ## [2026-10-04] — T-03 Audit + Patch-all with e-signed authorization, CVE whitepaper viewer & artifact pipeline (T-01/T-02), GUI overhaul, Electron wrapper (v1.0.2)
 
 ### Audit button (T-03, full flow)

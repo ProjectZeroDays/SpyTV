@@ -6,6 +6,7 @@ server state so both sides can use it without circular imports.
 """
 import datetime
 import importlib.util
+import ipaddress
 import os
 import socket
 import shlex
@@ -13,7 +14,7 @@ import subprocess
 import threading
 import time
 
-from core.cve_scanner import TV_CVE_DATABASE
+from core.cve_scanner import MAX_SCAN_HOSTS, TV_CVE_DATABASE
 
 REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
 GENERATED_EXPLOITS_DIR = os.path.join(REPO_ROOT, "data", "exploits", "generated")
@@ -74,11 +75,19 @@ def scan_network(cidr=None):
         cidr = _default_cidr()
 
     results = []
-    base_ip = cidr.split('/')[0].rsplit('.', 1)[0]
+    try:
+        network = ipaddress.ip_network(str(cidr), strict=False)
+    except ValueError:
+        network = ipaddress.ip_network(_default_cidr(), strict=False)
+    hosts = list(network.hosts())
+    if len(hosts) > MAX_SCAN_HOSTS:
+        print(f"[scan] {cidr} covers {len(hosts)} hosts — capping at "
+              f"{MAX_SCAN_HOSTS} (MAX_SCAN_HOSTS)")
+        hosts = hosts[:MAX_SCAN_HOSTS]
     tv_ports = [5555, 22, 80, 554, 8080, 1900, 7676, 3000, 8060, 36669, 8009, 49152]
 
-    for i in range(1, 255):
-        ip = f"{base_ip}.{i}"
+    for host in hosts:
+        ip = str(host)
         open_ports = []
         for port in tv_ports:
             try:

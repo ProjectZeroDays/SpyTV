@@ -3,10 +3,15 @@
 Detects TV types, checks for known CVEs, and provides vulnerability details
 including CVE IDs, severity, and patch status.
 """
+import ipaddress
 import socket
 import subprocess
 import re
 from colorama import Fore, Style
+
+# Safety cap shared by every network scan (see c2_ops.scan_network):
+# never enumerate more than this many hosts from a supplied CIDR.
+MAX_SCAN_HOSTS = 1024
 
 # Known CVE database for smart TVs
 TV_CVE_DATABASE = {
@@ -205,14 +210,20 @@ class CVEScanner:
             except Exception:
                 cidr = "192.168.1.0/24"
 
-        base_ip = cidr.split('/')[0].rsplit('.', 1)[0]
+        try:
+            network = ipaddress.ip_network(str(cidr), strict=False)
+        except ValueError:
+            network = ipaddress.ip_network("192.168.1.0/24", strict=False)
+        hosts = list(network.hosts())
+        if len(hosts) > MAX_SCAN_HOSTS:
+            hosts = hosts[:MAX_SCAN_HOSTS]
         tv_ports = set()
         for info in TV_CVE_DATABASE.values():
             tv_ports.update(info["ports"])
 
         findings = []
-        for i in range(1, 255):
-            ip = f"{base_ip}.{i}"
+        for host in hosts:
+            ip = str(host)
             open_ports = []
             for port in tv_ports:
                 try:
