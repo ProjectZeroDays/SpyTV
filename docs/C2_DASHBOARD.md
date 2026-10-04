@@ -41,6 +41,27 @@ python c2_server.py # direct
 
 The dashboard is available at `http://localhost:8443/`
 
+### Port and the Android console
+
+- `C2_PORT` (in `c2_server.py`) is the single source of truth for the port —
+  the dashboard, the implants and every generated payload are built from it.
+  Override it without editing code: `SPYTV_C2_PORT=9443 python c2_server.py`.
+- If the port is already owned by another program the C2 now **refuses to start
+  with a diagnosis** (which port, how to find the owner, how to move) instead of
+  dying with a bare traceback — otherwise clients keep talking to that other
+  program.
+- `SpyTV.apk` is the Android console. Set its endpoint on first launch, or any
+  time via the **⚙** button / **C2 address**:
+  `http://<c2-machine-lan-ip>:8443/`.
+  **`localhost` on a phone is the phone**, so the default only works on an
+  emulator — pointing it at the phone sends the console to whatever else owns
+  port 8443 there, which is how a foreign JSON blob used to be rendered as if it
+  were the dashboard.
+- The console **probes the endpoint before rendering it**: if the answer is
+  unreachable, is an error status, or isn't the SpyTV dashboard, it shows an
+  explicit error including the raw response — it never displays another
+  program's page as its own.
+
 ## API Endpoints
 
 ### Device Management

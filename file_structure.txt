@@ -43,7 +43,8 @@ spytv/
 │   └── app/
 │       ├── build.gradle.kts    # applicationId com.authenticated.spytv · minSdk 24
 │       ├── proguard-rules.pro   # Release shrinker rules (minify disabled)
-│       └── src/main/           # MainActivity.kt (WebView → :8443) · AndroidManifest.xml · layout · res
+│       └── src/main/           # MainActivity.kt (probes + loads a configurable C2 URL; error
+│                               #   screen when the answer isn't SpyTV) · AndroidManifest.xml · res
 │
 ├── electron/                   # Desktop wrapper → SpyTV-C2-<ver>-portable.exe
 │   ├── main.js / preload.js / offline.html / index.html

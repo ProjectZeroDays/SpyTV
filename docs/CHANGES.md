@@ -1,5 +1,35 @@
 # SpyTV Code Changes Log
 
+## [2026-10-04] — Android console hit the wrong service: configurable C2 endpoint, probe-before-render, port diagnostics (v1.0.4)
+
+### Why the console showed a JSON blob instead of the dashboard
+- `MainActivity` loaded `http://localhost:8443/` unconditionally. On a device
+  `localhost` **is the device**, so the WebView reached whatever else owned port
+  8443 there and rendered that program's raw JSON
+  (`…"version":"3.1.0","dashboard":"/dash","endpoints":[…]`) as if it were
+  SpyTV. The C2 in this repo serves `text/html` at `/` and has no such endpoint.
+
+### Android console
+- **Configurable, persisted endpoint** — first-launch dialog, plus a **⚙**
+  button / **C2 address** at any time. Accepts `host:port`, forces a scheme,
+  requires a host, stores in `SharedPreferences`.
+- **Probe before render** — unreachable, non-2xx, or a body without the
+  dashboard marker (`TV Security Assessment Platform`) now shows an explicit
+  error screen with the URL tried, the failure and the **raw response**, so the
+  operator sees exactly what answered. Retry / change address from there.
+
+### C2 server
+- `SPYTV_C2_PORT` moves the whole platform (console, dashboard, generated
+  implant payloads) without code edits; default stays 8443.
+- Startup **diagnoses a squatted port** — which port, how to find the owner
+  (`netstat` / `lsof`), how to move — instead of a bare `OSError` traceback, and
+  prints the LAN URL to enter in the console.
+
+### Tests
+- `GET /` must serve the SpyTV dashboard HTML, never a JSON envelope (the
+  contract the console checks), and `SPYTV_C2_PORT` must be honoured with the
+  8443 default preserved.
+
 ## [2026-10-04] — Security sweep: real APK pipeline, dependency remediation, local-model provider, scan fixes (v1.0.3)
 
 ### Vulnerabilities fixed

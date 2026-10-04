@@ -48,6 +48,9 @@ SpyTV.apk
 *.iml
 .idea/
 
+# Generated/stray images dropped in the repo root — not source, not assets
+watermarked_img_*.jpg
+
 # OS
 .DS_Store
 Thumbs.db

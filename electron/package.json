@@ -1,6 +1,6 @@
 {
   "name": "spytv-c2",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "SpyTV C2 desktop client — Authenticated, Inc.",
   "main": "main.js",
   "author": "Authenticated, Inc.",

