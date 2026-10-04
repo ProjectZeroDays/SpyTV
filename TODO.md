@@ -126,3 +126,76 @@
 - [ ] All artifact statuses logged to root `CVE_UPDATES.log`
 - [ ] Partial failures don't abort the CVE update run
 - [ ] `docs/C2_DASHBOARD.md` + tooltips document the artifact set
+
+---
+
+## T-03: One-click "Audit" — full network audit → connection teardown → PDF Red Team report
+
+**Status:** Not started
+**Requested:** 2026-10-04
+**Area:** `c2_server.py`, `c2_dashboard.html`, new `c2_audit.py` (report builder)
+
+### Overview
+
+A single **"Audit"** button that runs the complete engagement end-to-end:
+scan → verify exploits (no send) → execute exploits → kill all connections
+→ collect results → ask for client details → render a professional PDF
+Red Team audit report branded **Authenticated, Inc.**
+
+### Workflow (phases, with live progress in the dashboard)
+
+1. **Scan** — scan the network for vulnerable TVs (reuse `/api/scan`
+   family/CVE matching); record every finding per device.
+2. **Check (no send)** — for each discovered vuln TV, validate/check all
+   applicable exploits **without sending them** (dry-run: signature match,
+   target reachable, exploit module loads, preconditions OK). Record
+   check results (would-succeed / would-fail + reason).
+3. **Send** — execute the exploits that passed the check against each
+   vuln TV; capture per-attempt result (success/fail, evidence).
+4. **Kill all connections** — after all exploits for all vuln TVs have
+   been checked and run, terminate every session/socket opened during the
+   audit (reverse shells, streams, listeners, scanner sockets) and verify
+   nothing is left connected.
+5. **Client details prompt** — modal form: **name, address, phone,
+   email, website** (required fields validated before report render).
+6. **PDF report** — generate and display the audit report as PDF in the
+   dashboard (downloadable), containing:
+   - Cover page: **Authenticated, Inc.** as delivering company, client
+     info block, engagement type ("Red Team / Vulnerability Audit"),
+     date, report reference/ID.
+   - Industry-standard structure: executive summary, scope & methodology,
+     network/device inventory, findings per device (CVE, severity/CVSS,
+     exploit check + execution results), risk ratings matrix,
+     remediation/patch recommendations, conclusion, appendix
+     (CVE feed references, tooling).
+   - Professional layout: branded header/footer, page numbers,
+     severity color-coding, tables.
+
+### Technical notes
+
+- New module `c2_audit.py`: `run_audit()` state machine with phases
+  (`scanning → checking → exploiting → tearing_down → awaiting_client →
+  rendering → done`), persisted so refresh/resume doesn't restart it.
+- Endpoints: `POST /api/audit/start`, `GET /api/audit/status` (phase +
+  progress for the UI), `POST /api/audit/report` (client info → PDF),
+  `GET /api/audit/report.pdf`.
+- PDF via `reportlab` (add to requirements; fallback `fpdf2`) — pure
+  server-side generation, no browser print-to-PDF.
+- Audit is a background thread like the CVE update; button disabled +
+  phase shown while running; Confirm-before-start (it sends exploits).
+- Results also saved under `c2_data/audits/<timestamp>/` (JSON + PDF)
+  for the repo record.
+- Audit type field ("Red Team Vulnerability Audit") included so future
+  variants (compliance, black-box) can reuse the same template.
+
+### Acceptance checklist
+
+- [ ] "Audit" button runs all 6 phases in order with visible progress
+- [ ] Check phase verifies exploits without transmitting payloads
+- [ ] All connections/sessions killed and verified before report phase
+- [ ] Client form (name, address, phone, email, website) validated
+- [ ] PDF renders in-dashboard with Authenticated, Inc. branding,
+      client block, audit type, findings, risk ratings, recommendations
+- [ ] Report structure matches industry pentest-report conventions
+- [ ] Audit JSON + PDF archived under `c2_data/audits/`
+- [ ] Docs/tooltips (`docs/C2_DASHBOARD.md`, help icons) updated
