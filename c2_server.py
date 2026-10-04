@@ -13,6 +13,7 @@ import time
 import socket
 import struct
 import subprocess
+import sys
 import platform
 import uuid
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
@@ -1397,7 +1398,30 @@ class C2Handler(BaseHTTPRequestHandler):
         self.wfile.write(json.dumps(data).encode())
 
 
+def _harden_console_output():
+    """Make print() incapable of taking the C2 down.
+
+    A piped or redirected stdout on Windows is encoded with the ANSI code page
+    (cp1252 on Western locales), which has no '⚙'. Printing the banner's gear
+    raised UnicodeEncodeError *after* the port had already been bound and
+    before serve_forever(), so the process died during startup and the
+    dashboard answered nothing at all — the C2 looked like it was crashing and
+    being relaunched. Keep each stream's own encoding (interactive consoles
+    stay correct) and substitute a placeholder for anything it cannot
+    represent, instead of raising.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:          # stream is None (pythonw) or exotic
+            continue
+        try:
+            reconfigure(errors="replace")
+        except Exception:                # noqa: BLE001 — never fatal
+            pass
+
+
 def main():
+    _harden_console_output()
     load_devices()
     load_commands()
     load_scans()

@@ -828,7 +828,7 @@
             <input type="text" id="scan-cidr" class="form-input" placeholder="192.168.1.0/24">
           </div>
           <div class="form-group" style="flex:0">
-            <button class="btn btn-primary" onclick="startScan()" data-tooltip="Scan the network (generic ports + all CVE-database family signature ports) and match CVEs">Scan</button>
+            <button class="btn btn-primary" id="scan-btn" onclick="startScan()" data-tooltip="Scan the network (generic ports + all CVE-database family signature ports) and match CVEs">Scan</button>
           </div>
           <div class="form-group" style="flex:0">
             <button class="btn" onclick="saveScanResults()" data-tooltip="Save scan results to file">Save</button>
@@ -880,10 +880,10 @@
             </select>
           </div>
           <div class="form-group" style="flex:0">
-            <button class="btn btn-primary" onclick="generatePayload()" data-tooltip="Generate exploit payload">Generate</button>
+            <button class="btn btn-primary" id="payload-generate" onclick="generatePayload()" data-tooltip="Generate exploit payload">Generate</button>
           </div>
           <div class="form-group" style="flex:0">
-            <button class="btn btn-success" onclick="deployPayload()" data-tooltip="Run the exploit module against the target and report the real result">Exploit</button>
+            <button class="btn btn-success" id="payload-exploit" onclick="deployPayload()" data-tooltip="Run the exploit module against the target and report the real result">Exploit</button>
           </div>
         </div>
         <div id="payload-output"></div>
@@ -1207,30 +1207,85 @@ function addLog(msg) {
   container.scrollTop = container.scrollHeight;
 }
 
-async function api(path, method = 'GET', body = null) {
+// Some endpoints legitimately run for minutes (discovery, exploitation,
+// remediation, feed refresh). Everything else must fail loudly: fetch has no
+// default timeout, so without a budget a dead or blocked C2 left `await api(...)`
+// pending forever — buttons stayed disabled with no error, which read as
+// "the button doesn't work" / "the form hangs after I enter client details".
+// Ordered: first match wins.
+const API_BUDGETS = [
+  // execute_patches() allows 45s PER COMMAND and runs several commands, so a
+  // stack of timeouts can pass 300s without anything being wrong with the C2.
+  [/^\/api\/cve\/patch/, 600000],
+  // measured: full /24 discovery 38s; run_exploit() is capped at 90s server-side
+  // (\b keeps /api/scans — a fast local read — on the short default budget)
+  [/^\/api\/(scan\b|exploit)/, 300000],
+  // engagement starts, PDF reports, feed refresh, whitepaper/artifact renders
+  [/^\/api\/(patch|cve|implant|devices\/tv)/, 300000],
+];
+
+function apiTimeoutFor(path) {
+  const hit = API_BUDGETS.find(([re]) => re.test(path));
+  return hit ? hit[1] : 30000;   // everything else is a quick read or write
+}
+
+async function api(path, method = 'GET', body = null, timeoutMs) {
   const opts = { method, headers: {} };
   if (body) {
     opts.headers['Content-Type'] = 'application/json';
     opts.body = JSON.stringify(body);
   }
-  const r = await fetch(API + path, opts);
-  return r.json();
+  const budget = timeoutMs || apiTimeoutFor(path);
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), budget);
+  opts.signal = ctrl.signal;
+
+  let r;
+  try {
+    r = await fetch(API + path, opts);
+  } catch (e) {
+    clearTimeout(timer);
+    throw new Error(e && e.name === 'AbortError'
+      ? `no response after ${Math.round(budget / 1000)}s — check that the C2 is running`
+      : `cannot reach the C2 (${(e && e.message) || 'network error'})`);
+  }
+  clearTimeout(timer);
+
+  const text = await r.text();
+  let data;
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch (e) {
+    throw new Error(`${path} answered HTTP ${r.status} with a response that isn't JSON`);
+  }
+  // Keep the historical contract: error bodies are returned, not thrown, so
+  // callers can surface `res.error` / `res.errors`. Only fill in the message
+  // when the server failed without saying why.
+  if (data && typeof data === 'object' && !Array.isArray(data)
+      && !r.ok && !data.error) {
+    data.error = `HTTP ${r.status}${r.statusText ? ' ' + r.statusText : ''}`;
+  }
+  return data;
 }
 
 async function loadDevices() {
-  devices = await api('/api/devices');
+  const data = await api('/api/devices');
+  // Only adopt a real list: an error body (C2 down, 500, timeout) used to
+  // reach renderDevices() and die on devices.map, leaving the grid stale.
+  if (Array.isArray(data)) devices = data;
   renderDevices();
 }
 
 async function loadClips() {
-  clips = await api('/api/clips');
+  const data = await api('/api/clips');
+  if (Array.isArray(data)) clips = data;
   document.getElementById('stat-clips').textContent = clips.length;
   renderDevices();
 }
 
 async function loadLocalIp() {
   const data = await api('/api/local_ip');
-  localIp = data.ip;
+  if (data && data.ip) localIp = data.ip;
   document.getElementById('stat-ip').textContent = localIp;
 }
 
@@ -1405,17 +1460,58 @@ async function clearLogs() {
 }
 
 // Network Scan
+function setScanStatus(html) {
+  const el = document.getElementById('scan-results');
+  if (el) el.innerHTML = html;
+}
+
 async function startScan() {
-  const cidr = document.getElementById('scan-cidr').value || null;
-  addLog('Starting network scan...');
-  const result = await api('/api/scan', 'POST', { cidr });
-  addLog(`Scan complete: ${result.found} devices discovered`);
-  lastScanResults = result.results || [];
-  renderScanResults(result.results);
+  const btn = document.getElementById('scan-btn');
+  const cidr = document.getElementById('scan-cidr').value.trim() || null;
+  const label = btn ? btn.textContent : 'Scan';
+
+  addLog(`Starting network scan${cidr ? ' of ' + cidr : ' of the local subnet'}...`);
+  if (btn) { btn.disabled = true; btn.textContent = 'Scanning...'; }
+  setScanStatus(
+    '<p style="color:var(--text-muted);font-size:13px;padding:16px 0">'
+    + 'Scanning — probing hosts and matching CVEs. Results appear here when '
+    + 'discovery finishes (a full /24 takes about a minute).</p>');
+
+  try {
+    const result = await api('/api/scan', 'POST', { cidr });
+    if (result && result.error) {
+      throw new Error((result.errors || [result.error]).join(' '));
+    }
+    const rows = result && Array.isArray(result.results) ? result.results : null;
+    if (!rows) throw new Error('the C2 sent a reply without a results list');
+
+    lastScanResults = rows;
+    const found = (result.found === undefined || result.found === null)
+      ? rows.length : result.found;
+    addLog(`Scan complete: ${found} devices discovered`);
+    renderScanResults(rows);
+  } catch (e) {
+    const msg = (e && e.message) || String(e);
+    addLog(`Scan failed: ${msg}`);
+    setScanStatus(
+      '<div class="alert alert-warning" style="margin-top:12px">Scan failed: '
+      + escapeHtml(msg)
+      + ' — the results above were left unchanged. Check the C2 is reachable, '
+      + 'then try again.</div>');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = label; }
+  }
 }
 
 function renderScanResults(results) {
   const el = document.getElementById('scan-results');
+  if (!Array.isArray(results)) {
+    // Previously `results.length` threw on undefined, which left the panel
+    // untouched and made a failed scan look like a dead button.
+    setScanStatus('<div class="alert alert-warning">Scan returned no results '
+      + 'list — see the activity log for the reason.</div>');
+    return;
+  }
   if (results.length === 0) {
     el.innerHTML = '<p style="color:var(--text-muted);font-size:13px;padding:16px 0">No vulnerable devices found on the network.</p>';
     return;
@@ -1551,47 +1647,121 @@ function exploitTarget(ip, deviceType) {
 }
 
 // Payload Generator
+// Status lands in #payload-output on the card itself: this button used to
+// report nothing at all, so an empty form, a refused request or a reply
+// without a payload all read as "the Generate button does nothing".
+function setPayloadStatus(html) {
+  const el = document.getElementById('payload-output');
+  if (el) el.innerHTML = html;
+}
+
 async function generatePayload() {
-  const targetIp = document.getElementById('payload-ip').value;
+  const btn = document.getElementById('payload-generate');
+  const ipEl = document.getElementById('payload-ip');
+  const targetIp = (ipEl.value || '').trim();
   const family = document.getElementById('payload-family').value;
+  const label = btn ? btn.textContent : 'Generate';
+
   if (!targetIp) {
-    alert('Please enter a target IP address');
+    // Inline rather than alert(): a suppressed or missed dialog is invisible,
+    // and the card gave no other sign that anything was expected of you.
+    setPayloadStatus('<div class="alert alert-warning">Enter a target IP '
+      + 'address, then press Generate.</div>');
+    ipEl.focus();
+    addLog('Payload generation skipped: no target IP address');
     return;
   }
+
+  if (btn) { btn.disabled = true; btn.textContent = 'Generating...'; }
+  setPayloadStatus(
+    '<p style="color:var(--text-muted);font-size:13px;padding:8px 0">Building '
+    + 'the ' + escapeHtml(family) + ' payload for ' + escapeHtml(targetIp)
+    + '…</p>');
   addLog(`Generating payload for ${targetIp} (${family})...`);
-  const result = await api('/api/payload', 'POST', { target_ip: targetIp, family, c2_ip: localIp });
-  document.getElementById('payload-text').textContent = result.payload;
-  document.getElementById('payload-modal').classList.add('active');
-  addLog(`Payload generated for ${targetIp}`);
+
+  try {
+    const result = await api('/api/payload', 'POST',
+                             { target_ip: targetIp, family, c2_ip: localIp });
+    if (result && result.error) {
+      throw new Error((result.errors || [result.error]).join(' '));
+    }
+    const payload = (result && typeof result.payload === 'string'
+                     && result.payload.length) ? result.payload : null;
+    if (!payload) throw new Error('the C2 sent a reply without a payload');
+
+    document.getElementById('payload-text').textContent = payload;
+    // testAiGeneration() retitles this modal; a later payload must not inherit
+    // the previous CVE's title.
+    const title = document.querySelector('#payload-modal .modal-title');
+    if (title) title.textContent = 'Generated Payload';
+    document.getElementById('payload-modal').classList.add('active');
+    setPayloadStatus(
+      '<div class="alert alert-success">Payload ready for ' + escapeHtml(targetIp)
+      + ' — opened in the preview below.</div>');
+    addLog(`Payload generated for ${targetIp} (${family})`);
+  } catch (e) {
+    const msg = (e && e.message) || String(e);
+    addLog(`Payload generation failed: ${msg}`);
+    setPayloadStatus(
+      '<div class="alert alert-warning">Payload generation failed: '
+      + escapeHtml(msg) + '</div>');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = label; }
+  }
 }
 
 async function deployPayload() {
-  const targetIp = document.getElementById('payload-ip').value.trim();
+  const btn = document.getElementById('payload-exploit');
+  const ipEl = document.getElementById('payload-ip');
+  const targetIp = (ipEl.value || '').trim();
   const family = document.getElementById('payload-family').value;
+  const label = btn ? btn.textContent : 'Exploit';
   if (!targetIp) {
-    alert('Please enter a target IP address');
+    setPayloadStatus('<div class="alert alert-warning">Enter a target IP '
+      + 'address, then press Exploit.</div>');
+    ipEl.focus();
+    addLog('Exploit skipped: no target IP address');
     return;
   }
   const tvType = familyToTvType(family);
+  if (btn) { btn.disabled = true; btn.textContent = 'Running...'; }
+  setPayloadStatus('<p style="color:var(--text-muted);font-size:13px;padding:8px 0">'
+    + 'Running the exploit module against ' + escapeHtml(targetIp) + '…</p>');
   addLog(`Exploit on ${targetIp} (${family}) — running the exploit module...`);
   try {
     const res = await api('/api/exploit', 'POST',
                           { ip: targetIp, family, tv_type: tvType });
     if (res.error || res.attempted === false) {
-      addLog(`Exploit not run on ${targetIp}: ${res.error || 'no module available'}`);
+      const why = res.error || 'no module available';
+      addLog(`Exploit not run on ${targetIp}: ${why}`);
+      setPayloadStatus('<div class="alert alert-warning">Exploit not run: '
+        + escapeHtml(why) + '</div>');
       return;
     }
     const dur = (res.duration_s !== undefined && res.duration_s !== null)
       ? ` in ${res.duration_s}s` : '';
     if (res.success) {
       addLog(`Exploit succeeded on ${targetIp} (${res.tv_type})${dur}`);
+      setPayloadStatus('<div class="alert alert-success">Exploit succeeded on '
+        + escapeHtml(targetIp) + ' (' + escapeHtml(res.tv_type || tvType) + ')' + dur + '</div>');
     } else if (res.timed_out) {
-      addLog(`Exploit timed out on ${targetIp} (${res.tv_type})${dur}: ${res.error || 'module exceeded its time budget'}`);
+      const why = res.error || 'module exceeded its time budget';
+      addLog(`Exploit timed out on ${targetIp} (${res.tv_type})${dur}: ${why}`);
+      setPayloadStatus('<div class="alert alert-warning">Exploit timed out'
+        + dur + ': ' + escapeHtml(why) + '</div>');
     } else {
-      addLog(`Exploit failed on ${targetIp} (${res.tv_type})${dur}${res.error ? ': ' + res.error : ''}`);
+      const why = res.error ? ': ' + res.error : '';
+      addLog(`Exploit failed on ${targetIp} (${res.tv_type})${dur}${why}`);
+      setPayloadStatus('<div class="alert alert-warning">Exploit failed on '
+        + escapeHtml(targetIp) + dur + (res.error ? ': ' + escapeHtml(res.error) : '') + '</div>');
     }
   } catch (e) {
-    addLog(`Exploit request failed: ${e.message || e}`);
+    const msg = (e && e.message) || String(e);
+    addLog(`Exploit request failed: ${msg}`);
+    setPayloadStatus('<div class="alert alert-warning">Exploit request failed: '
+      + escapeHtml(msg) + '</div>');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = label; }
   }
 }
 
@@ -1626,7 +1796,16 @@ async function loadCVEs() {
 
 function renderCVEs(cves) {
   const el = document.getElementById('cve-results');
-  if (!cves || cves.length === 0) {
+  if (!Array.isArray(cves)) {
+    // A failed /api/cves reply is an object, not a list; `cves.length` was
+    // undefined so the empty-check passed and `cves.map` threw, blanking the
+    // tab with no explanation.
+    el.innerHTML = '<div class="alert alert-warning">CVE database could not be loaded'
+      + (cves && cves.error ? ' &mdash; ' + escapeHtml(cves.error) : '')
+      + '. Check the C2, then retry.</div>';
+    return;
+  }
+  if (cves.length === 0) {
     el.innerHTML = '<p style="color:var(--text-muted);font-size:13px;padding:16px 0">No CVEs in database.</p>';
     return;
   }
@@ -2065,7 +2244,9 @@ function showClientErrors(errors) {
 async function submitClientForm() {
   const client = readClientForm();
   const btn = document.getElementById('client-submit');
+  const label = btn.textContent;
   btn.disabled = true;
+  btn.textContent = 'Submitting...';
   try {
     if (clientModalMode === 'audit') {
       const res = await api('/api/audit/authorize', 'POST', { client });
@@ -2086,6 +2267,7 @@ async function submitClientForm() {
     showClientErrors([e.message || String(e)]);
   } finally {
     btn.disabled = false;
+    btn.textContent = label;
   }
 }
 

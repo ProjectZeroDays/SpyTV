@@ -100,12 +100,13 @@ spytv/
 │   ├── whitepapers/            # Generated per-CVE whitepapers (CVE-*.md, git-ignored)
 │   └── …                       # threat model, hardening, detection, code review, etc.
 │
-├── tests/                      # pytest suite — 97 tests
+├── tests/                      # pytest suite — 107 tests
 │   ├── test_audit_flow.py      # Engagement flows + endpoints
 │   ├── test_cve_artifacts.py   # T-01/T-02 artifact pipeline + viewer
 │   ├── test_local_provider.py  # Keyless local GGUF/MLX provider (probe + completions)
 │   ├── test_c2_server.py / test_cve_monitor.py / test_detectors.py
 │   ├── test_drill_report.py / test_hardening.py
+│   ├── test_dashboard_ui.py    # Dashboard inline script driven in Node (stub DOM)
 │   └── generated/              # Auto-generated exploit tests (test_CVE-*.py)
 │
 ├── tools/

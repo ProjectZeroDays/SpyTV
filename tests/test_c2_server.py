@@ -7,9 +7,11 @@ holds it (previously hung the /api/scan handler).
 import json
 import os
 import pathlib
+import queue
 import subprocess
 import sys
 import threading
+import time
 import urllib.request
 from http.server import ThreadingHTTPServer
 
@@ -110,3 +112,72 @@ def test_c2_port_env_override_moves_the_whole_platform():
     )
     assert out.returncode == 0, out.stderr
     assert out.stdout.strip() == "8443"
+
+
+def test_server_boots_when_stdout_is_not_utf8():
+    """Regression: the startup banner's '⚙' has no representation in cp1252,
+    which is the code page a piped or redirected stdout gets on Windows. The
+    print ran AFTER the port was already bound but BEFORE serve_forever(), so
+    UnicodeEncodeError killed the process during startup — the dashboard then
+    answered nothing at all, and the C2 read as "keeps restarting, opening a
+    terminal window again".
+
+    Run in a real subprocess (a pipe is what forces the ANSI code page) with
+    SPYTV_C2_PORT=0 so the ephemeral port can never collide with a live C2.
+    """
+    env = {k: v for k, v in os.environ.items() if k != "SPYTV_C2_PORT"}
+    env["SPYTV_C2_PORT"] = "0"
+    # A pipe would otherwise block-buffer stdout: a healthy server would never
+    # flush the banner and the test could not tell "running" from "stuck".
+    # PYTHONUNBUFFERED only changes buffering, never the ANSI code page.
+    env["PYTHONUNBUFFERED"] = "1"
+    proc = subprocess.Popen(
+        [sys.executable, "c2_server.py"],
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        env=env, cwd=str(pathlib.Path(__file__).resolve().parents[1]),
+        text=True, errors="replace",   # match the child's own code page
+    )
+    lines: "queue.Queue[str]" = queue.Queue()
+
+    def _pump():
+        for line in proc.stdout:
+            lines.put(line)
+
+    threading.Thread(target=_pump, daemon=True).start()
+
+    seen, booted, deadline = [], False, time.time() + 60
+    try:
+        while time.time() < deadline:
+            try:
+                line = lines.get(timeout=1)
+            except queue.Empty:
+                if proc.poll() is not None:
+                    break
+                continue
+            seen.append(line)
+            if "C2 Server running" not in line:
+                continue
+            booted = True
+            # The bind happens first, so the banner appears BEFORE the '⚙'
+            # print that used to kill the process. Keep draining afterwards,
+            # otherwise a startup death hides behind the banner line.
+            settle = time.time() + 3
+            while time.time() < settle:
+                try:
+                    seen.append(lines.get(timeout=0.2))
+                except queue.Empty:
+                    if proc.poll() is not None:
+                        break
+            break
+
+        blob = "".join(seen)
+        assert booted, f"server never reported it was running:\n{blob}"
+        assert "UnicodeEncodeError" not in blob, blob
+        assert "Traceback" not in blob, blob
+        assert proc.poll() is None, f"server exited during startup:\n{blob}"
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=10)
+        except Exception:              # noqa: BLE001 — never leak the process
+            proc.kill()

@@ -1,5 +1,120 @@
 # SpyTV Code Changes Log
 
+## [2026-10-04] — C2 died during its own startup; Scan and Audit buttons failed without a message (v1.0.6)
+
+### The C2 could exit before it ever served a request
+- `main()` prints an Android-console hint containing **`⚙`**. On Windows a
+  **piped or redirected** stdout is encoded with the ANSI code page (cp1252 on
+  Western locales), which has no such character, so `print()` raised
+  `UnicodeEncodeError`. An interactive console doesn't hit this — it writes
+  through the Unicode console API — which is why it only appeared when output
+  was captured, redirected, or launched through a wrapper.
+- The order inside `main()` made it fatal: bind the port → print the banner →
+  `print("… (⚙) …")` → `server.serve_forever()`. The exception fired
+  **after the port was already bound but before the server ever served**:
+  no dashboard, no API, and the only visible effect was a terminal that opened
+  with a traceback — matching the "C2 restarts opening a terminal window again"
+  report.
+- Fix: `_harden_console_output()` runs first in `main()` and reconfigures
+  `sys.stdout` / `sys.stderr` with `errors="replace"`. Each stream keeps its own
+  encoding (interactive consoles still render `⚙` properly) and substitutes a
+  placeholder for anything it cannot represent, so **no `print()` can be fatal**.
+  `c2_server.py` now imports `sys`.
+- Regression test `test_server_boots_when_stdout_is_not_utf8` starts the real
+  `c2_server.py` with a pipe (the condition that forces the ANSI code page),
+  `SPYTV_C2_PORT=0` so it can never collide with a live C2, and
+  `PYTHONUNBUFFERED=1` so a healthy server's banner actually reaches the pipe.
+  - Honest note: the first draft of that test **passed with the bug present**.
+    It stopped reading at `C2 Server running` — and that line is printed *before*
+    the failing print, so it won the race. It now keeps draining for 3s past the
+    banner; with `_harden_console_output()` commented out it fails on the exact
+    `UnicodeEncodeError: … '\u2699'`, and passes with the fix.
+
+### The Scan button now says what it is doing — and what went wrong
+- `startScan()` had **no error handling**: it awaited `api()`, logged
+  `Scan complete: ${result.found}` and handed `result.results` to
+  `renderScanResults()`. Any failure (non-200, non-JSON body, missing
+  `results`, network error) died as an unhandled rejection, so the panel stayed
+  exactly as it was and the log stopped at "Starting network scan..." — a dead
+  button. `renderScanResults(undefined)` also threw on `results.length`.
+- It now disables and relabels the button (`Scanning...`), writes a progress
+  note **into the results panel itself**, wraps everything in
+  try/catch/finally, validates that `results` is a list, and on failure shows a
+  warning panel naming the reason while leaving the previous rows intact. The
+  button is restored in `finally`, so every path re-enables it.
+- `renderScanResults()` guards non-array input instead of throwing.
+- Evidence for why it read as broken: the live C2's scan history shows **8
+  scans between 13:06 and 13:13**, one every 40–80s, each returning the same
+  single host — with no spinner, no disabled button and no in-panel feedback,
+  a minute of silence looks like nothing happened.
+
+### Client-details submit could hang with the button stuck
+- `api()` was `await fetch(...); return r.json()` — **no timeout, no status
+  check, no non-JSON handling**. `fetch` has no default timeout, so a C2 that
+  never answered left the promise pending forever; `submitClientForm()`'s
+  `finally` never ran, the Continue button stayed disabled and the modal never
+  closed. That is the reported "hangs after input of client details".
+- `api()` now arms an `AbortController` per call: **30s** by default, with an
+  ordered `API_BUDGETS` table for the endpoints that legitimately run long —
+  **600s** for `/api/cve/patch` (it stacks a 45s-per-command cap across several
+  commands), **300s** for scan / exploit / patch / cve / implant, and 30s for
+  everything else including the fast `/api/scans` read (`\b` keeps it off the
+  scan budget). It reads the body as
+  text, tolerates an empty or non-JSON reply, and fills in a generic
+  `error` when a non-2xx response didn't carry one, preserving the existing
+  `res.error` / `res.errors` contract. Timeouts and network failures are
+  rethrown as messages a human can act on ("check that the C2 is running").
+- `submitClientForm()` also relabels to `Submitting...` while in flight.
+- Measured on a new-code C2 (`:8444`): `POST /api/audit/authorize` **1.02s**
+  standalone, its PDF preview **0.02s**, and **0.43s while a scan was in
+  flight** — the exact condition under which the old single-threaded server
+  stalled the request.
+
+### Error bodies no longer reach `.map`
+- `renderCVEs(cves)` tested `!cves || cves.length === 0`. A failed
+  `/api/cves` reply is an **object**, so `length` was `undefined`, the
+  empty-check passed and `cves.map` threw — the tab went blank with no message.
+  It now requires an array and reports the server's error instead.
+- `loadDevices()` / `loadClips()` / `loadLocalIp()` only adopt a well-formed
+  reply (list / `ip` present), so a 500 or timeout can no longer overwrite the
+  last good state and crash `renderDevices()` on `devices.map`.
+
+### The Exploit Payload Generator's Generate button did nothing
+- `generatePayload()` was the last generate path with **no error handling**:
+  no try/catch, no `res.error` check, no button state. It validated the form
+  with `alert()` — a suppressed, backgrounded or simply missed dialog leaves no
+  trace, so an empty Target IP looked exactly like a broken button. It also
+  never wrote to the card's own `#payload-output` container, so *every* failure
+  was invisible.
+- The server side was healthy throughout: `POST /api/payload` measured on the
+  live C2 returned **200 in 0.07s** (`tizen-dev`, `webos-dev`, `dlna`), the
+  route exists (`c2_server.py:432`), and all four element ids the function
+  touches are present — which is what pointed the investigation at the client.
+- Now: inline validation on the card (never `alert()`), a `Generating...`
+  disabled button, try/catch, `res.error` surfaced, a reply without a `payload`
+  reported instead of opening a modal full of `undefined`, and the modal title
+  reset — `testAiGeneration()` retitles that shared modal to the CVE id and a
+  later payload must not inherit it.
+- `deployPayload()` got the same treatment: it already logged its outcomes, but
+  shared the `alert()` validation and gave no button or card feedback.
+
+### Verification
+- **107 tests pass** (+1 C2 startup crash, +2 dashboard).
+- `tests/test_dashboard_ui.py` executes the dashboard's whole inline script in
+  Node against a stub DOM: **67 assertions, 0 failures** across 13 sections —
+  the scan happy path, server rejection, unreachable C2, malformed reply, the
+  `renderScanResults(undefined)` guard, both client-details outcomes, the
+  bounded hang, the per-endpoint budgets, the new list guards, and both
+  Exploit Payload Generator buttons (empty input, success, server error,
+  network failure, payload-less reply, button restoration on every path).
+  It also `node --check`s the script first — a syntax error there would kill
+  every button at once. Skips if node is absent.
+- Live two-button run against the running C2: scan **200 in 38.1s, found=2,
+  results a list**; authorize **200 in 1.02s**; authorize-during-scan
+  **200 in 0.43s (did not block)**.
+- An already-running C2 keeps executing the code it was started with —
+  **restart it** to pick this up.
+
 ## [2026-10-04] — Scan froze at 5% for 37 minutes: parallel discovery, live progress, non-blocking C2 · brand artwork becomes every app icon (v1.0.5)
 
 ### Why the engagement sat on 5%
