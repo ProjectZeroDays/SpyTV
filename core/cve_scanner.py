@@ -7,11 +7,59 @@ import ipaddress
 import socket
 import subprocess
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from colorama import Fore, Style
 
 # Safety cap shared by every network scan (see c2_ops.scan_network):
 # never enumerate more than this many hosts from a supplied CIDR.
 MAX_SCAN_HOSTS = 1024
+
+# Bounded pool used for TCP connect probes.
+#
+# Probing is I/O-bound and a host that doesn't exist never sends a reset, so
+# EVERY probe pays the full 0.3s timeout. Scanning a /24 sequentially meant
+# ~1500 (hosts x ports) timeouts back to back: 15-20 minutes per pass, with the
+# engagement bar frozen at 5% because nothing reported progress in between.
+# Running the probes through a bounded pool turns that into seconds while
+# keeping the fan-out modest enough not to disturb the LAN.
+SCAN_WORKERS = 64
+
+
+def probe_port(ip, port, timeout=0.3):
+    """One TCP connect probe. Never raises — a failed probe reads as closed."""
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            sock.settimeout(timeout)
+            return sock.connect_ex((ip, port)) == 0
+        finally:
+            sock.close()
+    except Exception:  # noqa: BLE001 — anything unprobeable is simply closed
+        return False
+
+
+def probe_many(jobs, workers=SCAN_WORKERS, on_progress=None):
+    """Probe ``(ip, port)`` jobs concurrently and return results in job order.
+
+    ``on_progress(done, total)`` fires only on the calling thread, so callers
+    can push it straight through to the UI without extra locking.
+    """
+    results = [False] * len(jobs)
+    if not jobs:
+        if on_progress:
+            on_progress(0, 0)
+        return results
+    workers = max(1, min(int(workers), len(jobs)))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        pending = {pool.submit(probe_port, ip, port): idx
+                   for idx, (ip, port) in enumerate(jobs)}
+        done = 0
+        for fut in as_completed(pending):
+            results[pending[fut]] = bool(fut.result())
+            done += 1
+            if on_progress:
+                on_progress(done, len(jobs))
+    return results
 
 # Known CVE database for smart TVs
 TV_CVE_DATABASE = {
@@ -197,8 +245,13 @@ class CVEScanner:
             "patch_available": all(cve.get("fixed_in") for cve in relevant_cves),
         }
 
-    def scan_network(self, cidr=None):
-        """Scan network and return all TV findings."""
+    def scan_network(self, cidr=None, progress_cb=None):
+        """Scan network and return all TV findings.
+
+        ``progress_cb(fraction)`` (optional) receives 0.0 → 1.0 across this
+        pass so callers can show movement while it runs instead of freezing on
+        a single percentage until the whole sweep is done.
+        """
         if cidr is None:
             import socket as s
             try:
@@ -220,20 +273,25 @@ class CVEScanner:
         tv_ports = set()
         for info in TV_CVE_DATABASE.values():
             tv_ports.update(info["ports"])
+        tv_ports = sorted(tv_ports)   # deterministic job + result ordering
+
+        # One job per (host, port), probed through a bounded pool — see
+        # SCAN_WORKERS. Results are mapped back by position, so ordering of
+        # `open_ports` still follows tv_ports exactly as before.
+        ips = [str(host) for host in hosts]
+        jobs = [(ip, port) for ip in ips for port in tv_ports]
+
+        def _report(done, total):
+            if progress_cb and total:
+                progress_cb(done / total)
+
+        probes = probe_many(jobs, on_progress=_report)
 
         findings = []
-        for host in hosts:
-            ip = str(host)
-            open_ports = []
-            for port in tv_ports:
-                try:
-                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    s.settimeout(0.3)
-                    if s.connect_ex((ip, port)) == 0:
-                        open_ports.append(port)
-                    s.close()
-                except Exception:
-                    pass
+        for i, ip in enumerate(ips):
+            base = i * len(tv_ports)
+            open_ports = [port for j, port in enumerate(tv_ports)
+                          if probes[base + j]]
 
             if open_ports:
                 result = self.scan_host(ip, open_ports)

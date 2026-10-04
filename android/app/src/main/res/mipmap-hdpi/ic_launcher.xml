@@ -1,18 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Legacy launcher icon for API 24-25 (adaptive-icon requires v26). -->
+<!-- Legacy launcher icon for API 24-25 (adaptive-icon requires v26).
+     Full-bleed brand artwork from resources/logo_source.jpg; every
+     drawable-density bucket is written by tools/make_icon.py. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item>
         <shape android:shape="rectangle">
             <solid android:color="@color/background"/>
         </shape>
     </item>
-    <item
-        android:bottom="18dp"
-        android:left="18dp"
-        android:right="18dp"
-        android:top="18dp">
-        <shape android:shape="oval">
-            <solid android:color="@color/blue"/>
-        </shape>
-    </item>
+    <item android:drawable="@drawable/ic_launcher_foreground"/>
 </layer-list>

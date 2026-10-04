@@ -107,8 +107,15 @@ def httpd(monkeypatch, tmp_path):
     """C2 server on a random port with stubbed network operations and an
     isolated archive directory."""
     monkeypatch.setattr(c2_audit, "ARCHIVE_ROOT", str(tmp_path / "audits"))
-    monkeypatch.setattr(c2_server, "perform_scan",
-                        lambda cidr, scanner: [])
+    # Same shape as the production wiring: perform_scan(cidr, scanner,
+    # progress_cb). Reporting 1.0 exercises the engagement's progress path
+    # end-to-end instead of leaving the bar pinned at its first value.
+    def _stub_scan(cidr, scanner, progress_cb=None):
+        if progress_cb:
+            progress_cb(1.0)
+        return []
+
+    monkeypatch.setattr(c2_server, "perform_scan", _stub_scan)
     monkeypatch.setattr(c2_server, "check_target",
                         lambda ip, scanner: {
                             "ip": ip, "reachable": True, "open_ports": [7676],
@@ -519,3 +526,105 @@ def test_dashboard_exploit_flow_calls_real_endpoint():
     assert "/api/exploit" in html
     for stale in ("command: 'deploy'", "Exploit deployed"):
         assert stale not in html, f"phantom deploy flow leftover: {stale}"
+
+
+# ---------------------------------------------------------------------------
+# Scan responsiveness — the two things that made a scan read as a hang:
+# a progress bar that never moved, and a C2 that stopped answering every
+# other request while discovery ran (which looked like the C2 dying, so it
+# got restarted and opened a fresh terminal window).
+# ---------------------------------------------------------------------------
+
+def test_scan_progress_advances_across_the_scanning_slice():
+    """Discovery used to jump 5% -> 25% only once the ENTIRE pass finished,
+    so a slow network sat visibly frozen on 5%."""
+    eng = c2_audit.AuditEngagement(cidr="10.0.0.0/30")
+    eng.set_phase("scanning", 5)
+    seen = [eng.snapshot()["progress"]]
+    for frac in (0.25, 0.5, 0.75, 1.0):
+        eng._scan_progress(frac)
+        seen.append(eng.snapshot()["progress"])
+
+    assert seen == [5, 10, 15, 20, 25], seen
+    assert all(b >= a for a, b in zip(seen, seen[1:])), "bar moved backwards"
+
+
+def test_run_scan_forwards_progress_when_scan_fn_accepts_it():
+    def scan(cidr, cb=None):
+        if cb:
+            cb(0.5)
+            cb(1.0)
+        return [{"ip": "10.0.0.2"}]
+
+    eng = c2_audit.AuditEngagement(cidr="10.0.0.0/30", scan_fn=scan)
+    eng.set_phase("scanning", 5)
+
+    assert eng._run_scan() == [{"ip": "10.0.0.2"}]
+    assert eng.snapshot()["progress"] == 25
+
+
+def test_run_scan_still_calls_single_argument_scan_fn():
+    """Older wiring (`lambda cidr: []`, see test_audit_engagement_auto_*)
+    must keep working — progress is optional, not required."""
+    eng = c2_audit.AuditEngagement(cidr="10.0.0.0/30",
+                                   scan_fn=lambda cidr: [])
+    eng.set_phase("scanning", 5)
+
+    assert eng._run_scan() == []
+    assert eng.snapshot()["progress"] == 5
+
+
+def test_other_requests_answer_while_a_scan_runs(httpd, monkeypatch, tmp_path):
+    """Regression: /api/scan used to run the whole discovery inline on a
+    single-threaded server, so every other endpoint — device polling,
+    engagement status, and the desktop client's 2s health check — stalled
+    until it finished. The client fell back to its offline page, the C2
+    looked dead, and it got restarted with a new terminal window."""
+    monkeypatch.setattr(c2_server, "SCAN_FILE", str(tmp_path / "scans.json"))
+
+    def slow_scan(cidr, scanner, progress_cb=None):
+        time.sleep(2.0)
+        if progress_cb:
+            progress_cb(1.0)
+        return []
+
+    monkeypatch.setattr(c2_server, "perform_scan", slow_scan)
+
+    outcome = {}
+
+    def run_scan():
+        outcome["scan"] = _http(httpd, "POST", "/api/scan", {"cidr": None})[0]
+
+    worker = threading.Thread(target=run_scan, daemon=True)
+    worker.start()
+    time.sleep(0.4)          # the request handler is parked inside slow_scan
+
+    started = time.time()
+    code, scans = _http(httpd, "GET", "/api/scans")
+    elapsed = time.time() - started
+
+    assert code == 200
+    assert isinstance(scans, list)
+    assert elapsed < 1.0, f"other requests stalled {elapsed:.2f}s during a scan"
+
+    worker.join(timeout=15)
+    assert outcome.get("scan") == 200
+
+
+def test_scan_pipeline_reports_monotonic_progress():
+    """perform_scan must push 0.0 -> 1.0 across all three stages, and
+    scan_network must keep probing real sockets (this is the pipeline the
+    engagement's 5% slice is built on)."""
+    import c2_ops
+    from core.cve_scanner import CVEScanner
+
+    seen = []
+    results = c2_ops.perform_scan("127.0.0.1/32", CVEScanner(),
+                                  progress_cb=lambda f: seen.append(f))
+
+    assert isinstance(results, list)
+    for r in results:
+        assert {"ip", "open_ports", "device_type", "vulnerable"} <= set(r)
+    assert seen, "no progress reported"
+    assert all(b >= a for a, b in zip(seen, seen[1:])), seen
+    assert seen[-1] == 1.0, seen[-1]

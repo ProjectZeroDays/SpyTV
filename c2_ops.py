@@ -6,6 +6,7 @@ server state so both sides can use it without circular imports.
 """
 import datetime
 import importlib.util
+import inspect
 import ipaddress
 import os
 import socket
@@ -14,7 +15,7 @@ import subprocess
 import threading
 import time
 
-from core.cve_scanner import MAX_SCAN_HOSTS, TV_CVE_DATABASE
+from core.cve_scanner import MAX_SCAN_HOSTS, TV_CVE_DATABASE, probe_many
 
 REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
 GENERATED_EXPLOITS_DIR = os.path.join(REPO_ROOT, "data", "exploits", "generated")
@@ -69,8 +70,14 @@ def probe_ports(ip, ports=None, timeout=0.3):
     return open_ports
 
 
-def scan_network(cidr=None):
-    """Scan local network for vulnerable TVs using port scanning."""
+def scan_network(cidr=None, progress_cb=None):
+    """Scan local network for vulnerable TVs using port scanning.
+
+    ``progress_cb(fraction)`` (optional) receives 0.0 → 1.0 across this pass.
+    Probing runs through a bounded pool (``probe_many``) because sequential
+    0.3s timeouts on hosts that never answer took minutes per /24 — which is
+    what left the engagement bar sitting at 5% with no visible movement.
+    """
     if cidr is None:
         cidr = _default_cidr()
 
@@ -86,19 +93,19 @@ def scan_network(cidr=None):
         hosts = hosts[:MAX_SCAN_HOSTS]
     tv_ports = [5555, 22, 80, 554, 8080, 1900, 7676, 3000, 8060, 36669, 8009, 49152]
 
-    for host in hosts:
-        ip = str(host)
-        open_ports = []
-        for port in tv_ports:
-            try:
-                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                s.settimeout(0.3)
-                result = s.connect_ex((ip, port))
-                s.close()
-                if result == 0:
-                    open_ports.append(port)
-            except Exception:
-                pass
+    ips = [str(host) for host in hosts]
+    jobs = [(ip, port) for ip in ips for port in tv_ports]
+
+    def _report(done, total):
+        if progress_cb and total:
+            progress_cb(done / total)
+
+    probes = probe_many(jobs, on_progress=_report)
+
+    for i, ip in enumerate(ips):
+        base = i * len(tv_ports)
+        open_ports = [port for j, port in enumerate(tv_ports)
+                      if probes[base + j]]
 
         if open_ports:
             device_type = "Unknown"
@@ -137,10 +144,37 @@ def _default_cidr():
         return "192.168.1.0/24"
 
 
-def perform_scan(cidr, scanner):
+def perform_scan(cidr, scanner, progress_cb=None):
     """Full discovery pass: generic scan + CVE signature ports + family/CVE
-    matching. Returns enriched findings (same shape /api/scan returns)."""
-    results = scan_network(cidr)
+    matching. Returns enriched findings (same shape /api/scan returns).
+
+    ``progress_cb(fraction)`` (optional) receives a monotonic 0.0 → 1.0 across
+    the WHOLE pass. The engagement maps that onto its5% → 25% slice, so the
+    bar keeps moving instead of sitting on one number until everything is done.
+    """
+    # Weighted slices of the bar: generic discovery is the bulk of the work,
+    # the per-host CVE-port enrichment is small, the CVE scanner's own sweep
+    # (16 signature ports) closes it out.
+    W_GENERIC, W_EXTRA = 0.55, 0.15   # W_CVE = 1 - the two above = 0.30
+
+    # Two adapters over the same mapping: scan_network / the CVE scanner take
+    # progress_cb(fraction), while probe_many notifies with (done, total).
+    def _fraction_cb(start, span):
+        def report(frac):
+            if progress_cb is None:
+                return
+            frac = max(0.0, min(1.0, float(frac)))
+            progress_cb(start + span * frac)
+        return report
+
+    def _counts_cb(start, span):
+        report_fraction = _fraction_cb(start, span)
+
+        def report(done, total):
+            report_fraction((done / total) if total else 0.0)
+        return report
+
+    results = scan_network(cidr, progress_cb=_fraction_cb(0.0, W_GENERIC))
 
     # Enrich with CVE-database matching: add the vulnerability signature
     # ports for every known TV family so those TVs are discovered too, then
@@ -150,23 +184,30 @@ def perform_scan(cidr, scanner):
     scanned_ips = {r["ip"] for r in results}
     extra_ports = [p for p in cve_ports
                    if p not in (5555, 22, 80, 8080, 8060, 36669)]
-    for r in results:
-        for port in extra_ports:
-            if port in r["open_ports"]:
-                continue
-            try:
-                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                s.settimeout(0.3)
-                if s.connect_ex((r["ip"], port)) == 0:
+    if results and extra_ports:
+        jobs = [(r["ip"], port) for r in results for port in extra_ports]
+        probes = probe_many(jobs,
+                            on_progress=_counts_cb(W_GENERIC, W_EXTRA))
+        for i, r in enumerate(results):
+            base = i * len(extra_ports)
+            for j, port in enumerate(extra_ports):
+                if probes[base + j] and port not in r["open_ports"]:
                     r["open_ports"].append(port)
-                s.close()
-            except Exception:
-                pass
 
     # CVE-scan pass over the whole range (picks up families the generic
     # pass missed, e.g. Samsung 26101 / LG 30000 / Hisense 56789).
+    # Sniff the signature rather than catching TypeError, so a TypeError
+    # raised INSIDE the scanner isn't silently retried as "no progress arg".
     try:
-        cve_findings = scanner.scan_network(cidr)
+        takes_progress = "progress_cb" in inspect.signature(
+            scanner.scan_network).parameters
+    except (TypeError, ValueError):
+        takes_progress = False
+    try:
+        cve_findings = (scanner.scan_network(
+            cidr, progress_cb=_fraction_cb(W_GENERIC + W_EXTRA,
+                                           1 - W_GENERIC - W_EXTRA))
+            if takes_progress else scanner.scan_network(cidr))
     except Exception:
         cve_findings = []
     by_ip = {r["ip"]: r for r in results}

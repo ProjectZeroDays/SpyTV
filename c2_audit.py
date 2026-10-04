@@ -14,6 +14,7 @@ recommendations, appendices, sign-off).
 """
 import datetime
 import hashlib
+import inspect
 import io
 import json
 import os
@@ -916,6 +917,23 @@ class Engagement:
             self.phases.append({"phase": phase, "at": utc_now_iso()})
         self.say(f"[{phase}] {progress}%")
 
+    def set_progress(self, progress, log=False):
+        """Move the bar WITHOUT recording a phase transition.
+
+        Long steps used to jump5% → 25% only once the whole step finished, so
+        a slow network discovery made the banner look frozen (or dead). Callers
+        now push intermediate percentages through here while the work runs.
+        Returns True when the value actually changed.
+        """
+        pct = max(0, min(100, int(progress)))
+        with self._lock:
+            changed = pct != self.progress
+            if changed:
+                self.progress = pct
+        if changed and log:
+            self.say(f"[{self.phase}] {pct}%")
+        return changed
+
     def snapshot(self):
         with self._lock:
             return {
@@ -1029,11 +1047,43 @@ class AuditEngagement(Engagement):
         self.results = {"scan": {}, "checks": [], "exploits": [],
                         "connections": {}}
 
+    # -- discovery progress -------------------------------------------------
+    def _scan_progress(self, fraction):
+        """Map the scan's 0.0 → 1.0 onto the scanning phase's5% → 25% slice."""
+        frac = max(0.0, min(1.0, float(fraction)))
+        pct = 5 + int(20 * frac)
+        # Log on 5-point steps only, so the banner log stays readable; the bar
+        # itself still advances on every update it receives.
+        self.set_progress(pct, log=(pct % 5 == 0))
+
+    def _run_scan(self):
+        """Run the wired scan_fn, passing a progress callback when it takes one.
+
+        Callables wired with the older ``lambda cidr: ...`` shape accept only
+        one argument — detect that from the signature instead of catching
+        TypeError, which would re-run a scan that actually failed inside for
+        an unrelated reason.
+        """
+        cb = self._scan_progress
+        try:
+            params = list(inspect.signature(self.scan_fn).parameters.values())
+        except (TypeError, ValueError):
+            params = []
+        accepts_progress = (
+            any(p.kind == p.VAR_KEYWORD for p in params) or
+            sum(1 for p in params
+                if p.kind in (p.POSITIONAL_ONLY,
+                              p.POSITIONAL_OR_KEYWORD)) >= 2
+        )
+        if accepts_progress:
+            return self.scan_fn(self.cidr, cb) or []
+        return self.scan_fn(self.cidr) or []
+
     def run(self):
         # Phase 1 — scan for vulnerable TVs
         self.set_phase("scanning", 5)
         self.say(f"Scanning {self.cidr or 'local network'} for vulnerable TVs...")
-        findings = self.scan_fn(self.cidr) or []
+        findings = self._run_scan()
         targets = [f for f in findings
                    if f.get("vulnerable") and f.get("tv_type")]
         self.results["scan"] = {

@@ -110,11 +110,13 @@ spytv/
 │
 ├── tools/
 │   ├── banner.py               # ASCII banner helper
-│   └── make_icon.py            # Regenerates electron/icon.png (SpyTV app icon)
+│   └── make_icon.py            # Derives every app icon from resources/logo_source.jpg →
+│                               #   electron/icon.png (1024²), icon.png, Android launcher art
 │
 ├── output/                     # Generated reports kept as tracked samples
 │
 ├── resources/                  # Runtime assets
+│   ├── logo_source.jpg         # Source artwork (TV/binoculars mark) — every app icon derives from it
 │   └── config.yaml             # Default settings (tvreaper.{apk,wgt,ipk} are build outputs, git-ignored)
 │
 ├── c2_data/                    # Runtime state (git-ignored)

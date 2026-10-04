@@ -15,7 +15,7 @@ import struct
 import subprocess
 import platform
 import uuid
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 from core.cve_scanner import CVEScanner, TV_CVE_DATABASE
 from c2_cve_feed import (
@@ -1141,7 +1141,8 @@ class C2Handler(BaseHTTPRequestHandler):
 
             eng = AuditEngagement(
                 cidr=str(data.get("cidr") or "").strip() or None,
-                scan_fn=lambda cidr: perform_scan(cidr, cve_scanner),
+                scan_fn=lambda cidr, progress_cb=None: perform_scan(
+                    cidr, cve_scanner, progress_cb),
                 check_fn=lambda ip: check_target(ip, cve_scanner),
                 exploit_fn=lambda tv_type, ip: run_exploit(tv_type, ip),
                 kill_fn=lambda ips: kill_all_connections(ips),
@@ -1422,8 +1423,16 @@ def main():
     print("Starting CVE feed update in background...")
     threading.Thread(target=_startup_cve_update, daemon=True).start()
 
+    # Threading, not the single-threaded HTTPServer: a scan, an exploit run or
+    # an engagement holds a request open for a long time, and while one request
+    # was in flight the whole dashboard stopped answering — the desktop client's
+    # 2s health check failed, it fell back to the offline page, and the C2 looked
+    # like it had died (which is what made it get restarted with a new terminal
+    # window). Shared state is guarded by its own locks (devices/commands/scans/
+    # engagements), and daemon_threads is True on this class, so an in-flight
+    # request never keeps the process alive on shutdown.
     try:
-        server = HTTPServer((C2_HOST, C2_PORT), C2Handler)
+        server = ThreadingHTTPServer((C2_HOST, C2_PORT), C2Handler)
     except OSError as e:
         # A port that is already taken is the classic "the dashboard/Android
         # console shows something that isn't SpyTV" failure: the console and the

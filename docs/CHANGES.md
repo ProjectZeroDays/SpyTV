@@ -1,5 +1,72 @@
 # SpyTV Code Changes Log
 
+## [2026-10-04] — Scan froze at 5% for 37 minutes: parallel discovery, live progress, non-blocking C2 · brand artwork becomes every app icon (v1.0.5)
+
+### Why the engagement sat on 5%
+- The engagement reported **once** before discovery and once after:
+  `set_phase("scanning", 5)` → `perform_scan()` → `set_phase("checking", 25)`.
+  Nothing moved the bar in between. Read off the live C2's
+  `/api/audit/status`: `"[scanning] 5%"` at `13:16:04`, next log line
+  `"Scan complete: 2 host(s)"` at `13:53:04` — **37 minutes pinned at 5%**.
+- The scan was the cause. Two *sequential* passes over every host in the CIDR
+  (`c2_ops.scan_network`, 12 ports, then `cve_scanner.scan_network`, 16 ports)
+  each probe with `settimeout(0.3)`. A host that doesn't exist never sends a
+  reset, so **every** probe pays the full 0.3s — measured on the local `/24`,
+  pass 1 alone took **942.1s** (~15.7 min), pass 2 ~20 min more.
+- Nothing in the repo restarts the C2 (neither `.bat` has a loop, Electron
+  only *views* the dashboard and never spawns Python, teardown only kills
+  child tool processes, and Windows has no crash record for `python.exe`):
+  the "restart with a new terminal window" was the symptom of an operator
+  restarting an app that had gone unresponsive, not a watchdog.
+
+### Discovery is parallel and reports as it runs
+- `probe_many()` / `probe_port()` (`core/cve_scanner.py`) probe
+  `(host, port)` jobs through a bounded pool of 64 workers, keeping the old
+  socket semantics exactly (never raises; a failed probe reads as closed).
+  `MAX_SCAN_HOSTS`, the port lists and the family/CVE matching are unchanged.
+- Measured on the same `/24`: pass 1 **942.1s → 15.1s (62×)**, pass 2
+  **22.7s**, the whole `perform_scan()` **37.7s** — same hosts found (no
+  findings dropped; checked against `127.0.0.1/32`).
+- `perform_scan(cidr, scanner, progress_cb=None)` and
+  `CVEScanner.scan_network(cidr, progress_cb=None)` emit a **monotonic
+  0.0 → 1.0** across their three stages (0.55 generic / 0.15 extra CVE ports /
+  0.30 CVE sweep). `Engagement.set_progress()` maps that onto the scanning
+  phase's 5% → 25% slice, logging every 5 points. Callables wired the old
+  way (`lambda cidr: …`) still work — the arity is sniffed, not caught.
+
+### The C2 keeps answering while a scan runs
+- `POST /api/scan` ran the entire discovery **inline** on a single-threaded
+  `HTTPServer`, so device polling, engagement status and the desktop client's
+  2s health check all stalled until it finished — the client fell back to its
+  offline page and the C2 *read* as dead.
+- `main()` now binds `ThreadingHTTPServer` (`daemon_threads` is already True);
+  every shared structure (`devices` / `commands` / `scans` / `engagements` /
+  `authorizations`) is guarded by its own lock.
+
+### Every app icon now comes from the brand artwork
+- Source of truth: `resources/logo_source.jpg` (1408×768). It is a JPEG, so
+  the "transparent" backdrop is a baked grey/white checkerboard. `tools/make_icon.py`
+  measures the disc's bounding box by luminance (disc ≈ `#141E27`, checkerboard
+  ≥ `#CCC`), crops the largest square around it and paints everything outside
+  the disc with the disc's own sampled fill — verified seamless (outside fill
+  `[20,30,39]`, std **0**, no discontinuity at the rim).
+- Outputs: `electron/icon.png` 1024² → desktop exe (embedded icon re-extracted
+  and verified: corner `#141E27`, centre = the artwork), root `icon.png` 192² →
+  widget builders, and Android `drawable-*/ic_launcher_{,round_}foreground.png`
+  (108dp at every density bucket).
+- The Android launcher used to be a **solid blue square** on v26 and a navy
+  square with a plain blue circle on the legacy path. All four launcher XMLs
+  now reference the artwork; the legacy round icon uses a pre-clipped circular
+  PNG so it can't show square corners on a round launcher.
+
+### Tests — 104 passed (+5)
+- `test_scan_progress_advances_across_the_scanning_slice` — 5→10→15→20→25, never backwards.
+- `test_run_scan_forwards_progress_when_scan_fn_accepts_it` and
+  `test_run_scan_still_calls_single_argument_scan_fn` — new contract plus the old wiring.
+- `test_other_requests_answer_while_a_scan_runs` — a 2s `/api/scan` must not
+  stall `/api/scans` for more than 1s (fails on the old single-threaded server).
+- `test_scan_pipeline_reports_monotonic_progress` — real sockets, 0.0 → 1.0.
+
 ## [2026-10-04] — Android console hit the wrong service: configurable C2 endpoint, probe-before-render, port diagnostics (v1.0.4)
 
 ### Why the console showed a JSON blob instead of the dashboard
