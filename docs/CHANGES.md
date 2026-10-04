@@ -1,5 +1,57 @@
 # SpyTV Code Changes Log
 
+## [2026-10-04] — CVE Feed Pipeline, AI Auto-Exploit Generation, Live Patching
+
+### Vulnerability updater run
+- Ran the NVD updater against the smart-TV keyword set — **2 new CVEs ingested**:
+  - **CVE-2026-87588** (HIGH 8.8) — Chromecast/Chrome use-after-free, fixed in Chrome 153.0.8010.36
+  - **CVE-2026-95372** (HIGH 8.3) — Chromecast/Chrome sandbox escape, fixed in Chrome 154.0.8037.57
+- Updates log to **`CVE_UPDATES.log` in the repo root** (JSONL: id, severity, score, description, NVD + whitepaper links, exploit status). The feed replays this file if `c2_data/cve_state.json` is cleared, so root-log entries are always addable to the C2.
+
+### New files
+- `c2_cve_feed.py` — feed manager: NVD 2.0 fetch (rate-limit aware), root update log, `.env`/JSON key resolution, AI exploit generation, per-CVE whitepaper rendering
+- `core/cve_scanner.py` — 8-family TV CVE database (adds **chromecast** family, 28 CVEs total), family detection, patch command sets
+- `data/exploits/cve_exploits.py` — working exploit modules per family incl. new **ChromecastExploit** (CVE-2026-87588 / CVE-2026-95372 staged via cast setup endpoint)
+- `run_c2.bat` — launcher that **checks `.env` for AI keys first**; if none are present it prompts to add OpenRouter / Venice AI / Abliteration.ai keys or skip, then starts the C2
+- `.env.example` — key template (`.env` is git-ignored)
+
+### CVE Monitor tab (C2 dashboard)
+- **Update CVEs** button → background NVD fetch; status banner + feed polling until complete
+- **AI Provider Keys** panel: OpenRouter (Uncensored), Venice AI (Uncensored V 1.2 / Qwen 3.6 Plus Uncensored / GLM 4.7 Flash Heretic), Abliteration.ai (Abliterated Large v2); masked status, Save Keys, **Test Generate**
+- Auto-generation: every newly ingested CVE gets an exploit module written to `data/exploits/generated/CVE-*.py` when any provider key is configured
+
+### CVE Feed sidebar (right side of every tab)
+- Entry list with severity badge, description, **NVD Advisory** link and **Whitepaper** link (`/api/cve/whitepaper/<id>`), "⚡ exploit ready" marker
+- Header shows total count + last-update time (and "Updating…" during refresh)
+- Loads at page start, on demand, and every 60 s; responsive layout (moves below content under 1280 px)
+
+### Patch logic (live execution)
+- `POST /api/cve/patch` now **executes** the family's remediation commands (shlex-split, 45 s timeout, per-command status/output), marks matching devices `patched` + `patched_cves`
+- **Patch button under each device card** → runs CVE remediation first, then sends the implant `patch` command; activity log shows per-command results
+- **Patch button on each scan row** → same execution path
+- CVE table Patch button now targets the newest scanned device of that family (prompt fallback)
+- Fixed non-reentrant `devices_lock` deadlock in patch/exfil/poll handlers (server hang)
+
+### Scanning logic
+- `/api/scan` merges CVE-database signature ports (26101 Tizen, 30000 webOS, 8009 Cast, 56789 Hisense, …) and attaches matched `cves`, severity, MAC, Bluetooth, SSH per host
+- Device cards show family-specific **CVE chips** (severity-colored, fixed-in tooltip) with "Patched" state
+- Chromecast/Google TV family added end-to-end (scan → exploit → patch → controls)
+
+### Docs & help
+- TROUBLESHOOTING + Wiki header links now served **from the C2** at `/docs/*.md` (rendered HTML, works remotely)
+- `docs/TROUBLESHOOTING.md`: new sections for CVE feed, AI exploit generation, patch failures; corrected log-file list
+- `docs/C2_DASHBOARD.md`: feed, AI keys, new endpoints, file structure
+- Help icons ( ? ) and tooltips updated for Network Scan, CVE Monitor, feed sidebar, patch buttons
+
+### Fixes
+- `datetime.utcnow()` deprecation → timezone-aware `utc_now_iso()` (Python 3.14)
+- `handle_scan` local-shadowing bug on `scans` (results never persisted)
+- `.gitignore`: track `CVE_UPDATES.log` + generated exploits; ignore `.env` and `ai_keys.json`
+
+### Testing
+- 39/39 pytest pass; dashboard JS syntax-checked with `node --check`
+- End-to-end verified: feed update, patch execution (3/3 chromecast commands, `cves_fixed` returned), AI key save/status, register/poll implant flow, `/docs/*` rendering
+
 ## [2026-10-03] — Code Review Fixes + C2 Dashboard
 
 ### Code Review Fixes (CR-01 through CR-56)

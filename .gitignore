@@ -16,6 +16,10 @@ c2_data/
 logs/
 certs/
 *.log
+# CVE update log lives at the repo root and IS tracked (C2 feeds from it)
+!CVE_UPDATES.log
+# Generated AI exploits are tracked; secrets are not
+!data/exploits/generated/*.py
 
 # Android
 android/.gradle/
@@ -40,3 +44,5 @@ desktop.ini
 *.key
 *.crt
 *.pem
+.env
+c2_data/ai_keys.json

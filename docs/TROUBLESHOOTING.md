@@ -1,5 +1,8 @@
 # Troubleshooting Guide
 
+> **Viewed from the C2?** This guide is served live by the dashboard at
+> `http://<c2-ip>:8443/docs/TROUBLESHOOTING.md` (header link, top right).
+
 ## Common Issues
 
 ### C2 Server Won't Start
@@ -10,7 +13,57 @@
 1. Check Python version: `python --version` (requires 3.8+)
 2. Install dependencies: `pip install pyyaml requests colorama`
 3. Check port 8443 is not in use: `netstat -ano | findstr 8443`
+   - A previous server instance may still be running — end it:
+     `taskkill /F /PID <pid>` (Windows) or `kill <pid>` (Linux)
 4. Try a different port: Edit `C2_PORT` in `c2_server.py`
+
+### CVE Feed Not Updating
+
+**Symptom:** The CVE Feed sidebar is empty or shows "last update" from long ago.
+
+**Solutions:**
+1. Click **Update CVEs** on the CVE Monitor tab (runs NVD fetch in background;
+   new entries appear in the feed within ~1 minute)
+2. Check your network can reach `services.nvd.nist.gov`
+3. NVD rate-limits anonymous clients (~1 request / 6 s / keyword). For faster
+   updates set `NVD_API_KEY` in `.env` (free key from NVD)
+4. Inspect `CVE_UPDATES.log` in the repo root — each line is JSON with the
+   CVE id, severity, and links; entries are replayed into the feed on next update
+5. Force an offline check: the state file is `c2_data/cve_state.json` — delete
+   it to rebuild the feed from `CVE_UPDATES.log` + a fresh NVD fetch
+
+### AI Exploit Generation Not Running
+
+**Symptom:** New CVEs appear in the feed but never get the "⚡ exploit ready"
+marker; console says "no AI provider API key configured".
+
+**Solutions:**
+1. Run `run_c2.bat` — if `.env` has no keys it prompts for OpenRouter,
+   Venice AI, or Abliteration.ai (or skip). Keys are appended to `.env`
+2. Or add keys in the dashboard: **CVE Monitor → AI Provider Keys → Save Keys**
+   (stored in `c2_data/ai_keys.json`, which takes precedence over `.env`)
+3. Verify with **Test Generate** — it generates an exploit for the newest feed
+   CVE and shows any provider error (bad key, quota, model id)
+4. Check which provider is active: `GET /api/ai-keys` shows masked status
+5. Model IDs can be overridden with env vars: `OPENROUTER_MODEL`,
+   `VENICE_MODEL_UNCENSORED`, `VENICE_MODEL_QWEN`, `VENICE_MODEL_GLM`,
+   `ABLITERATION_MODEL`
+
+### Patch Button Does Nothing / Reports Failures
+
+**Symptom:** Clicking **Patch** on a device or scan result logs
+`failed` / `skipped` commands.
+
+**Solutions:**
+1. `skipped — tool not installed on operator host`: the vendor CLI (`sdb`,
+   `adb`, `ares-*`) is not on PATH. Install the platform SDK (Tizen Studio,
+   Android platform-tools, webOS CLI) or rely on the guided `echo` steps
+2. `failed` with output: check the per-command output in the Activity Log —
+   the target may have dev mode disabled or the IP may be wrong
+3. Confirm the device family mapped correctly — Patch uses the family→CVE
+   mapping (`FAMILY_TO_TV_TYPE` in `c2_server.py`); unknown families return 400
+   with the list of valid types
+4. Network-unreachable targets time out after 45 s per command
 
 ### Devices Not Appearing in Dashboard
 
@@ -88,6 +141,7 @@ python c2_server.py
 
 ## Log Files
 
+- CVE updates: `CVE_UPDATES.log` (repo root, JSONL — replayed into the C2 feed)
 - C2 Server: `logs/spytv.log`
 - Installer: `spytv_install.log`
 - Fingerprint: `spytv_fingerprint.log`
@@ -95,6 +149,7 @@ python c2_server.py
 
 ## Getting Help
 
-- Check the [Wiki](../README.md) for full documentation
+- Open this guide from the C2 header: **Troubleshooting** (top right)
+- Check the [Wiki](./WIKI.md) for full documentation
 - Review [C2_DASHBOARD.md](./C2_DASHBOARD.md) for dashboard usage
 - See [CODE_REVIEW.md](./CODE_REVIEW.md) for known issues
