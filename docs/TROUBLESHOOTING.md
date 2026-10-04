@@ -10,12 +10,16 @@
 **Symptom:** `python c2_server.py` exits with error.
 
 **Solutions:**
-1. Check Python version: `python --version` (requires 3.8+)
-2. Install dependencies: `pip install pyyaml requests colorama`
+1. Check Python version: `python --version` (requires 3.10+)
+2. Install dependencies: `pip install -r requirements.txt`
+   (`colorama`, `pyyaml`, `requests`, `reportlab` — reportlab is required
+   for the audit/patch reports and the authorization PDF)
 3. Check port 8443 is not in use: `netstat -ano | findstr 8443`
    - A previous server instance may still be running — end it:
      `taskkill /F /PID <pid>` (Windows) or `kill <pid>` (Linux)
 4. Try a different port: Edit `C2_PORT` in `c2_server.py`
+5. `reportlab` missing (`ModuleNotFoundError: reportlab`): the server still
+   starts, but Audit/Patch reports fail — install requirements and restart
 
 ### CVE Feed Not Updating
 
@@ -48,6 +52,51 @@ marker; console says "no AI provider API key configured".
 5. Model IDs can be overridden with env vars: `OPENROUTER_MODEL`,
    `VENICE_MODEL_UNCENSORED`, `VENICE_MODEL_QWEN`, `VENICE_MODEL_GLM`,
    `ABLITERATION_MODEL`
+
+### Audit / Patch Engagement Not Starting
+
+**Symptom:** Clicking **Audit** opens the client form, but no scan begins —
+or the banner shows `awaiting_signature` forever.
+
+**Solutions:**
+1. The flow is gated on purpose: the engagement starts **only after the
+   authorization form is e-signed by both parties** — draw a signature in
+   the pad **and** confirm the client company, then press **Sign & Start**
+2. Signature rejected (`400 invalid signature`): draw again with the mouse/
+   finger (the pad needs actual strokes, not just the company text), keep it
+   under the 400 KB canvas export cap, and use a PNG-capable browser
+3. Client form validation errors are shown inline under the form — all six
+   fields are required (company, name, address, phone, email, website)
+4. The unsigned form is always saved under `c2_data/audits/<auth_id>/` —
+   open it from the banner's **Authorization** button and sign later; the
+   engagement waits at `awaiting_signature` until then
+5. After signing, the banner polls `GET /api/audit/status` every 2 s —
+   phase/progress/last message appear there; a reload re-attaches (state is
+   server-owned)
+6. **Report never renders:** reports render when the engagement reaches
+   `complete` — check the banner's phase; if teardown hangs, use **Kill All
+   Connections** first, then the report button
+7. **Patch All** patches *before* asking for client details — if the form
+   reappears immediately, the patch phase already finished; submit the same
+   client info to render the remediation proof PDF
+
+### CVE Artifacts Not Generated
+
+**Symptom:** New feed CVEs have no whitepaper file, no
+`tests/generated/test_CVE-*.py`, or flags show `—` in the Output panel.
+
+**Solutions:**
+1. Artifacts are generated for **new** CVEs during the update — click
+   **Update CVEs** after configuring keys (existing old entries predate the
+   pipeline; only new ones get the set)
+2. Without an AI key the templates still generate whitepaper, test,
+   signature and patch-check files — only the *exploit* needs a provider
+   key (see the section above)
+3. `tests_generated: false` means the generated test could not pass — the
+   exploit is moved to `data/exploits/generated/CVE-*.quarantined` and the
+   reason is in `CVE_UPDATES.log` (`artifacts` event `errors`)
+4. Inspect status per CVE: `GET /api/cve/artifacts/<cve_id>` or **View
+   Vulnerability Info** in the dashboard
 
 ### Patch Button Does Nothing / Reports Failures
 

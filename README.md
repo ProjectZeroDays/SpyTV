@@ -1,66 +1,120 @@
-# SpyTV — Defensive Toolkit & Framework Review
+# SpyTV — TV Security Assessment Platform
 
-This repository contains the **defensive** work product of the SpyTV engagement:
+The working repository of the SpyTV engagement for **Authenticated, Inc.**: an
+authorization-first platform for assessing smart TVs on client networks,
+plus the defensive toolkit and defect review produced alongside it.
 
-1. **`CODE_REVIEW.md`** — a defect review of the offensive SpyTV / SpyTV / TVREAPER
-   code (57 findings: fatal defects, self-inflicted vulnerabilities,
-   misconfigurations, portability gaps, and documentation-integrity problems).
-   The review documents what is broken; it deliberately provides no corrected
-   exploit, targeting, implant, or evasion logic.
-2. **`defense/`** — a stdlib-only, production-quality toolkit covering the four
-   defensive pillars: attack-surface assessment, hardening (ADB, UPnP, VLAN
+1. **C2 dashboard** (`c2_server.py` + `c2_dashboard.html`) — scan networks,
+   verify targets read-only, deploy exploit modules with dry-run-first
+   behavior, patch devices, and manage engagements from a responsive web UI
+   (also shipped as a desktop `.exe` via `electron/`).
+2. **Audit & Patch-all engagements (T-03)** — `c2_audit.py` drives the full
+   engagement flow: client details → **industry-standard authorization form
+   e-signed by both parties** → scan → verify → exploit → kill connections →
+   **reportlab PDF report**. The Patch All flow proves every device
+   vulnerability is remediated (or documents what is not, and why).
+3. **CVE feed & AI artifact pipeline (T-01/T-02)** — `c2_cve_feed.py` pulls
+   smart-TV CVEs from NVD and, per new CVE, generates the full artifact set:
+   exploit module, whitepaper, a pytest test that must pass, detection
+   signature proposal, patch check, and feed enrichment.
+4. **`defense/`** — a production-quality toolkit covering the four defensive
+   pillars: attack-surface assessment, hardening (ADB, UPnP, VLAN
    segmentation, firmware), detection engineering (SOC/home-lab), and CVE
    monitoring.
-3. **`docs/`** — the wiki: [home](docs/WIKI.md) · [getting started](docs/Getting-Started.md) ·
-   [threat model](docs/Threat-Model.md) · [hardening](docs/Hardening-Guide.md) ·
-   [detection](docs/Detection-Guide.md) · [CVE monitoring](docs/CVE-Monitoring-Guide.md)
+5. **`CODE_REVIEW.md`** — a defect review of the offensive framework code
+   (57 findings: fatal defects, self-inflicted vulnerabilities,
+   misconfigurations, portability gaps, and documentation-integrity
+   problems).
+6. **`docs/`** — the wiki: [home](docs/WIKI.md) ·
+   [getting started](docs/GETTING_STARTED.md) ·
+   [architecture](docs/ARCHITECTURE.md) ·
+   [C2 dashboard](docs/C2_DASHBOARD.md) ·
+   [threat model](docs/THREAT_MODEL.md) ·
+   [hardening](docs/HARDENING_GUIDE.md) ·
+   [detection](docs/DETECTION_GUIDE.md) ·
+   [CVE monitoring](docs/CVE_MONITORING_GUIDE.md) ·
+   [troubleshooting](docs/TROUBLESHOOTING.md) ·
+   [changes](docs/CHANGES.md)
 
 ## Authorization
 
 Use these tools **only on networks and devices you own or are explicitly
-authorized to assess**. The hardening modules are read-only by default; every
-state-changing command is printed as a dry-run preview until you pass
-`--apply`.
+authorized to assess**. The C2 enforces this in flow: the **Audit** button
+does not run until an *Authorization to Perform a Security Assessment and
+Rules of Engagement* document has been **e-signed by both parties** — the
+provider block is pre-signed by Authenticated, Inc., the client draws their
+signature and confirms their company in the dashboard. The signed
+instrument (with a SHA-256 record hash and audit trail) is archived under
+`c2_data/audits/<auth_id>/`. The hardening modules are read-only by
+default; every state-changing command is printed as a dry-run preview until
+you pass `--apply`.
+
+## Releases
+
+GitHub releases ship three assets:
+
+| Asset | What it is |
+|---|---|
+| `SpyTV.apk` | Implant/APK artifact for authorized target devices |
+| `SpyTV-C2-<ver>-portable.exe` | Desktop C2 — Electron wrapper around the dashboard (offline fallback page included) |
+| `SHA256SUMS.txt` | SHA-256 checksum manifest for the attached assets |
+
+Latest: [v1.0.2](https://github.com/ProjectZeroDays/SpyTV/releases/tag/v1.0.2).
 
 ## Repository layout
 
 ```
 SpyTV/
-├── CODE_REVIEW.md                  # Defect review of the reviewed framework
 ├── README.md
-├── requirements.txt                # empty — stdlib only
-├── defense/
-│   ├── common.py                   # shared helpers (report writing, dry-run exec)
-│   ├── hardening/
-│   │   ├── attack_surface.py       # TV port/attack-surface auditor (read-only)
-│   │   ├── adb_disable.py          # find TCP/5555, vendor disable steps, local blocks
-│   │   ├── upnp_close.py           # SSDP/UPnP enumeration + close-down guidance
-│   │   ├── vlan_segmentation.py    # nftables/iptables/guide generator for IoT VLAN
-│   │   └── firmware_audit.py       # inventory hygiene audit + vendor update paths
-│   ├── detection/
-│   │   ├── events.py               # Event/Alert model
-│   │   ├── ssh_detector.py         # sshd brute-force detector + log line parser
-│   │   ├── adb_detector.py         # rogue ADB connections / adb connect / device attach
-│   │   ├── ssdp_detector.py        # SSDP sweep / fan-out anomaly detector
-│   │   ├── adapters.py             # sshd log tail, netstat/ss poller, JSONL pipeline
-│   │   ├── monitor.py              # unified monitor CLI
-│   │   ├── drill.py                # self-scoring detection drill (synthetic events)
-│   │   ├── report.py               # alert JSONL -> incident summary markdown
-│   │   └── rules/                  # Sigma rules for SIEM import
-│   └── cve_monitor/
-│       ├── monitor.py              # NVD 2.0 watcher, dedupe, alerting
-│       ├── whitepaper.py           # client-ready defensive CVE brief generator
-│       └── keywords.json           # smart TV platform keywords
-├── config/                         # example configs (copy, remove .example)
-├── docs/                           # the wiki (see links above)
-└── tests/                          # unittest suite (39 tests)
+├── CODE_REVIEW.md                  # Defect review of the reviewed framework
+├── requirements.txt                # colorama, pyyaml, requests, reportlab (C2 PDFs)
+├── run_c2.bat                      # Launcher: AI-key prompt, starts the C2
+├── create_apk.py                   # Builds SpyTV.apk for releases
+│
+├── c2_server.py                    # C2 HTTP server (port 8443) — all API endpoints
+├── c2_ops.py                       # Shared scan/check/exploit/patch/teardown ops
+├── c2_audit.py                     # Engagement state machines + reportlab PDF builders
+├── c2_cve_feed.py                  # CVE feed manager: NVD fetch, AI exploit + artifact gen
+├── c2_dashboard.html               # Web dashboard (served at /)
+├── tvreaper.js                     # Implant payload (C2 polling)
+├── CVE_UPDATES.log                 # Root JSONL CVE update log (replayed into the feed)
+│
+├── electron/                       # Desktop wrapper → SpyTV-C2-<ver>-portable.exe
+├── core/                           # Core logic (discovery, dispatcher, receiver, config)
+├── families/                       # Family-specific exploits (tizen/webos/android/dlna/hbbtv)
+├── data/
+│   └── exploits/generated/         # AI-generated exploit modules (CVE-*.py; quarantined on failing tests)
+├── docs/                           # The wiki (see links above)
+│   ├── whitepapers/                # Generated per-CVE whitepapers (T-01)
+│   ├── C2_DASHBOARD.md             # Endpoints, dashboard features, engagement flows
+│   └── CHANGES.md                  # Release-by-release change log
+├── defense/                        # Defensive toolkit (hardening, detection, CVE monitor)
+├── c2_data/                        # Runtime state (git-ignored): audits/, clips/, registries
+│   └── audits/<auth_id>/           # Authorization PDFs (unsigned/signed) + reports
+├── data/signatures/                # Detection-signature proposals (assessor-validated)
+├── data/patch_checks/              # Patch verification checks
+└── tests/                          # pytest suite — 82 tests (generated: tests/generated/)
 ```
 
-## Quickstart
+## Quickstart — C2 dashboard
 
 ```bash
 cd C:\Projects\SpyTV
+pip install -r requirements.txt      # colorama, pyyaml, requests, reportlab
+run_c2.bat                           # prompts for AI provider keys (or skip), starts C2
+# …or run directly:
+python c2_server.py
 
+# Dashboard:  http://127.0.0.1:8443/   (desktop: electron\dist\SpyTV-C2-1.0.2-portable.exe)
+# 1. Network Discovery → Scan → Check / Patch / Exploit per device
+# 2. Audit  → client details → e-sign authorization → scan/check/exploit/kill → PDF report
+# 3. Patch All → patches everything → client details → remediation proof PDF
+# 4. CVE Monitor → Update CVEs → full artifact set per new CVE (see docs/C2_DASHBOARD.md)
+```
+
+## Quickstart — defensive toolkit
+
+```bash
 # 1. Audit your network's TV attack surface (read-only)
 python -m defense.hardening.attack_surface --network 192.168.1.0/24
 
@@ -116,25 +170,44 @@ python -m defense.cve_monitor.whitepaper --days 90
 
 ## CVE monitor & whitepaper behavior
 
-Queries the NVD 2.0 API per keyword (default set covers smart TV platforms),
-deduplicates against `defense/cve_monitor/state.json`, flags CVEs whose
-references point at public exploit corpora as **public exploit reference**,
-and alerts via console, JSONL, and optional webhook. `whitepaper.py` renders
-the same data as a defensive client brief — scope, executive summary,
-severity index, per-CVE entries with recommended actions mapped to the
-hardening modules. Without an API key it rate-limits to one request per 6
-seconds per NVD guidance.
+Two independent pipelines watch smart-TV CVEs:
+
+- **Defensive watcher** (`defense/cve_monitor/`): queries the NVD 2.0 API per
+  keyword, deduplicates against `defense/cve_monitor/state.json`, flags CVEs
+  whose references point at public exploit corpora as **public exploit
+  reference**, and alerts via console, JSONL, and optional webhook.
+  `whitepaper.py` renders a defensive client brief — scope, executive
+  summary, severity index, per-CVE entries with recommended actions mapped to
+  the hardening modules. Without an API key it rate-limits to one request per
+  6 seconds per NVD guidance.
+- **C2 feed pipeline** (`c2_cve_feed.py`): runs at every C2 start and via
+  *Update CVEs*. Each new CVE gets the full artifact set — exploit module
+  (AI provider required), whitepaper (`docs/whitepapers/`), a
+  pytest-validated generated test (`tests/generated/`, exploit quarantined on
+  failure), detection-signature and patch-check proposals, and NVD
+  enrichment (CWE / affected CPEs / fixed version / attack vector). Every
+  status lands as JSONL `artifacts` events in root `CVE_UPDATES.log` and on
+  the feed entry flags (`whitepaper_generated`, `tests_generated`,
+  `signature_generated`, `patch_check_generated`).
 
 ## Tests
 
 ```bash
-python -m unittest discover -s tests -v   # 39 tests
-python -m defense.detection.drill         # expect: ALL SCENARIOS PASS
+python -m pytest -q                 # 82 tests (everything, incl. generated-artifact suites)
+python -m defense.detection.drill   # expect: ALL SCENARIOS PASS
 ```
+
+The suite covers the C2 endpoints, audit/patch engagement state machines,
+authorization PDF structure, signature validation, the CVE artifact
+pipeline, and the defense toolkit — all offline (network operations are
+stubbed).
 
 ## Scope note
 
-Per the engagement terms, this repo intentionally contains **no** offensive
-capability: no exploit code, no scanner/exploit fixes, no implant logic, no
-evasion tooling, and no autonomous exploit acquisition. Everything here is
-defensive: assess, harden, detect, monitor.
+Per the engagement terms, this repository exists for **authorized security
+assessment of client-owned smart TVs**: scan, verify (read-only), deploy
+dry-run-first exploit modules, patch, and produce signed reports — plus the
+defensive counterparts (assess, harden, detect, monitor) and the defect
+review. Exploit modules default to dry-run and transmit no payloads until an
+engagement explicitly runs them against authorized targets. No guidance for
+unauthorized use is provided or implied.

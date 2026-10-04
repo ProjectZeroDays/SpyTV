@@ -2,18 +2,34 @@
 
 ## Overview
 
-The SpyTV C2 (Command & Control) server provides a web-based dashboard for managing TV implants. It handles audio/video exfiltration, device control, and command dispatch.
+The SpyTV C2 (Command & Control) server provides a web-based dashboard for
+**authorized smart TV assessments**: network discovery and read-only target
+verification, exploit deployment (dry-run-first), device patching,
+audio/video capture from implanted devices — plus the **Audit** and
+**Patch All** engagement flows (client details → e-signed authorization →
+phases → PDF reports) and the CVE feed + AI artifact pipeline behind the
+CVE Monitor tab. It ships as a desktop app via the Electron wrapper.
 
 ## Architecture
 
 ```
-[TV Implant] <--HTTP--> [C2 Server :8443] <--HTTP/WebSocket--> [Web Dashboard]
+[TV Implant] <--HTTP--> [C2 Server :8443] <--HTTP--> [Web Dashboard / Electron app]
+                                |
+              +-----------------+------------------+
+              |                                    |
+      [c2_audit.py]                    [c2_cve_feed.py]
+      engagements + PDFs               NVD feed + artifact pipeline
+      (authorization e-sign)           (exploit/whitepaper/test/signature)
 ```
 
-- **C2 Server** (`c2_server.py`): Python HTTP server on port 8443
-- **Dashboard** (`c2_dashboard.html`): Single-page JS app served by C2
+- **C2 Server** (`c2_server.py`): Python HTTP server on port 8443 — all API endpoints
+- **Shared ops** (`c2_ops.py`): scan, read-only check, exploit (dry-run-first), patch, connection teardown
+- **Engagements** (`c2_audit.py`): audit/patch state machines + reportlab PDFs (authorization instrument, reports)
+- **CVE pipeline** (`c2_cve_feed.py`): NVD fetch, AI exploit + full artifact set per new CVE
+- **Dashboard** (`c2_dashboard.html`): responsive single-page JS app served by C2
 - **Implant** (`tvreaper.js`): Polls C2 every 5 seconds for commands
-- **Storage** (`c2_data/`): Clips, device registry, command queue
+- **Desktop** (`electron/`): wrapper → `SpyTV-C2-<ver>-portable.exe`
+- **Storage** (`c2_data/`): clips, device registry, command queue, engagement archives (`audits/<auth_id>/`)
 
 ## Starting the C2
 

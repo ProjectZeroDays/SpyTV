@@ -4,6 +4,34 @@ The CVE monitor is the defensive counterpart of an "auto-update exploit"
 mechanism: it watches NVD for newly published smart TV CVEs and **alerts
 only** — it never downloads, evaluates, or configures exploits.
 
+> This guide covers the **defensive watcher** (`defense/cve_monitor/`).
+> The C2 runs its own pipeline — see [C2 feed & artifact pipeline](#c2-feed--artifact-pipeline)
+> below — so both sides of the house are covered.
+
+## C2 feed & artifact pipeline
+
+`c2_cve_feed.py` powers the dashboard's CVE Feed. It runs at every C2 start
+and via **Update CVEs**, and for each **new** CVE produces the *full*
+artifact set (one artifact at a time — a failure never aborts the run):
+
+| Artifact | Where | Behavior |
+|---|---|---|
+| Exploit module | `data/exploits/generated/CVE-*.py` | AI provider required; dry-run-first |
+| Whitepaper | `docs/whitepapers/CVE-*.md` | AI draft, deterministic template fallback |
+| Pytest test | `tests/generated/test_CVE-*.py` | must **pass pytest**; failing exploit → `.quarantined` |
+| Detection signature | `data/signatures/CVE-*.md` | proposal only — assessor validates, never auto-merged |
+| Patch check | `data/patch_checks/CVE-*.md` | verification steps for Patch / Patch All |
+| Feed enrichment | feed entry | CWE, affected CPEs, fixed version, attack vector |
+
+Feed entries carry the flags `whitepaper_generated`, `tests_generated`,
+`signature_generated`, `patch_check_generated`; every status is appended to
+root `CVE_UPDATES.log` as JSONL `artifacts` events (the feed replays this
+file if `c2_data/cve_state.json` is cleared). Inspect per-CVE status with
+`GET /api/cve/artifacts/<id>`; the dashboard's **View Whitepaper** /
+**View Vulnerability Info** buttons render the documents in the Output
+panel. AI keys resolve from `c2_data/ai_keys.json` → `.env` → process env.
+Full details: [C2_DASHBOARD.md](C2_DASHBOARD.md).
+
 ## Operation
 
 ```bash
