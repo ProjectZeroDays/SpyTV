@@ -11,7 +11,7 @@ release).
 ## Phase 1 — Error-correct & refactor
 - `git status` / `git diff` review of all pending and recent changes.
 - Fix obvious errors: broken imports, dead code, deprecated API usage,
-  duplicated logic, inconsistent naming (SpyTV branding — never any legacy pre-rename names).
+  duplicated logic, inconsistent naming (SpyTV branding only — never any legacy pre-rename names).
 - Keep refactors behavior-preserving; do not redesign features.
 
 ## Phase 2 — Test all code
