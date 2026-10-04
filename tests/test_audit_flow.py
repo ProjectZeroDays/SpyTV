@@ -18,7 +18,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
-from http.server import HTTPServer
+from http.server import ThreadingHTTPServer
 
 import pytest
 
@@ -72,25 +72,34 @@ CLIENT = {
 # helpers
 # ---------------------------------------------------------------------------
 
-def _http(port, method, path, body=None):
+def _http(port, method, path, body=None, _retries=1):
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(
         f"http://127.0.0.1:{port}{path}", data=data, method=method,
         headers={"Content-Type": "application/json"} if data else {},
     )
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            raw = resp.read()
-            ctype = resp.headers.get("Content-Type", "")
-            if "json" in ctype:
-                return resp.status, json.loads(raw)
-            return resp.status, raw
-    except urllib.error.HTTPError as e:
-        raw = e.read()
+    # The local test server shares the machine's socket stack with the rest of
+    # the suite, so a request can occasionally come back with a transient
+    # transport abort (WSAECONNABORTED/10053). That says nothing about the
+    # endpoint under test, so re-issue it once before failing the test.
+    for attempt in range(_retries + 1):
         try:
-            return e.code, json.loads(raw)
-        except ValueError:
-            return e.code, raw
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                raw = resp.read()
+                ctype = resp.headers.get("Content-Type", "")
+                if "json" in ctype:
+                    return resp.status, json.loads(raw)
+                return resp.status, raw
+        except urllib.error.HTTPError as e:
+            raw = e.read()
+            try:
+                return e.code, json.loads(raw)
+            except ValueError:
+                return e.code, raw
+        except (ConnectionAbortedError, ConnectionResetError):
+            if attempt >= _retries:
+                raise
+            time.sleep(0.05)
 
 
 @pytest.fixture()
@@ -128,7 +137,7 @@ def httpd(monkeypatch, tmp_path):
         c2_server.patch_engagement = None
         c2_server.authorizations.clear()
 
-    server = HTTPServer(("127.0.0.1", 0), c2_server.C2Handler)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), c2_server.C2Handler)
     port = server.server_address[1]
     t = threading.Thread(target=server.serve_forever, daemon=True)
     t.start()

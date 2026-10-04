@@ -1,6 +1,6 @@
 # SpyTV Code Changes Log
 
-## [2026-10-04] — Security sweep: real APK pipeline, dependency remediation, local-model provider, scan fixes
+## [2026-10-04] — Security sweep: real APK pipeline, dependency remediation, local-model provider, scan fixes (v1.0.3)
 
 ### Vulnerabilities fixed
 - **electron ^33 → 44.5.1 / electron-builder 25.1.8 → 26.15.3** (`electron/`): clears all
@@ -42,6 +42,14 @@
   hardened `.gitignore`; regenerated `file_structure.txt`.
 - `/Push` extended with cleanup, `file_structure.txt` regeneration, and
   vulnerability-sweep phases.
+- `SpyTV.apk` is no longer tracked — it is a **generated release asset** built on
+  demand by `create_apk.py` (build outputs stay out of git).
+
+### Release assets (v1.0.3)
+- Desktop asset rebuilt on the new toolchain as `SpyTV-C2-1.0.3-portable.exe`
+  (electron-builder 26.15.3, signtool-signed); `electron/package.json` +
+  lockfile bumped to 1.0.3.
+- `SHA256SUMS.txt` regenerated for the attached asset set.
 
 ## [2026-10-04] — T-03 Audit + Patch-all with e-signed authorization, CVE whitepaper viewer & artifact pipeline (T-01/T-02), GUI overhaul, Electron wrapper (v1.0.2)
 

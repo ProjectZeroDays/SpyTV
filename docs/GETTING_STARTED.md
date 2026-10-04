@@ -23,7 +23,7 @@ run_c2.bat            # prompts for AI keys (or skip), starts the C2
 # …or:  python c2_server.py
 
 # Dashboard:  http://127.0.0.1:8443/
-# Desktop:    electron\dist\SpyTV-C2-1.0.2-portable.exe   (from the release)
+# Desktop:    electron\dist\SpyTV-C2-1.0.3-portable.exe   (from the release)
 ```
 
 1. **Network Discovery → Scan** your segment, then **Check** (read-only) or

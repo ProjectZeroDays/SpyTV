@@ -1,7 +1,7 @@
 spytv/
 ├── README.md
-├── LICENSE
 ├── TODO.md
+├── file_structure.txt              # This file — generated from `git ls-files`
 ├── requirements.txt            # colorama, pyyaml, requests, reportlab (C2 PDFs)
 ├── setup.py                    # Unified setup script (installs python deps + system tools)
 ├── setup.sh                    # Linux/WSL bootstrap (downloads repo from ProjectZeroDays/SpyTV)
@@ -9,8 +9,8 @@ spytv/
 ├── .env.example                # AI / NVD key template (copy to .env)
 ├── .gitignore
 ├── create_apk.py               # Real Gradle build + verification → SpyTV.apk
-├── SpyTV.apk                   # Release asset (regenerated per release)
 ├── SHA256SUMS.txt              # Release asset checksum manifest
+#  SpyTV.apk is a generated release asset — git-ignored, rebuilt per release
 ├── CVE_UPDATES.log             # Root JSONL CVE log (replayed into the C2 feed)
 ├── registry.yaml               # Exploit / device-family registry
 ├── config.yaml                 # Top-level configuration
@@ -42,11 +42,13 @@ spytv/
 │   ├── gradle/wrapper/         # gradle-wrapper.jar + gradle-wrapper.properties
 │   └── app/
 │       ├── build.gradle.kts    # applicationId com.authenticated.spytv · minSdk 24
-│       └── src/main/           # MainActivity.kt (WebView → :8443) · manifest · layout · res
+│       ├── proguard-rules.pro   # Release shrinker rules (minify disabled)
+│       └── src/main/           # MainActivity.kt (WebView → :8443) · AndroidManifest.xml · layout · res
 │
 ├── electron/                   # Desktop wrapper → SpyTV-C2-<ver>-portable.exe
 │   ├── main.js / preload.js / offline.html / index.html
 │   ├── package.json            # electron 44.5 · electron-builder 26.15 (npm audit: 0 vulns)
+│   ├── package-lock.json       # Lockfile (audited clean)
 │   └── dist/                   # Build output (git-ignored)
 │
 ├── core/                       # Core Logic
@@ -75,16 +77,18 @@ spytv/
 │   └── vlan_policy.example.json
 │
 ├── data/
-│   ├── exploits/               # Stdlib modules: adb_wireless · ssh_brute · vendor_specific · cve_exploits
-│   └── exploits/generated/     # AI exploit modules: CVE-*.py (tracked)
-│                               #   CVE-*.quarantined when its generated test fails
+│   └── exploits/               # Stdlib modules: adb_wireless · ssh_brute · vendor_specific · cve_exploits
+│       └── generated/          # AI exploit modules (CVE-*.py, tracked once created) — dir is
+│                               #   created on the first CVE update; .quarantined when its test fails
 │
 ├── defense/                    # Defensive toolkit (stdlib only)
+│   ├── __init__.py · common.py # Package init + shared helpers
 │   ├── hardening/              # attack_surface · adb_disable · upnp_close
 │   │                           # vlan_segmentation · firmware_audit
-│   ├── detection/              # ssh/adb/ssdp detectors · monitor · drill
+│   ├── detection/              # ssh_detector · adb_detector · ssdp_detector ·
+│   │                           # monitor · drill · report · adapters · events
 │   │   └── rules/              # Sigma rules for SIEM import
-│   └── cve_monitor/            # NVD watcher · defensive whitepaper generator
+│   └── cve_monitor/            # NVD watcher · whitepaper generator · keywords.json
 │
 ├── docs/                       # Wiki + generated documents
 │   ├── WIKI.md / GETTING_STARTED.md / ARCHITECTURE.md

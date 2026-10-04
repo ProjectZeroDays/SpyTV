@@ -43,6 +43,8 @@ android/.gradle/
 android/build/
 android/app/build/
 android/local.properties
+# Release APK is a generated asset (create_apk.py builds it on demand)
+SpyTV.apk
 *.iml
 .idea/
 

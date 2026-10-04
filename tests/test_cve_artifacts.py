@@ -21,7 +21,7 @@ import json
 import threading
 import urllib.error
 import urllib.request
-from http.server import HTTPServer
+from http.server import ThreadingHTTPServer
 
 import pytest
 
@@ -396,7 +396,7 @@ def httpd(feed_env, monkeypatch):
     (feed_env / "whitepapers").mkdir(exist_ok=True)
     (feed_env / "whitepapers" / "CVE-2099-0001.md").write_text(
         "# Generated WP\n\n## Summary\n\nFrom file.", encoding="utf-8")
-    server = HTTPServer(("127.0.0.1", 0), c2_server.C2Handler)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), c2_server.C2Handler)
     port = server.server_address[1]
     t = threading.Thread(target=server.serve_forever, daemon=True)
     t.start()
