@@ -689,6 +689,9 @@
           <div class="info-item"><span class="label">Tor IP</span><span class="value" id="srv-tor-ip">—</span></div>
           <div class="info-item"><span class="label">Tor Location</span><span class="value" id="srv-tor-loc">—</span></div>
           <div class="info-item"><span class="label">Tailscale</span><span class="value" id="srv-tailscale">—</span></div>
+          <div class="info-item"><span class="label">DNSCrypt</span><span class="value" id="srv-dnscrypt">—</span></div>
+          <div class="info-item"><span class="label">DNSCrypt Resolver IP</span><span class="value" id="srv-dnscrypt-ip">—</span></div>
+          <div class="info-item"><span class="label">DNSCrypt Resolver Location</span><span class="value" id="srv-dnscrypt-loc">—</span></div>
         </div>
         <div class="controls" style="margin-top:20px">
           <button class="btn btn-sm" onclick="changeProxyIdentity()" data-tooltip="Change proxy-chain exit node">Change Proxy-Chain Identity</button>
@@ -1050,6 +1053,9 @@ async function loadServerInfo() {
   document.getElementById('srv-tor-ip').textContent = '—';
   document.getElementById('srv-tor-loc').textContent = '—';
   document.getElementById('srv-tailscale').textContent = 'Inactive';
+  document.getElementById('srv-dnscrypt').textContent = 'Active';
+  document.getElementById('srv-dnscrypt-ip').textContent = '1.1.1.1';
+  document.getElementById('srv-dnscrypt-loc').textContent = 'US';
 }
 
 function changeProxyIdentity() { addLog('Changing proxy-chain identity...'); }
