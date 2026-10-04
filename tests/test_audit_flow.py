@@ -409,6 +409,68 @@ def test_idle_status_payloads(httpd):
 
 
 # ---------------------------------------------------------------------------
+# exploit execution endpoint (real module run — replaces the phantom
+# `deploy` command the Payload tab used to queue for a device_id nobody
+# ever polls)
+# ---------------------------------------------------------------------------
+
+def test_exploit_endpoint_runs_registered_module(httpd, monkeypatch):
+    calls = []
+
+    def _fake_run(tv_type, ip):
+        calls.append((tv_type, ip))
+        return {"attempted": True, "success": True, "duration_s": 2.5}
+
+    monkeypatch.setattr(c2_server, "run_exploit", _fake_run)
+    code, res = _http(httpd, "POST", "/api/exploit",
+                      {"ip": "10.20.30.40", "family": "tizen-dev"})
+    assert code == 200
+    assert res["attempted"] is True and res["success"] is True
+    assert res["tv_type"] == "samsung-tizen"
+    assert res["duration_s"] == 2.5
+    assert res["executed_at"]
+    assert calls == [("samsung-tizen", "10.20.30.40")]
+
+
+def test_exploit_endpoint_honors_explicit_tv_type_and_reports_failure(httpd,
+                                                                      monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        c2_server, "run_exploit",
+        lambda tv, ip: calls.append(tv) or {
+            "attempted": True, "success": False, "duration_s": 0.4,
+            "error": "connection refused"})
+    code, res = _http(httpd, "POST", "/api/exploit",
+                      {"ip": "10.20.30.41", "tv_type": "chromecast"})
+    assert code == 200
+    assert res["success"] is False and res["error"] == "connection refused"
+    assert res["tv_type"] == "chromecast"
+    assert calls == ["chromecast"]
+
+
+def test_exploit_endpoint_never_runs_without_a_module(httpd, monkeypatch):
+    def _must_not_run(tv_type, ip):
+        raise AssertionError("run_exploit must not be called without a module")
+
+    monkeypatch.setattr(c2_server, "run_exploit", _must_not_run)
+    # 'dlna' has no registry module — honest 404, nothing executed.
+    code, res = _http(httpd, "POST", "/api/exploit",
+                      {"ip": "10.20.30.42", "family": "dlna"})
+    assert code == 404
+    assert res["attempted"] is False
+    assert "no exploit module" in res["error"]
+
+
+def test_exploit_endpoint_validates_ip(httpd):
+    code, res = _http(httpd, "POST", "/api/exploit",
+                      {"ip": "", "family": "tizen-dev"})
+    assert code == 400 and "Missing" in res["error"]
+    code, res = _http(httpd, "POST", "/api/exploit",
+                      {"ip": "not-an-ip", "family": "tizen-dev"})
+    assert code == 400 and "Invalid IPv4" in res["error"]
+
+
+# ---------------------------------------------------------------------------
 # dashboard static contract (buttons, modals, no simulated leftovers)
 # ---------------------------------------------------------------------------
 
@@ -435,3 +497,16 @@ def test_dashboard_has_no_simulated_info():
                   "killProxyChain", "killTor()", "AA:BB:CC:DD:EE:FF",
                   "// Simulated server info"):
         assert stale not in html, f"simulated UI leftover: {stale}"
+
+
+def test_dashboard_exploit_flow_calls_real_endpoint():
+    """The Payload tab's Exploit button must run the real /api/exploit
+    endpoint and must never queue the phantom `deploy` command again."""
+    import os
+    path = os.path.join(os.path.dirname(c2_server.__file__),
+                        "c2_dashboard.html")
+    with open(path, encoding="utf-8") as f:
+        html = f.read()
+    assert "/api/exploit" in html
+    for stale in ("command: 'deploy'", "Exploit deployed"):
+        assert stale not in html, f"phantom deploy flow leftover: {stale}"

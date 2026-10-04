@@ -73,6 +73,7 @@ The dashboard is available at `http://localhost:8443/`
 - `POST /api/scan` — Port-scan a CIDR; merges CVE-database signature ports (Samsung 26101, LG 30000, Chromecast 8009, Hisense 56789, …) and attaches matched CVEs, severity, MAC, Bluetooth, SSH flags per host
 - `GET /api/scans` — Recent scan history
 - `POST /api/check` — **Read-only** verification of one target (ports, family, CVE match, exploit availability + dry-run) — transmits no payloads
+- `POST /api/exploit` — **Execute** the family exploit module against one target (Payload tab "Exploit" button). Resolves the device family (explicit `tv_type` → exact/substring `FAMILY_TO_TV_TYPE` map), refuses families with no registered module (honest 404, nothing runs), then returns the module's real outcome: `attempted`, `success`, `duration_s`, `error`/`timed_out`, `executed_at`
 
 ### Audit & Patch-all (T-03 engagements)
 - `POST /api/audit/authorize` — Validate the 6 client fields (`company`, `name`, `address`, `phone`, `email`, `website`) and stage the unsigned **Authorization & Rules of Engagement** PDF under `c2_data/audits/<auth_id>/`; returns `auth_id`, `pdf_url`, `record_hash`

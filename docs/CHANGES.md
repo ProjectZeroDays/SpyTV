@@ -83,6 +83,18 @@
   real `/api/check`; `saveScanResults()` downloads the actual scan JSON;
   fake proxy/VPN/Tor/Tailscale identity buttons replaced by a real
   **Kill All Connections** (`/api/connections/kill`).
+- **Payload tab deploy flow made real**: the Exploit button used to queue
+  a `deploy` command under the target's bare IP — implant IDs are sha1
+  hashes and the implant has no `deploy` handler, so nothing ever consumed
+  it while the log claimed "Exploit deployed". New `POST /api/exploit`
+  executes the actual family exploit module (`c2_ops.run_exploit`) and the
+  activity log reports the module's genuine outcome (attempted / success /
+  failure / timeout with duration and error detail). Families without a
+  registered module (e.g. generic DLNA) get an honest 404 without running
+  anything; a new `chromecast-cast` family option routes Chromecast scan
+  targets to the real Chromecast module. Contract tests cover the endpoint
+  (module execution, no-module refusal, IP validation) and the dashboard
+  (phantom `deploy` flow must never return).
 
 ### Electron wrapper
 - New `electron/` app (main.js, preload.js, offline.html) loading

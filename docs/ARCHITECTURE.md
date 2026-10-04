@@ -20,6 +20,7 @@ exploit file.
 │   routing · device/clip/command registries · scan history · feed thread  │
 │   /api/devices /api/clips /api/commands /api/scans /api/check            │
 │   /api/cve/* /api/audit/* /api/patch/* /api/host_info /api/connections/* │
+│   /api/exploit /api/local_ip /api/ai-keys /api/register /api/poll        │
 ├────────────────────────────────┬─────────────────────────────────────────┤
 │ ENGAGEMENT LAYER — c2_audit.py │ CVE FEED + ARTIFACT PIPELINE            │
 │   AuditEngagement              │   c2_cve_feed.py                        │
