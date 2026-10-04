@@ -49,6 +49,7 @@ spytv/
 │   ├── main.js / preload.js / offline.html / index.html
 │   ├── package.json            # electron 44.5 · electron-builder 26.15 (npm audit: 0 vulns)
 │   ├── package-lock.json       # Lockfile (audited clean)
+│   ├── icon.png                # App icon (1024²) → build.win.icon; build-time input, not packed
 │   └── dist/                   # Build output (git-ignored)
 │
 ├── core/                       # Core Logic
@@ -107,7 +108,8 @@ spytv/
 │   └── generated/              # Auto-generated exploit tests (test_CVE-*.py)
 │
 ├── tools/
-│   └── banner.py               # ASCII banner helper
+│   ├── banner.py               # ASCII banner helper
+│   └── make_icon.py            # Regenerates electron/icon.png (SpyTV app icon)
 │
 ├── output/                     # Generated reports kept as tracked samples
 │

@@ -49,6 +49,10 @@
 - Desktop asset rebuilt on the new toolchain as `SpyTV-C2-1.0.3-portable.exe`
   (electron-builder 26.15.3, signtool-signed); `electron/package.json` +
   lockfile bumped to 1.0.3.
+- **Branded desktop icon** — new `electron/icon.png` (1024×1024, dark `#0B0E14`
+  tile, blue `#3B82F6` TV + eye) wired to `build.win.icon`, replacing the stock
+  Electron icon. `tools/make_icon.py` regenerates it (drawn at 4096px and
+  downsampled). The icon is a build-time input and is not packed into the asar.
 - `SHA256SUMS.txt` regenerated for the attached asset set.
 
 ## [2026-10-04] — T-03 Audit + Patch-all with e-signed authorization, CVE whitepaper viewer & artifact pipeline (T-01/T-02), GUI overhaul, Electron wrapper (v1.0.2)
