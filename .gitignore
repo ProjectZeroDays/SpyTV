@@ -21,6 +21,10 @@ certs/
 # Generated AI exploits are tracked; secrets are not
 !data/exploits/generated/*.py
 
+# Electron C2 wrapper (deps + build output are regenerated)
+electron/node_modules/
+electron/dist/
+
 # Android
 android/.gradle/
 android/build/

@@ -23,6 +23,8 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
+import sys
 import time
 import urllib.request
 import urllib.parse
@@ -104,6 +106,14 @@ CVE_LOG_FILE = REPO_ROOT / "CVE_UPDATES.log"
 AI_KEYS_FILE = REPO_ROOT / "c2_data" / "ai_keys.json"
 ENV_FILE = REPO_ROOT / ".env"
 GENERATED_DIR = REPO_ROOT / "data" / "exploits" / "generated"
+# T-01/T-02 artifact locations (all tracked in the repo).
+WHITEPAPER_DIR = REPO_ROOT / "docs" / "whitepapers"
+GENERATED_TESTS_DIR = REPO_ROOT / "tests" / "generated"
+SIGNATURE_DIR = REPO_ROOT / "data" / "signatures"
+PATCH_CHECK_DIR = REPO_ROOT / "data" / "patch_checks"
+# Per-entry artifact flags — mirrored onto every feed entry (T-02).
+ARTIFACT_FLAGS = ("whitepaper_generated", "tests_generated",
+                  "signature_generated", "patch_check_generated")
 NVD_API_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 NVD_KEYWORDS = [
     "smart tv", "android tv", "tizen", "webos", "roku",
@@ -282,6 +292,523 @@ def generate_exploit_for_cve(cve_id: str, provider: str | None = None,
 
 
 # ---------------------------------------------------------------------------
+# Artifact generation — T-01 whitepaper + T-02 test/signature/patch/enrich
+# ---------------------------------------------------------------------------
+def _ai_complete(prompt: str, provider: str, model: str | None = None,
+                 max_tokens: int = 2000, temperature: float = 0.4):
+    """Single chat-completion call against a configured provider.
+
+    Returns ``(text, error)`` — never raises.
+    """
+    keys = load_ai_keys()
+    prov = AI_PROVIDERS.get(provider)
+    if not provider or not prov or not keys.get(provider):
+        return None, "No AI provider API key configured"
+    model = model or prov["default_model"]
+    model_id = prov["models"].get(model, model)
+    payload = {
+        "model": model_id,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+    }
+    headers = {
+        "Authorization": f"Bearer {keys[provider]}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://github.com/authenticated-inc/spytv",
+        "X-Title": "SpyTV CVE Artifact Generator",
+    }
+    try:
+        req = urllib.request.Request(
+            prov["endpoint"],
+            data=json.dumps(payload).encode(),
+            headers=headers,
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=90) as resp:
+            data = json.loads(resp.read().decode())
+        return data["choices"][0]["message"]["content"].strip(), None
+    except Exception as exc:  # noqa: BLE001 — surface any provider failure
+        return None, str(exc)
+
+
+def _ai_artifact(cve: dict, provider: str, kind: str):
+    """Prompt the provider for one artifact of a CVE. Returns (text, error)."""
+    cid = cve.get("id")
+    base = (f"CVE: {cid}\nSeverity: {cve.get('severity')} "
+            f"(CVSS {cve.get('score')})\n"
+            f"Component: {cve.get('component', 'unknown')}\n"
+            f"Device family: {cve.get('device_name', 'Smart TV')}\n"
+            f"Fixed in: {cve.get('fixed_in', 'unknown')}\n"
+            f"Ports: {cve.get('ports', [])}\n"
+            f"Description: {cve.get('description', '')}")
+    if kind == "whitepaper":
+        prompt = (f"Write an authorized security-assessment whitepaper in markdown "
+                  f"for this smart-TV vulnerability (lab / client-owned devices "
+                  f"only, no exploit code):\n{base}\n\n"
+                  f"Use exactly these ## sections: Summary, Affected products, "
+                  f"Detection (SpyTV), Remediation, References. Output ONLY "
+                  f"markdown.")
+        max_tokens = 1400
+    elif kind == "test":
+        prompt = (f"Write a pytest test file for the exploit module "
+                  f"data/exploits/generated/{cid}.py (class exposing check(ip) "
+                  f"and run(ip, params=None)):\n{base}\n\n"
+                  f"Constraints: load it with importlib.util.spec_from_file_"
+                  f"location using pathlib Path(__file__).resolve().parents[2] / "
+                  f"'data' / 'exploits' / 'generated' / '{cid}.py'; pytest.skip "
+                  f"if the file is missing; structure/metadata assertions only; "
+                  f"NO sockets or network; stdlib + pytest only. Output ONLY raw "
+                  f"Python.")
+        max_tokens = 1400
+    elif kind == "signature":
+        prompt = (f"Propose a detection-signature addition for "
+                  f"core/cve_scanner.py family matching for this CVE (a markdown "
+                  f"proposal — do NOT edit any source file):\n{base}\n\n"
+                  f"Include matching ports/service fingerprints, family/device "
+                  f"indicators, a suggested Python snippet, and validation "
+                  f"notes. Output ONLY markdown.")
+        max_tokens = 900
+    else:  # patch_check
+        prompt = (f"Write a remediation/patch verification check in markdown for "
+                  f"this CVE's device family (commands an assessor runs to "
+                  f"confirm the fix):\n{base}\n\n"
+                  f"Include vendor firmware update steps, a verification "
+                  f"command, and what 'patched' looks like. Output ONLY markdown.")
+        max_tokens = 900
+    text, err = _ai_complete(prompt, provider, max_tokens=max_tokens)
+    if text:
+        text = re.sub(r"^```(?:markdown|python)?\s*|\s*```$", "", text.strip(),
+                      flags=re.MULTILINE).strip()
+    return text, err
+
+
+def _inline_md(text: str) -> str:
+    text = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", text)
+    text = re.sub(r"`([^`]+)`", r"<code>\1</code>", text)
+    text = re.sub(r"\[([^\]]+)\]\((https?://[^)\s]+)\)",
+                  r'<a href="\2" target="_blank" rel="noopener">\1</a>', text)
+    return text
+
+
+def markdown_to_html(md: str) -> str:
+    """Minimal, safe markdown renderer for generated whitepapers.
+
+    Input is HTML-escaped before inline formatting is applied, so AI (or
+    template) content can never inject markup.
+    """
+    def esc(s):
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    out, buf, in_list, in_code = [], [], False, False
+
+    def flush():
+        if buf:
+            # buf holds raw lines — escape exactly once here.
+            out.append("<p>" + _inline_md(esc(" ".join(buf))) + "</p>")
+            buf.clear()
+
+    for raw in (md or "").splitlines():
+        line = raw.rstrip()
+        if in_code:
+            if line.startswith("```"):
+                out.append("</code></pre>")
+                in_code = False
+            else:
+                out.append(esc(raw))
+            continue
+        if line.startswith("```"):
+            flush()
+            if in_list:
+                out.append("</ul>")
+                in_list = False
+            out.append("<pre><code>")
+            in_code = True
+            continue
+        m = re.match(r"^\s*[-*]\s+(.*)$", line)
+        if m:
+            flush()
+            if not in_list:
+                out.append("<ul>")
+                in_list = True
+            out.append("<li>" + _inline_md(esc(m.group(1))) + "</li>")
+            continue
+        if in_list:
+            out.append("</ul>")
+            in_list = False
+        m = re.match(r"^(#{1,4})\s+(.*)$", line)
+        if m:
+            flush()
+            lvl = len(m.group(1))
+            out.append(f"<h{lvl}>" + _inline_md(esc(m.group(2))) + f"</h{lvl}>")
+            continue
+        if not line.strip():
+            flush()
+        else:
+            buf.append(line)
+    flush()
+    if in_list:
+        out.append("</ul>")
+    if in_code:
+        out.append("</code></pre>")
+    return "\n".join(out)
+
+
+def template_whitepaper(cve: dict) -> str:
+    """Deterministic per-CVE whitepaper (offline base / fallback document)."""
+    cid = cve.get("id", "CVE-UNKNOWN")
+    sev = (cve.get("severity") or "UNKNOWN").upper()
+    refs = cve.get("references") or []
+    affected = cve.get("affected") or []
+    ref_lines = "\n".join(f"- [{u}]({u})" for u in refs) or "- No references recorded."
+    aff_lines = "\n".join(f"- {a}" for a in affected) or (
+        "- As reported by NVD for the affected smart-TV family — see the NVD "
+        "advisory for the authoritative CPE list.")
+    return f"""# {cid} — Smart TV vulnerability brief
+
+**Severity:** {sev} · **CVSS:** {cve.get('score') or 'n/a'} · **Published:** {cve.get('published') or 'unknown'}
+**Component:** {cve.get('component') or 'unknown'} · **Fixed in:** {cve.get('fixed_in') or 'see vendor advisory'}
+**Attack vector:** {cve.get('exploitability') or cve.get('attack_vector') or 'unknown'} · **CWE:** {', '.join(cve.get('cwe') or []) or 'n/a'}
+
+## Summary
+
+{cve.get('description') or 'No description recorded.'}
+
+## Affected products
+
+{aff_lines}
+
+## Detection (SpyTV)
+
+- Matched during network scans (`/api/scan`) and read-only checks (`/api/check`) for the affected family.
+- Signature ports: {', '.join(str(p) for p in (cve.get('ports') or [])) or 'see NVD / vendor advisory'}.
+- Dry-run verification confirms exploitability **without transmitting payloads**.
+
+## Remediation
+
+- Upgrade the TV to the vendor-fixed firmware ({cve.get('fixed_in') or 'version per vendor advisory'}).
+- Disable unused remote services (ADB/SSH/vendor dev ports) on the management VLAN.
+- Use the C2 **Patch** (single device) or **Patch All** (network) button to run the family remediation commands, then re-scan to confirm the signature no longer matches.
+
+## References
+
+{ref_lines}
+- [{cve.get('nvd_url')}]({cve.get('nvd_url')})
+
+## Document control
+
+Generated by the SpyTV CVE pipeline for {cid} on {datetime.now(timezone.utc).date().isoformat()} · Authenticated, Inc. · Authorized security assessments only.
+"""
+
+
+def template_signature(cve: dict) -> str:
+    """Detection-signature proposal — validated by an assessor, never auto-merged."""
+    cid = cve.get("id", "CVE-UNKNOWN")
+    ports = ", ".join(str(p) for p in (cve.get("ports") or [])) or "see NVD / vendor advisory"
+    ports_repr = repr(cve.get("ports") or [])
+    family = cve.get("device_name") or cve.get("component") or "smart TV family"
+    return f"""# Detection signature proposal — {cid}
+
+> Proposal only — **not merged** into `core/cve_scanner.py`. An assessor
+> reviews and applies validated changes.
+
+## Indicators
+
+- **Family / component:** {family} ({cid})
+- **Service ports:** {ports}
+- **Attack vector:** {cve.get('attack_vector') or 'unknown'}
+- **CWE:** {', '.join(cve.get('cwe') or []) or 'n/a'}
+
+## Suggested family-matching snippet (validate before merging)
+
+```python
+# core/cve_scanner.py — candidate match for {cid}
+# ("{cid}", {ports_repr}, "{family}"),
+```
+
+## Validation checklist
+
+- Confirm the port/fingerprint against a lab device running vulnerable firmware.
+- Confirm no false positives against patched firmware of the same family.
+- Keep existing family entries and CVE lists stable — additive changes only.
+"""
+
+
+def template_patch_check(cve: dict) -> str:
+    """Patch/remediation verification check for the Patch / Patch All flow."""
+    cid = cve.get("id", "CVE-UNKNOWN")
+    cmds = cve.get("patch_commands") or []
+    cmd_lines = "\n".join(f"- `{c}`" for c in cmds) or (
+        "- No family commands recorded — vendor firmware update required.")
+    return f"""# Patch verification check — {cid}
+
+> Artifact for the C2 **Patch** / **Patch All** flow — review before use.
+
+## Preconditions
+
+- Device reachable on the local network; engagement authorized (signed authorization on file).
+
+## Verification steps
+
+- Apply the family remediation commands (the Patch button runs these):
+{cmd_lines}
+- Re-run `/api/scan` + `/api/check` for the device IP: the target must **no longer match** {cid}.
+- Confirm firmware version is at or above {cve.get('fixed_in') or 'the vendor-fixed release'}.
+
+## Patched looks like
+
+- CVE no longer matched, the exploit dry-run reports not vulnerable, and the device card shows **Patched**.
+"""
+
+
+def template_generated_test(cve_id: str) -> str:
+    """Deterministic, offline-safe pytest file for a generated exploit."""
+    var = re.sub(r"[^0-9A-Za-z]", "_", cve_id)
+    return f'''"""Auto-generated offline test for {cve_id} (T-02 artifact pipeline).
+
+Safe by default: import/structure checks only — no network, no live devices.
+"""
+import importlib.util
+import pathlib
+
+import pytest
+
+MOD_PATH = (pathlib.Path(__file__).resolve().parents[2]
+            / "data" / "exploits" / "generated" / "{cve_id}.py")
+
+
+def _load():
+    if not MOD_PATH.exists():
+        pytest.skip("exploit module not generated yet")
+    spec = importlib.util.spec_from_file_location("exploit_{var}", MOD_PATH)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_module_imports():
+    _load()
+
+
+def test_public_interface_matches_contract():
+    mod = _load()
+    assert callable(getattr(mod, "check", None)), "check(ip) is missing"
+    assert callable(getattr(mod, "run", None)), "run(ip, params=None) is missing"
+
+
+def test_metadata_references_the_cve():
+    mod = _load()
+    cves = getattr(mod, "CVES", None)
+    if cves is not None:
+        assert "{cve_id}" in cves
+    name = getattr(mod, "NAME", None)
+    if name is not None:
+        assert isinstance(name, str) and name.strip()
+'''
+
+
+def _with_test_header(source: str, cve_id: str) -> str:
+    return (f'"""Auto-generated test for {cve_id} '
+            f'(AI-assisted, validated by pytest)."""\n') + source.lstrip("\n")
+
+
+def _pytest_passes(path: Path) -> tuple:
+    """Run pytest on a generated test file (offline, sandboxed subprocess).
+
+    Returns ``(passed, tail_of_output)``.
+    """
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-m", "pytest", str(path), "-q", "--no-header",
+             "-p", "no:cacheprovider"],
+            cwd=str(REPO_ROOT), capture_output=True, text=True, timeout=120,
+        )
+        out = ((proc.stdout or "") + (proc.stderr or ""))[-800:]
+        return proc.returncode == 0, out
+    except Exception as exc:  # noqa: BLE001
+        return False, str(exc)
+
+
+def _quarantine_exploit(cve_id: str) -> bool:
+    """Move an untested exploit module out of the import path (.quarantined)."""
+    src = GENERATED_DIR / f"{cve_id}.py"
+    if not src.exists():
+        return False
+    dst = GENERATED_DIR / f"{cve_id}.quarantined"
+    try:
+        if dst.exists():
+            dst.unlink()
+        src.rename(dst)
+        return True
+    except OSError:
+        return False
+
+
+# Proven once per process: the deterministic test template passes without an
+# exploit module present (it pytest.skip()s) — avoids a pytest subprocess per
+# CVE during large updates.
+_template_test_proven = False
+
+
+def build_artifact_set(cve: dict, provider: str | None = None) -> dict:
+    """Generate the full T-02 artifact set for a CVE (T-01 whitepaper first).
+
+    Each artifact is attempted independently — one failure never blocks
+    another or the surrounding CVE update. AI drafts are used when a
+    provider is configured; deterministic templates are the fallback so
+    the artifact set is complete even offline. The generated test must
+    **pass pytest** before ``tests_generated`` is set; if it cannot be
+    made to pass, the exploit module is quarantined.
+
+    The four ``*_generated`` flags are mirrored onto ``cve`` (the feed
+    entry object stored in state).
+    """
+    global _template_test_proven
+    cid = cve.get("id", "CVE-UNKNOWN")
+    report = {flag: False for flag in ARTIFACT_FLAGS}
+    errors = {}
+
+    def _draft(kind):
+        """AI draft when configured, else (None, None) → template path."""
+        if not provider:
+            return None, None
+        try:
+            text, err = _ai_artifact(cve, provider, kind)
+            return (text, None) if text else (None, err or "empty AI response")
+        except Exception as exc:  # noqa: BLE001
+            return None, str(exc)
+
+    # 1. Whitepaper (T-01) ---------------------------------------------------
+    try:
+        text, err = _draft("whitepaper")
+        if err:
+            errors["whitepaper_ai"] = err
+        text = text or template_whitepaper(cve)
+        WHITEPAPER_DIR.mkdir(parents=True, exist_ok=True)
+        (WHITEPAPER_DIR / f"{cid}.md").write_text(text, encoding="utf-8")
+        report["whitepaper_generated"] = True
+    except Exception as exc:  # noqa: BLE001
+        errors["whitepaper"] = str(exc)
+
+    # 2. Generated pytest test — must PASS before the flag is set ------------
+    try:
+        GENERATED_TESTS_DIR.mkdir(parents=True, exist_ok=True)
+        test_path = GENERATED_TESTS_DIR / f"test_{cid}.py"
+        source, ai_err = _draft("test")
+        if ai_err:
+            errors["test_ai"] = ai_err
+        passed, log = False, ""
+        if source:
+            test_path.write_text(_with_test_header(source, cid),
+                                 encoding="utf-8")
+            passed, log = _pytest_passes(test_path)
+            if not passed:
+                errors["test_ai"] = "AI test failed pytest — using template"
+        if not passed:
+            test_path.write_text(template_generated_test(cid), encoding="utf-8")
+            exploit_file = GENERATED_DIR / f"{cid}.py"
+            # Template needs a real run when an exploit exists (import is the
+            # actual check); without one it is proven once per process.
+            if exploit_file.exists() or not _template_test_proven:
+                passed, log = _pytest_passes(test_path)
+                if passed and not exploit_file.exists():
+                    _template_test_proven = True
+            else:
+                passed = True
+        if passed:
+            report["tests_generated"] = True
+        else:
+            errors["test"] = (log or "")[-400:]
+            if _quarantine_exploit(cid):
+                report["quarantined"] = True
+                cve["exploit_generated"] = False
+    except Exception as exc:  # noqa: BLE001
+        errors["test"] = str(exc)
+        if _quarantine_exploit(cid):
+            report["quarantined"] = True
+            cve["exploit_generated"] = False
+
+    # 3. Detection-signature proposal (validated, never auto-merged) --------
+    try:
+        text, err = _draft("signature")
+        if err:
+            errors["signature_ai"] = err
+        text = text or template_signature(cve)
+        if len(text.strip()) < 80:
+            raise ValueError("signature proposal too short")
+        SIGNATURE_DIR.mkdir(parents=True, exist_ok=True)
+        (SIGNATURE_DIR / f"{cid}.md").write_text(text, encoding="utf-8")
+        report["signature_generated"] = True
+    except Exception as exc:  # noqa: BLE001
+        errors["signature"] = str(exc)
+
+    # 4. Patch/remediation check proposal ------------------------------------
+    try:
+        text, err = _draft("patch_check")
+        if err:
+            errors["patch_check_ai"] = err
+        text = text or template_patch_check(cve)
+        if len(text.strip()) < 60:
+            raise ValueError("patch check too short")
+        PATCH_CHECK_DIR.mkdir(parents=True, exist_ok=True)
+        (PATCH_CHECK_DIR / f"{cid}.md").write_text(text, encoding="utf-8")
+        report["patch_check_generated"] = True
+    except Exception as exc:  # noqa: BLE001
+        errors["patch_check"] = str(exc)
+
+    if errors:
+        report["errors"] = errors
+    for flag in ARTIFACT_FLAGS:
+        cve[flag] = bool(report[flag])
+    return report
+
+
+def artifact_status(cve_id: str) -> dict | None:
+    """Artifact inventory for one CVE (files on disk + per-entry flags)."""
+    cve = get_cve(cve_id)
+    if not cve:
+        return None
+    files = {
+        "whitepaper": WHITEPAPER_DIR / f"{cve_id}.md",
+        "test": GENERATED_TESTS_DIR / f"test_{cve_id}.py",
+        "signature": SIGNATURE_DIR / f"{cve_id}.md",
+        "patch_check": PATCH_CHECK_DIR / f"{cve_id}.md",
+        "exploit": GENERATED_DIR / f"{cve_id}.py",
+    }
+
+    def _rel(p: Path):
+        try:
+            return str(p.relative_to(REPO_ROOT))
+        except ValueError:
+            return str(p)
+
+    return {
+        "id": cve_id,
+        "flags": {f: bool(cve.get(f)) for f in ARTIFACT_FLAGS},
+        "exploit_generated": bool(cve.get("exploit_generated")),
+        "files": {name: {"path": _rel(p), "exists": p.exists()}
+                  for name, p in files.items()},
+        "enrichment": {k: cve.get(k)
+                       for k in ("cwe", "affected", "fixed_in", "attack_vector",
+                                 "exploitability")},
+    }
+
+
+def get_whitepaper_markdown(cve_id: str):
+    """``(markdown, source)`` — generated file when present, template otherwise."""
+    cve = get_cve(cve_id)
+    if not cve:
+        return None
+    path = WHITEPAPER_DIR / f"{cve_id}.md"
+    if path.exists():
+        try:
+            return path.read_text(encoding="utf-8"), "file"
+        except OSError:
+            pass
+    return template_whitepaper(cve), "template"
+
+
+# ---------------------------------------------------------------------------
 # NVD fetching / parsing
 # ---------------------------------------------------------------------------
 def fetch_nvd_cves(days: int = 30, api_key: str | None = None):
@@ -317,7 +844,8 @@ def fetch_nvd_cves(days: int = 30, api_key: str | None = None):
 
 
 def parse_nvd_cve(nvd_cve: dict) -> dict:
-    """Normalize an NVD CVE document into a feed entry."""
+    """Normalize an NVD CVE document into a feed entry (with T-02
+    enrichment: CWE, affected products, fixed version, attack vector)."""
     cve_id = nvd_cve.get("id", "")
     description = ""
     for desc in nvd_cve.get("descriptions", []):
@@ -325,17 +853,53 @@ def parse_nvd_cve(nvd_cve: dict) -> dict:
             description = desc.get("value", "")
             break
 
-    severity, score = None, None
+    severity, score, cvss_data = None, None, {}
     for metric_key in ("cvssMetricV31", "cvssMetricV30", "cvssMetricV2"):
         metrics = nvd_cve.get("metrics", {}).get(metric_key, [])
         if metrics:
             data = metrics[0].get("cvssData", {})
-            severity = data.get("baseSeverity")
+            severity = data.get("baseSeverity") or metrics[0].get("baseSeverity")
             score = data.get("baseScore")
+            cvss_data = data
             break
 
     references = [r.get("url", "") for r in nvd_cve.get("references", [])
                   if r.get("url")]
+
+    # Enrichment — CWE ids from the weaknesses array.
+    cwes, seen = [], set()
+    for weak in nvd_cve.get("weaknesses", []):
+        for entry in weak.get("description", []):
+            value = entry.get("value")
+            if value and value.startswith("CWE-") and value not in seen:
+                seen.add(value)
+                cwes.append(value)
+
+    # Enrichment — affected products from the CPE configurations.
+    affected = []
+    for cfg in nvd_cve.get("configurations", []):
+        for node in cfg.get("nodes", []):
+            for match in node.get("cpeMatch", []):
+                crit = match.get("criteria") or match.get("cpe23Uri")
+                if crit and crit not in affected:
+                    affected.append(crit)
+
+    # Enrichment — fixed version from the description ("fixed in 4.2.1").
+    fixed_in = None
+    m = re.search(r"fixed in(?: version)? ([0-9][0-9A-Za-z._+-]*)",
+                  description, re.IGNORECASE)
+    if m:
+        fixed_in = m.group(1)
+
+    # Enrichment — exploitability note for the dashboard card.
+    attack_vector = cvss_data.get("attackVector")
+    av_label = {"NETWORK": "Network-reachable",
+                "ADJACENT_NETWORK": "Adjacent-network",
+                "LOCAL": "Local", "PHYSICAL": "Physical"}.get(attack_vector)
+    exploitability = av_label or "Unknown"
+    if cvss_data.get("userInteraction") == "NONE":
+        exploitability += " · no user interaction required"
+
     return {
         "id": cve_id,
         "description": description[:600],
@@ -347,6 +911,17 @@ def parse_nvd_cve(nvd_cve: dict) -> dict:
         # Per-CVE whitepaper served by the C2 (rendered brief).
         "whitepaper_url": f"/api/cve/whitepaper/{cve_id}",
         "exploit_generated": False,
+        # T-02 enrichment
+        "cwe": cwes[:5],
+        "affected": affected[:8],
+        "fixed_in": fixed_in,
+        "attack_vector": attack_vector,
+        "exploitability": exploitability,
+        # T-02 artifact flags (set by build_artifact_set)
+        "whitepaper_generated": False,
+        "tests_generated": False,
+        "signature_generated": False,
+        "patch_check_generated": False,
         "source": "nvd",
     }
 
@@ -371,9 +946,17 @@ def save_state(state: dict):
     CVE_STATE_FILE.write_text(json.dumps(state, indent=2), encoding="utf-8")
 
 
-def log_cve_update(new_cves: list, generated: list | None = None):
-    """Append new-CVE entries to CVE_UPDATES.log in the repository root."""
+def log_cve_update(new_cves: list, generated: list | None = None,
+                   artifacts: dict | None = None):
+    """Append new-CVE entries to CVE_UPDATES.log in the repository root.
+
+    ``artifacts`` maps CVE id → the report returned by
+    :func:`build_artifact_set`; one ``artifacts`` event per CVE records
+    every per-artifact status (T-02: all statuses land in the root log).
+    """
     generated = generated or []
+    artifacts = artifacts or {}
+    quarantined = [cid for cid, r in artifacts.items() if r.get("quarantined")]
     try:
         CVE_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
         with open(CVE_LOG_FILE, "a", encoding="utf-8") as fh:
@@ -390,12 +973,26 @@ def log_cve_update(new_cves: list, generated: list | None = None):
                     "exploit_generated": cve["id"] in generated,
                 }
                 fh.write(json.dumps(entry) + "\n")
+            for cid, report in artifacts.items():
+                fh.write(json.dumps({
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                    "event": "artifacts",
+                    "id": cid,
+                    "whitepaper_generated": bool(report.get("whitepaper_generated")),
+                    "tests_generated": bool(report.get("tests_generated")),
+                    "signature_generated": bool(report.get("signature_generated")),
+                    "patch_check_generated": bool(report.get("patch_check_generated")),
+                    "quarantined": bool(report.get("quarantined")),
+                    "errors": report.get("errors") or None,
+                }) + "\n")
             if new_cves:
                 fh.write(json.dumps({
                     "ts": datetime.now(timezone.utc).isoformat(),
                     "event": "update_summary",
                     "new": len(new_cves),
                     "generated": len(generated),
+                    "artifacts": len(artifacts),
+                    "quarantined": quarantined or None,
                 }) + "\n")
     except OSError as exc:
         print(f"[CVE] could not write update log: {exc}")
@@ -494,9 +1091,37 @@ def update_cve_database(api_key: str | None = None, days: int = 30,
         print("[CVE] no AI provider key configured — skipping auto "
               "exploit generation (add keys via run_c2.bat or the dashboard)")
 
+    # 3b. Full artifact set per new CVE (T-01 whitepaper + T-02 test/
+    #     signature/patch-check/enrichment). Each artifact and each CVE is
+    #     isolated: a partial failure never aborts the update run.
+    artifacts = {}
+    for cve in new_cves:
+        try:
+            report = build_artifact_set(cve, provider if auto_generate else None)
+        except Exception as exc:  # noqa: BLE001 — keep the run alive
+            report = {flag: False for flag in ARTIFACT_FLAGS}
+            report["errors"] = {"pipeline": str(exc)}
+            for flag in ARTIFACT_FLAGS:
+                cve[flag] = False
+            print(f"[CVE] artifact pipeline failed for {cve.get('id')}: {exc}")
+        artifacts[cve.get("id", "CVE-UNKNOWN")] = report
+        if report.get("quarantined"):
+            cve["exploit_generated"] = False
+            if cve["id"] in generated:
+                generated.remove(cve["id"])
+            print(f"[CVE] quarantined exploit for {cve['id']} "
+                  f"(generated test did not pass)")
+        # new_cves entries are the same objects stored in known_cves —
+        # mirror flags anyway in case a caller passed a detached dict.
+        entry = state["known_cves"].get(cve.get("id"))
+        if entry is not None and entry is not cve:
+            for flag in ARTIFACT_FLAGS:
+                entry[flag] = cve.get(flag, False)
+            entry["exploit_generated"] = bool(cve.get("exploit_generated"))
+
     state["new_count"] = len(new_cves)
     save_state(state)
-    log_cve_update(new_cves, generated)
+    log_cve_update(new_cves, generated, artifacts)
     return new_cves
 
 
@@ -530,7 +1155,11 @@ def get_cve(cve_id: str) -> dict | None:
 
 
 def render_cve_whitepaper(cve_id: str) -> str | None:
-    """Render a per-CVE whitepaper (HTML) from stored feed data."""
+    """Render a per-CVE whitepaper (HTML) from stored feed data.
+
+    Prefers the generated markdown document in ``docs/whitepapers/`` when
+    one exists (T-01); falls back to the structured feed-data brief.
+    """
     cve = get_cve(cve_id)
     if not cve:
         return None
@@ -543,6 +1172,35 @@ def render_cve_whitepaper(cve_id: str) -> str | None:
     sev_color = {"CRITICAL": "#EF4444", "HIGH": "#F59E0B",
                  "MEDIUM": "#3B82F6", "LOW": "#10B981"}.get(sev, "#6B7280")
     esc = lambda s: (s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    # T-01: prefer the generated document (AI-assisted or template) when it
+    # is on disk; it carries the full section structure.
+    doc_path = WHITEPAPER_DIR / f"{cve_id}.md"
+    if doc_path.exists():
+        try:
+            body = (f'<div class="card"><h2 style="margin-top:0">'
+                    f'Generated whitepaper</h2>'
+                    f'{markdown_to_html(doc_path.read_text(encoding="utf-8"))}</div>')
+        except OSError:
+            body = None
+    else:
+        body = None
+    if body is None:
+        body = f"""<div class="card"><h2 style="margin-top:0">Description</h2>
+<p>{esc(cve.get('description'))}</p></div>
+<div class="card"><h2 style="margin-top:0">References</h2><ul>{refs}</ul></div>
+<div class="card"><h2 style="margin-top:0">Remediation</h2>
+<p>Patch the affected TV to the vendor-fixed firmware, disable unused remote
+services (ADB/SSH/dev ports), and re-run the SpyTV network scan to confirm the
+device no longer matches the vulnerable signature. The C2 <b>Patch</b> button
+applies the remediation commands for the matched device family.</p></div>"""
+    artifacts = artifact_status(cve_id) or {}
+    flags = artifacts.get("flags", {})
+    flag_line = " · ".join(
+        f"{k.replace('_generated', '')}: "
+        f"{'&#10003;' if flags.get(k) else '&#8212;'}"
+        for k in ARTIFACT_FLAGS
+    )
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -551,25 +1209,26 @@ def render_cve_whitepaper(cve_id: str) -> str | None:
  body {{ background:#0B0E14; color:#F3F4F6; font-family:-apple-system,'Segoe UI',Roboto,sans-serif;
         max-width:860px; margin:0 auto; padding:32px; line-height:1.6; }}
  h1 {{ font-size:22px; }} h2 {{ font-size:15px; color:#9CA3AF; margin-top:28px; }}
+ h3 {{ font-size:14px; color:#D1D5DB; margin-top:20px; }}
  a {{ color:#3B82F6; }} .badge {{ display:inline-block; padding:3px 10px; border-radius:12px;
         font-size:12px; font-weight:700; background:{sev_color}22; color:{sev_color};
         border:1px solid {sev_color}; }}
  .meta {{ color:#9CA3AF; font-size:13px; }}
  .card {{ background:#151B27; border:1px solid #1F2937; border-radius:12px; padding:20px; margin:16px 0; }}
  ul {{ padding-left:20px; }} .back {{ font-size:13px; }}
+ pre {{ background:#0B0E14; border:1px solid #1F2937; border-radius:8px; padding:12px;
+        overflow-x:auto; font-size:12px; }}
+ code {{ color:#93C5FD; }}
 </style></head><body>
 <p class="back"><a href="/">&#8592; Back to C2 Dashboard</a></p>
 <h1>{esc(cve_id)} <span class="badge">{esc(sev)}{f" · {score}" if score else ""}</span></h1>
 <p class="meta">Published: {esc(cve.get('published') or 'unknown')} &middot;
+Fixed in: {esc(cve.get('fixed_in') or 'see vendor advisory')} &middot;
+CWE: {esc(', '.join(cve.get('cwe') or []) or 'n/a')} &middot;
 Source: <a href="{esc(cve.get('nvd_url'))}" target="_blank">NVD entry</a></p>
-<div class="card"><h2 style="margin-top:0">Description</h2>
-<p>{esc(cve.get('description'))}</p></div>
+{body}
 <div class="card"><h2 style="margin-top:0">References</h2><ul>{refs}</ul></div>
-<div class="card"><h2 style="margin-top:0">Remediation</h2>
-<p>Patch the affected TV to the vendor-fixed firmware, disable unused remote
-services (ADB/SSH/dev ports), and re-run the SpyTV network scan to confirm the
-device no longer matches the vulnerable signature. The C2 <b>Patch</b> button
-applies the remediation commands for the matched device family.</p></div>
 <div class="card"><h2 style="margin-top:0">Assessment status</h2>
-<p>Exploit module generated: {"yes" if cve.get("exploit_generated") else "no"}</p></div>
+<p>Exploit module generated: {"yes" if cve.get("exploit_generated") else "no"}</p>
+<p>Artifacts — {flag_line}</p></div>
 </body></html>"""

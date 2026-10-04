@@ -1,0 +1,42 @@
+{
+  "name": "spytv-c2",
+  "version": "1.0.2",
+  "description": "SpyTV C2 desktop client — Authenticated, Inc.",
+  "main": "main.js",
+  "author": "Authenticated, Inc.",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win portable"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.authenticated.spytv",
+    "productName": "SpyTV C2",
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "offline.html"
+    ],
+    "win": {
+      "target": [
+        "portable"
+      ],
+      "icon": null
+    },
+    "portable": {
+      "artifactName": "SpyTV-C2-${version}-portable.exe"
+    },
+    "directories": {
+      "output": "dist"
+    },
+    "compression": "normal",
+    "npmRebuild": false
+  },
+  "allowScripts": {
+    "electron@33.4.11": true
+  }
+}

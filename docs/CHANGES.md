@@ -1,5 +1,141 @@
 # SpyTV Code Changes Log
 
+## [2026-10-04] — T-03 Audit + Patch-all with e-signed authorization, CVE whitepaper viewer & artifact pipeline (T-01/T-02), GUI overhaul, Electron wrapper (v1.0.2)
+
+### Audit button (T-03, full flow)
+- **`c2_ops.py` (new)** — stateless shared operations: network scan +
+  family/CVE enrichment (`perform_scan`), read-only target verification
+  (`check_target`), exploit registry loader + dry-run/live execution,
+  patch execution (`execute_patches`), connection teardown
+  (`kill_all_connections`). Imported by both the HTTP handlers and the
+  engagement runners (injected via lambdas) so neither side imports the
+  other — no circular imports.
+- **`c2_audit.py` (new)** — engagement state machines + reportlab PDF
+  builders:
+  - `AuditEngagement`: scan → dry-run checks (no payloads) → send
+    exploits → kill/verify connections → **auto-render report** (client
+    captured up-front — no second prompt).
+  - `PatchEngagement`: discover + patch every device first, then
+    `awaiting_client` → remediation proof report (patched per device/CVE,
+    or not-patched with the reason).
+  - Industry-standard PDF machinery: branded cover, TOC (multiBuild),
+    exec summary, scope & methodology, inventory, findings, risk matrix,
+    remediation/attestation, recommendations, appendices, sign-off;
+    severity colour-coding, header/footer, page numbers.
+  - **Authorization instrument builder** — *Authorization to Perform a
+    Security Assessment and Rules of Engagement*: 10 numbered clauses
+    (parties, authorization statement, scope, out-of-scope, rules of
+    engagement, confidentiality, liability, ESIGN Act 15 U.S.C. §7001 /
+    UETA electronic-signature clause, term, execution), provider block
+    **pre-signed by Authenticated, Inc.** ("/s/ Ian, Assessment Lead"),
+    client signature image with `/s/` fallback, document-control table,
+    SHA-256 record hash and an execution audit trail (doc ID, UTC
+    timestamps, signer IP). Valid for 30 days (`AUTH_VALID_DAYS`).
+- **New endpoints** (wired via dependency injection in `c2_server.py`):
+  | Method | Path | Purpose |
+  |---|---|---|
+  | POST | `/api/audit/authorize` | validate 6 client fields → unsigned auth PDF |
+  | POST | `/api/audit/sign` | validate drawn PNG signature → archive signed PDF → **start audit** |
+  | GET | `/api/audit/status` | phase/progress/log/report_ready (survives reloads) |
+  | GET | `/api/audit/report.pdf` | final audit report |
+  | GET | `/api/audit/authorization.pdf` | `?auth_id=…[&state=unsigned\|signed]` |
+  | POST | `/api/patch/start` | begin patch-all (discovery + registry) |
+  | POST | `/api/patch/report` | client details → remediation PDF |
+  | GET | `/api/patch/status` / `/api/patch/report.pdf` | progress / download |
+  | POST | `/api/check` | read-only target verification (no payloads) |
+  | GET | `/api/host_info` | real host facts (replaces simulated Server tab) |
+  | POST | `/api/connections/kill` | teardown + verification |
+- Archives under `c2_data/audits/<auth_id>/` (`authorization.pdf`,
+  `authorization-signed.pdf`, `authorization.json` sidecar with record
+  hash, `report.pdf`, `engagement.json`).
+- Refactors: `handle_scan` → `c2_ops.perform_scan`, `serve_cve_patch` →
+  `c2_ops.execute_patches` (removes duplicated inline logic), local
+  `scan_network`/`utc_now_iso` deleted from `c2_server.py`.
+- New `tests/test_audit_flow.py` (**19 tests**): client validation,
+  authorization PDF structure (content extracted from compressed
+  streams), record-hash determinism, signature decode + size cap, path
+  traversal guard, both engagement machines end-to-end, every HTTP
+  endpoint, dashboard static contract.
+
+### Dashboard — GUI best practices + responsive pass
+- **Audit** (amber) and **Patch All** (green) buttons in the Network
+  Scan toolbar; shared `#engagement-status` banner under the nav with
+  live phase, progress bar, last message and contextual actions
+  (Report / Authorization / Dismiss).
+- **Client details modal** (6 fields, labelled inputs, server-side error
+  display, prefilled from `localStorage`) used by both flows.
+- **Authorization e-sign modal**: inline PDF preview (iframe) + canvas
+  signature pad (pointer events, devicePixelRatio-aware, `touch-action:
+  none`), company confirmation, ESIGN notice, Clear/Cancel/Sign.
+- Keyboard support: Escape closes dialogs, nav tabs keyboard-activatable
+  (`role="tab"`, `tabindex`, `aria-selected`), backdrop click dismisses;
+  `aria-live` banner, `:focus-visible` outlines, `prefers-reduced-motion`
+  support, 44px touch targets on coarse pointers.
+- Accessibility: AA-contrast fixes (button variants rebuilt against
+  verified text colours, `--text-muted` raised to 5.4:1), labelled form
+  fields, dialogs with `role="dialog"`/`aria-modal`.
+- Responsive: `.table-scroll` wrappers for wide tables, form/auth grids
+  collapse to one column, modals fit 96vw/92vh on phones, toolbar wraps,
+  banner stacks on narrow screens.
+- **Simulated data removed** (real data only): `loadServerInfo()` now
+  reads `/api/host_info` (hostname, OS, Python, MAC, uptime — no more
+  `AA:BB:CC:DD:EE:FF`/fake proxy/VPN/Tor rows); `checkTarget()` calls the
+  real `/api/check`; `saveScanResults()` downloads the actual scan JSON;
+  fake proxy/VPN/Tor/Tailscale identity buttons replaced by a real
+  **Kill All Connections** (`/api/connections/kill`).
+
+### Electron wrapper
+- New `electron/` app (main.js, preload.js, offline.html) loading
+  `http://127.0.0.1:8443/` with a reachability check and offline
+  fallback page; built with electron-builder (portable target) →
+  `dist/SpyTV-C2-1.0.2-portable.exe` (attached to this release).
+  `electron/node_modules/` and `electron/dist/` are gitignored.
+
+### Whitepaper viewer + CVE artifact pipeline (T-01 / T-02)
+- **`build_artifact_set()` in `c2_cve_feed.py`** — full artifact pass per
+  new CVE inside `update_cve_database()` (after exploit generation), one
+  artifact and one CVE at a time; a partial failure never aborts the run:
+  | Artifact | Location | Behaviour |
+  |---|---|---|
+  | Whitepaper | `docs/whitepapers/CVE-*.md` | AI draft when a provider key is configured, deterministic template fallback — file always exists |
+  | Pytest test | `tests/generated/test_CVE-*.py` | must **pass a real pytest run** before `tests_generated` is set; failing AI draft → offline-safe template; still failing → exploit renamed `.quarantined`, `exploit_generated` cleared, failure logged |
+  | Detection signature | `data/signatures/CVE-*.md` | proposal for `core/cve_scanner.py` family matching — assessor-validated, **never auto-merged** |
+  | Patch check | `data/patch_checks/CVE-*.md` | remediation verification steps for Patch / Patch All |
+  | Feed enrichment | feed entry | CWE list, affected CPEs, fixed version, attack vector + exploitability note (from NVD `weaknesses`/`configurations`/CVSS) |
+  | Log records | `CVE_UPDATES.log` | one `artifacts` JSONL event per CVE with every flag + errors, `quarantined` in `update_summary` |
+- Feed flags per entry: `whitepaper_generated`, `tests_generated`,
+  `signature_generated`, `patch_check_generated`; AI failure on any draft
+  falls back to the deterministic template (offline-complete pipeline).
+- **New endpoints**: `GET /api/cve/whitepaper_doc/<id>` (markdown +
+  `source: file|template` for the viewer) and `GET /api/cve/artifacts/<id>`
+  (flags, file inventory, enrichment). `render_cve_whitepaper()` now embeds
+  the generated markdown document when present.
+- **Dashboard (T-01)**: right column is now equal width to the main card
+  (`minmax(0,1fr) × 2`, stacking under 1280px) and holds a new **Output**
+  panel — a single replaceable output area (`setOutput()` replaces prior
+  content; `resetOutput()` on every C2 start) — plus the CVE feed. Every
+  feed entry gained **View Whitepaper** (safe client-side markdown render:
+  HTML-escaped before formatting, so AI content can't inject markup) and
+  **View Vulnerability Info** (severity/CVSS/CWE/component/fixed-in/
+  attack-vector/exploit status table, affected CPEs, then live artifact
+  status from `/api/cve/artifacts/<id>`). Help tooltips + `docs/C2_DASHBOARD.md`
+  document the viewer, the artifact set and the new endpoints.
+- `tests/generated/.gitignore` — mirrors the `data/exploits/generated/`
+  tracking exception (generated tests tracked, pytest scratch not).
+- New `tests/test_cve_artifacts.py` (**21 tests**): template structure +
+  XSS-safe markdown rendering, whitepaper file generation and source
+  fallback, HTML page preferring the generated document, generated test
+  passing a real pytest run, full artifact set + flags, AI-failure and
+  single-artifact-failure isolation, test-failure quarantine, NVD
+  enrichment, `update_cve_database` end-to-end (statuses logged, partial
+  failure doesn't abort), both new HTTP endpoints, dashboard/docs contract.
+
+### Housekeeping
+- `requirements.txt`: `reportlab>=5.0.0`.
+- Tests **42 → 82** (all green).
+
+---
+
 ## [2026-10-04] — /Push Release Pipeline: error-correct, refactor, tests, debug
 
 ### New command

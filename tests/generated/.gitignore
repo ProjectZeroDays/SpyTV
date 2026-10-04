@@ -1,0 +1,6 @@
+# T-02: generated exploit tests are tracked (mirrors the exception for
+# data/exploits/generated/), pytest scratch from validation runs is not.
+__pycache__/
+.pytest_cache/
+*.pyc
+!test_CVE-*.py

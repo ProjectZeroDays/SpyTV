@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SpyTV C2 — Authenticated, Inc.</title>
+  <style>
+    :root {
+      --bg: #0B1220;
+      --panel: #111A2E;
+      --border: #1E2A44;
+      --accent: #0F766E;
+      --text: #E2E8F0;
+      --muted: #94A3B8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 24px;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 40px 34px;
+      max-width: 520px;
+      width: 100%;
+    }
+    h1 { font-size: 24px; margin-bottom: 10px; }
+    p { color: var(--muted); font-size: 15px; line-height: 1.6; }
+    .accent { color: #14B8A6; }
+    footer { margin-top: 24px; font-size: 12px; color: var(--muted); letter-spacing: 1px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>SpyTV <span class="accent">C2</span></h1>
+    <p>Connecting to the local dashboard at <code>127.0.0.1:8443</code>…</p>
+    <footer>&copy; Authenticated, Inc.</footer>
+  </div>
+</body>
+</html>

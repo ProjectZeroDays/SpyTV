@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SpyTV C2 — Server Offline</title>
+  <style>
+    :root {
+      --bg: #0B1220;
+      --panel: #111A2E;
+      --border: #1E2A44;
+      --accent: #0F766E;
+      --accent-hover: #14B8A6;
+      --text: #E2E8F0;
+      --muted: #94A3B8;
+      --danger: #F87171;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      text-align: center;
+    }
+    main {
+      width: 100%;
+      max-width: 640px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 40px 32px;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+    }
+    .logo {
+      display: inline-block;
+      font-size: 13px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--accent-hover);
+      border: 1px solid var(--accent);
+      border-radius: 999px;
+      padding: 6px 14px;
+      margin-bottom: 22px;
+    }
+    h1 { font-size: 26px; font-weight: 650; margin-bottom: 12px; }
+    h1 .status { color: var(--danger); }
+    p.lead { color: var(--muted); font-size: 15px; line-height: 1.6; margin-bottom: 24px; }
+    .steps {
+      text-align: left;
+      background: rgba(15, 118, 110, 0.08);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      border-radius: 10px;
+      padding: 16px 18px;
+      margin-bottom: 26px;
+      font-size: 14px;
+      line-height: 1.7;
+      color: var(--muted);
+    }
+    .steps strong { color: var(--text); }
+    code {
+      background: #0A1020;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 2px 7px;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 13px;
+      color: var(--accent-hover);
+      word-break: break-all;
+    }
+    ol { padding-left: 20px; }
+    li { margin-bottom: 6px; }
+    #retry {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 9px;
+      padding: 13px 34px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s ease, transform 0.1s ease;
+    }
+    #retry:hover { background: var(--accent-hover); }
+    #retry:active { transform: scale(0.98); }
+    #retry:disabled { opacity: 0.6; cursor: wait; }
+    #status { margin-top: 16px; font-size: 13px; color: var(--muted); min-height: 18px; }
+    #status.ok { color: var(--accent-hover); }
+    #status.err { color: var(--danger); }
+    .auto { margin-top: 10px; font-size: 12px; color: var(--muted); opacity: 0.8; }
+    footer {
+      margin-top: 26px;
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: 1px;
+    }
+    footer span { color: var(--accent-hover); }
+    @media (max-width: 520px) {
+      main { padding: 28px 18px; }
+      h1 { font-size: 21px; }
+      #retry { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="logo">SpyTV C2</div>
+    <h1>SpyTV C2 server is <span class="status">not running</span></h1>
+    <p class="lead">
+      The desktop client could not reach the local dashboard at
+      <code>http://127.0.0.1:8443/</code>.
+    </p>
+
+    <div class="steps">
+      <ol>
+        <li>Start the server with <code>run_c2.bat</code> (repo root), or</li>
+        <li>Run <code>python c2_server.py</code> from the repo root.</li>
+        <li>Wait for the dashboard on its default port <code>8443</code>.</li>
+        <li>Click <strong>Retry</strong> below (or just wait — the client re-checks automatically).</li>
+      </ol>
+    </div>
+
+    <button id="retry" type="button">Retry</button>
+    <div id="status"></div>
+    <div class="auto">Auto-retry every 15 seconds while offline.</div>
+
+    <footer>&copy; <span>Authenticated, Inc.</span></footer>
+  </main>
+
+  <script>
+    (function () {
+      var btn = document.getElementById('retry');
+      var status = document.getElementById('status');
+
+      btn.addEventListener('click', function () {
+        btn.disabled = true;
+        status.className = '';
+        status.textContent = 'Checking for the C2 server…';
+
+        var done = function (up) {
+          btn.disabled = false;
+          if (up) {
+            status.className = 'ok';
+            status.textContent = 'Server found — loading dashboard…';
+          } else {
+            status.className = 'err';
+            status.textContent = 'Still unreachable. Is the server started?';
+          }
+        };
+
+        try {
+          var p = window.spytv && window.spytv.retry ? window.spytv.retry() : null;
+          if (p && typeof p.then === 'function') {
+            p.then(done).catch(function () { done(false); });
+          } else {
+            done(false);
+          }
+        } catch (e) {
+          done(false);
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

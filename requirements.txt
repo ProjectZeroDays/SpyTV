@@ -2,3 +2,5 @@
 colorama>=0.4.6
 pyyaml>=6.0
 requests>=2.31.0
+# PDF generation for audit/patch reports + authorization instrument (T-03)
+reportlab>=5.0.0

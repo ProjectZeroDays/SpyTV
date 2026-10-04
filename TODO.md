@@ -6,7 +6,7 @@
 
 ## T-01: AI-generated whitepapers for every exploited CVE + in-dashboard viewer panel
 
-**Status:** Not started
+**Status:** ✅ Complete — 2026-10-04 (ships with v1.0.2)
 **Requested:** 2026-10-04
 **Area:** `c2_cve_feed.py`, `c2_server.py`, `c2_dashboard.html`
 
@@ -49,19 +49,31 @@
 
 ### Acceptance checklist
 
-- [ ] New CVE with an exploit generated also has a whitepaper file
-- [ ] "View Whitepaper" button renders it in the right panel
-- [ ] "View Vulnerability Info" button renders vuln details in the right panel
-- [ ] Right panel is equal width to the left card
-- [ ] Each button press replaces the previous panel content
-- [ ] Panel resets on C2/dashboard start
-- [ ] Tests pass; docs + tooltips updated
+- [x] New CVE with an exploit generated also has a whitepaper file
+- [x] "View Whitepaper" button renders it in the right panel
+- [x] "View Vulnerability Info" button renders vuln details in the right panel
+- [x] Right panel is equal width to the left card
+- [x] Each button press replaces the previous panel content
+- [x] Panel resets on C2/dashboard start
+- [x] Tests pass; docs + tooltips updated
+
+**Shipped (2026-10-04):** whitepapers land in `docs/whitepapers/CVE-*.md`
+(AI draft via `build_artifact_set()` when a provider key is configured,
+deterministic template fallback otherwise — the file always exists) with
+`whitepaper_generated` on every feed entry. New `GET /api/cve/whitepaper_doc/<id>`
+serves the markdown (file → template fallback) to the new **Output** panel —
+a right-column card equal width to the main card (`minmax(0,1fr) × 2`,
+stacking under 1280px) that is fully replaced on every press (`setOutput()`)
+and reset by `resetOutput()` in `init()`. `render_cve_whitepaper()` now
+embeds the generated document when present. Both viewer buttons render on
+every feed entry; help tooltips + `docs/C2_DASHBOARD.md` updated.
+Covered by `tests/test_cve_artifacts.py` (21 tests; suite 61 → 82 green).
 
 ---
 
 ## T-02: AI-generated tests + all relevant artifacts for every new exploit
 
-**Status:** Not started
+**Status:** ✅ Complete — 2026-10-04 (ships with v1.0.2)
 **Requested:** 2026-10-04
 **Area:** `c2_cve_feed.py`, `tests/`, `c2_server.py`
 
@@ -118,48 +130,90 @@
 
 ### Acceptance checklist
 
-- [ ] New exploit CVE also has `tests/generated/test_CVE-*.py`
-- [ ] Generated tests pass under `pytest` (or entry flagged as failed)
-- [ ] Tests are offline/mocked — no live device calls
-- [ ] Whitepaper, detection signature, patch check, feed enrichment,
+- [x] New exploit CVE also has `tests/generated/test_CVE-*.py`
+- [x] Generated tests pass under `pytest` (or entry flagged as failed)
+- [x] Tests are offline/mocked — no live device calls
+- [x] Whitepaper, detection signature, patch check, feed enrichment,
       docs blurb each generated where applicable and flagged per-entry
-- [ ] All artifact statuses logged to root `CVE_UPDATES.log`
-- [ ] Partial failures don't abort the CVE update run
-- [ ] `docs/C2_DASHBOARD.md` + tooltips document the artifact set
+- [x] All artifact statuses logged to root `CVE_UPDATES.log`
+- [x] Partial failures don't abort the CVE update run
+- [x] `docs/C2_DASHBOARD.md` + tooltips document the artifact set
+
+**Shipped (2026-10-04):** `build_artifact_set()` runs per new CVE inside
+`update_cve_database()` — whitepaper (`docs/whitepapers/`), pytest test
+(`tests/generated/test_CVE-*.py`, **validated with a real pytest run**;
+AI draft falls back to the offline-safe template when it fails; if the
+test still can't pass the exploit is renamed `.quarantined`,
+`exploit_generated` cleared and the failure logged), detection-signature
+proposal (`data/signatures/`, assessor-validated — never auto-merged),
+patch check (`data/patch_checks/`), NVD enrichment (CWE / affected CPEs /
+fixed-in / attack vector + exploitability note) and a docs blurb per CVE.
+Flags `whitepaper_generated` / `tests_generated` / `signature_generated` /
+`patch_check_generated` on every feed entry; one JSONL `artifacts` event
+per CVE in root `CVE_UPDATES.log` (+ `quarantined` in `update_summary`);
+per-artifact and per-CVE isolation keeps partial failures from aborting
+the run. `GET /api/cve/artifacts/<id>` exposes the inventory; the Output
+panel's "View Vulnerability Info" renders it. `tests/generated/.gitignore`
+mirrors the `data/exploits/generated/` tracking exception.
+Covered by `tests/test_cve_artifacts.py` (suite 61 → 82 green).
 
 ---
 
 ## T-03: One-click "Audit" — full network audit → connection teardown → PDF Red Team report
 
-**Status:** Not started
+**Status:** ✅ Complete (2026-10-04) — shipped with v1.0.2, incl. authorization
+e-sign gate and the companion **Patch-all** engagement
 **Requested:** 2026-10-04
-**Area:** `c2_server.py`, `c2_dashboard.html`, new `c2_audit.py` (report builder)
+**Area:** `c2_server.py`, `c2_dashboard.html`, new `c2_audit.py` (PDF
+builders), new `c2_ops.py` (shared ops), `tests/test_audit_flow.py`
 
 ### Overview
 
-A single **"Audit"** button that runs the complete engagement end-to-end:
-scan → verify exploits (no send) → execute exploits → kill all connections
-→ collect results → ask for client details → render a professional PDF
-Red Team audit report branded **Authenticated, Inc.**
+A single **"Audit"** button that runs the complete engagement end-to-end.
+As amended on delivery, the flow is gated by a signed authorization:
 
-### Workflow (phases, with live progress in the dashboard)
+1. **Client details first** — modal form: **company, name (authorized rep),
+   address, phone, email, website** (validated before anything runs).
+2. **Authorization instrument** — an industry-standard *Authorization to
+   Perform a Security Assessment and Rules of Engagement* PDF (numbered
+   clauses 1–10: parties, authorization statement, scope, out of scope,
+   rules of engagement, confidentiality, disclaimer/liability, ESIGN/UETA
+   electronic-signature clause, term, execution) is generated and saved
+   locally under `c2_data/audits/<auth_id>/authorization.pdf`, pre-signed
+   by Authenticated, Inc. ("/s/ Ian, Assessment Lead") and shown in an
+   iframe for the client to countersign on a signature pad.
+3. **E-sign** — the client's drawn signature (PNG dataURL, validated) +
+   client company name execute the instrument: signed PDF archived as
+   `authorization-signed.pdf` with a SHA-256 record hash and audit trail
+   (doc ID, UTC timestamps, signer IP) in `authorization.json` sidecar.
+   **Only then does the audit start** — no signature, no test.
+4. **Phases** — scan → check (dry-run, no payloads) → send exploits →
+   kill all connections (verified) → report auto-renders (client info
+   already known; **no second prompt**).
+5. **Report** — industry-standard PDF (cover, contents, exec summary,
+   scope & methodology, inventory, findings, risk, remediation,
+   recommendations, appendix, sign-off) branded **Authenticated, Inc.**
 
-1. **Scan** — scan the network for vulnerable TVs (reuse `/api/scan`
-   family/CVE matching); record every finding per device.
-2. **Check (no send)** — for each discovered vuln TV, validate/check all
+The companion **Patch All** button patches every discovered/registered
+device first, *then* collects the same client details and renders a
+remediation report PDF proving what was patched — or which devices
+could not be patched and why.
+
+### Workflow (audit phases, with live progress in the dashboard)
+
+After the authorization gate above, `AuditEngagement` runs:
+
+1. **Scan** — scan the network for vulnerable TVs (shared
+   `c2_ops.perform_scan` family/CVE matching); record every finding.
+2. **Check (no send)** — for each discovered vuln TV, validate all
    applicable exploits **without sending them** (dry-run: signature match,
-   target reachable, exploit module loads, preconditions OK). Record
-   check results (would-succeed / would-fail + reason).
-3. **Send** — execute the exploits that passed the check against each
-   vuln TV; capture per-attempt result (success/fail, evidence).
-4. **Kill all connections** — after all exploits for all vuln TVs have
-   been checked and run, terminate every session/socket opened during the
-   audit (reverse shells, streams, listeners, scanner sockets) and verify
-   nothing is left connected.
-5. **Client details prompt** — modal form: **name, address, phone,
-   email, website** (required fields validated before report render).
-6. **PDF report** — generate and display the audit report as PDF in the
-   dashboard (downloadable), containing:
+   target reachable, exploit module loads, preconditions OK).
+3. **Send** — execute the exploits that passed the check; capture
+   per-attempt result (success/fail, evidence).
+4. **Kill all connections** — terminate every session/socket opened during
+   the audit and verify nothing is left connected.
+5. **PDF report** — generated automatically at the end of phase 4 (client
+   details were captured up-front), downloadable from the status banner:
    - Cover page: **Authenticated, Inc.** as delivering company, client
      info block, engagement type ("Red Team / Vulnerability Audit"),
      date, report reference/ID.
@@ -173,29 +227,45 @@ Red Team audit report branded **Authenticated, Inc.**
 
 ### Technical notes
 
-- New module `c2_audit.py`: `run_audit()` state machine with phases
-  (`scanning → checking → exploiting → tearing_down → awaiting_client →
-  rendering → done`), persisted so refresh/resume doesn't restart it.
-- Endpoints: `POST /api/audit/start`, `GET /api/audit/status` (phase +
-  progress for the UI), `POST /api/audit/report` (client info → PDF),
-  `GET /api/audit/report.pdf`.
-- PDF via `reportlab` (add to requirements; fallback `fpdf2`) — pure
-  server-side generation, no browser print-to-PDF.
-- Audit is a background thread like the CVE update; button disabled +
-  phase shown while running; Confirm-before-start (it sends exploits).
-- Results also saved under `c2_data/audits/<timestamp>/` (JSON + PDF)
-  for the repo record.
+- New modules: `c2_audit.py` (`AuditEngagement` / `PatchEngagement` state
+  machines + reportlab PDF builders) and `c2_ops.py` (stateless shared
+  scan/check/patch/exploit/teardown ops injected by the server — no
+  circular imports). Server-side engagement state guarded by
+  `engagements_lock`; status survives page reloads (server owns it).
+- Endpoints: `POST /api/audit/authorize` (client → unsigned auth PDF),
+  `POST /api/audit/sign` (e-sign → starts audit), `GET /api/audit/status`,
+  `GET /api/audit/report.pdf`, `GET /api/audit/authorization.pdf
+  ?auth_id=…[&state=unsigned|signed]`; `POST /api/patch/start`,
+  `POST /api/patch/report`, `GET /api/patch/status`,
+  `GET /api/patch/report.pdf`; plus `POST /api/check` (read-only
+  verification), `GET /api/host_info`, `POST /api/connections/kill`.
+- PDF via `reportlab>=5.0.0` (in `requirements.txt`) — pure server-side
+  generation, no browser print-to-PDF.
+- Audit runs in a background thread; the shared status banner shows
+  phase + progress + last message and polls every 2s.
+- Archives under `c2_data/audits/<id>/` (report.pdf, engagement.json,
+  authorization.pdf, authorization-signed.pdf, authorization.json).
+- Signature: base64 PNG dataURL validated (magic bytes, size cap) before
+  embedding; record hash = SHA-256 over client+signature+timestamp.
 - Audit type field ("Red Team Vulnerability Audit") included so future
   variants (compliance, black-box) can reuse the same template.
 
 ### Acceptance checklist
 
-- [ ] "Audit" button runs all 6 phases in order with visible progress
-- [ ] Check phase verifies exploits without transmitting payloads
-- [ ] All connections/sessions killed and verified before report phase
-- [ ] Client form (name, address, phone, email, website) validated
-- [ ] PDF renders in-dashboard with Authenticated, Inc. branding,
-      client block, audit type, findings, risk ratings, recommendations
-- [ ] Report structure matches industry pentest-report conventions
-- [ ] Audit JSON + PDF archived under `c2_data/audits/`
-- [ ] Docs/tooltips (`docs/C2_DASHBOARD.md`, help icons) updated
+- [x] "Audit" button runs all phases in order with visible progress
+- [x] Authorization gate: client details → industry-standard form (10
+      numbered clauses, ESIGN/UETA, provider pre-signed) → e-signature
+      pad → audit starts only when executed
+- [x] Signed instrument saved locally with SHA-256 record hash + audit
+      trail (doc ID, UTC timestamps, signer IP)
+- [x] Check phase verifies exploits without transmitting payloads
+- [x] All connections/sessions killed and verified before report phase
+- [x] Client form (company, name, address, phone, email, website)
+      validated; no second prompt — report renders automatically
+- [x] PDF renders with Authenticated, Inc. branding, client block, audit
+      type, findings, risk ratings, recommendations
+- [x] Report structure matches industry pentest-report conventions
+- [x] Audit JSON + PDF archived under `c2_data/audits/`
+- [x] Companion **Patch All**: patch every device first → client details →
+      remediation proof report (patched / not-patched + why)
+- [x] Docs/tooltips (`docs/C2_DASHBOARD.md`, help icons) updated

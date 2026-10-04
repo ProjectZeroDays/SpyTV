@@ -14,13 +14,20 @@ import socket
 import struct
 import subprocess
 import platform
+import uuid
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 from core.cve_scanner import CVEScanner, TV_CVE_DATABASE
 from c2_cve_feed import (
     update_cve_database, get_feed, get_all_cves, load_ai_keys, save_ai_keys,
     generate_exploit_for_cve, ai_key_status, render_cve_whitepaper, AI_PROVIDERS,
+    artifact_status, get_whitepaper_markdown,
 )
+import c2_audit
+from c2_audit import (AuditEngagement, PatchEngagement, validate_client,
+                      build_authorization_pdf, authorization_record_hash)
+from c2_ops import (utc_now_iso, scan_network, perform_scan, check_target,
+                    execute_patches, kill_all_connections, run_exploit)
 
 # Device family -> CVE database key
 FAMILY_TO_TV_TYPE = {
@@ -77,10 +84,97 @@ cve_scanner = CVEScanner()
 # CVE feed update state (updated in background at startup)
 cve_feed_status = {"updating": False, "last_result": None, "new": 0}
 
+# Engagement state — Audit button (T-03) and Patch-all button. Guarded by
+# engagements_lock; started/stopped from the dashboard.
+engagements_lock = threading.Lock()
+audit_engagement = None    # c2_audit.AuditEngagement | None
+patch_engagement = None    # c2_audit.PatchEngagement | None
+authorizations = {}        # auth_id -> authorization record (also on disk)
 
-def utc_now_iso():
-    """Timezone-aware UTC timestamp in the legacy '...Z' string format."""
-    return datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "")
+# Server uptime facts (for the dashboard's Server tab — real values only)
+SERVER_STARTED_AT = utc_now_iso()
+SERVER_STARTED_MONO = time.time()
+
+_SIGNATURE_MAX_BYTES = 400 * 1024
+
+
+def _auth_dir(auth_id):
+    """Safe archive directory for an authorization id (rejects traversal)."""
+    auth_id = str(auth_id or "")
+    if not auth_id or not all(c.isalnum() or c in "-_" for c in auth_id):
+        return None
+    return os.path.join(c2_audit.ARCHIVE_ROOT, auth_id)
+
+
+def _decode_signature(value):
+    """Decode + validate a drawn e-signature (base64 PNG dataURL).
+
+    Returns ``(png_bytes, errors)``. Only well-formed PNGs under the size
+    cap are accepted — the bytes are embedded in a legally binding
+    authorization document, so nothing else gets through.
+    """
+    raw = str(value or "").strip()
+    if not raw:
+        return None, ["A drawn signature is required."]
+    if raw.startswith("data:"):
+        header, sep, b64 = raw.partition(",")
+        if not sep or "base64" not in header:
+            return None, ["Signature must be a base64 PNG data URL."]
+        raw = b64.strip()
+    try:
+        png = base64.b64decode(raw, validate=True)
+    except Exception:  # noqa: BLE001 — binascii.Error and friends
+        return None, ["Signature is not valid base64."]
+    if not png.startswith(b"\x89PNG\r\n\x1a\n"):
+        return None, ["Signature must be a PNG image."]
+    if len(png) > _SIGNATURE_MAX_BYTES:
+        return None, [f"Signature image exceeds {_SIGNATURE_MAX_BYTES // 1024} KB."]
+    if len(png) < 64:
+        return None, ["Signature image is incomplete — please sign again."]
+    return png, []
+
+
+def load_authorization(auth_id):
+    """Authorization record from memory, falling back to disk (restart-safe)."""
+    with engagements_lock:
+        rec = authorizations.get(auth_id)
+    if rec:
+        return rec
+    out_dir = _auth_dir(auth_id)
+    if not out_dir:
+        return None
+    path = os.path.join(out_dir, "authorization.json")
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                rec = json.load(f)
+        except (IOError, json.JSONDecodeError):
+            return None
+        with engagements_lock:
+            authorizations[auth_id] = rec
+        return rec
+    return None
+
+
+def save_authorization(auth_id, rec):
+    """Persist the authorization record (JSON sidecar) and cache it."""
+    out_dir = _auth_dir(auth_id)
+    if not out_dir:
+        return
+    os.makedirs(out_dir, exist_ok=True)
+    with open(os.path.join(out_dir, "authorization.json"), "w",
+              encoding="utf-8") as f:
+        json.dump(rec, f, indent=2, default=str)
+    with engagements_lock:
+        authorizations[auth_id] = rec
+
+
+def _idle_engagement(kind):
+    """Status payload when no engagement of this kind has been started."""
+    return {"kind": kind, "phase": "idle", "progress": 0, "log": [],
+            "phases": [], "results": {}, "client": None,
+            "report_ready": False, "report_url": None,
+            "started_at": None, "finished_at": None, "error": None}
 
 
 def get_local_ip():
@@ -154,59 +248,6 @@ def save_scans():
 
 def get_device_id(ip):
     return hashlib.sha1(ip.encode()).hexdigest()[:12]
-
-
-def scan_network(cidr=None):
-    """Scan local network for vulnerable TVs using port scanning."""
-    if cidr is None:
-        local_ip = get_local_ip()
-        cidr = f"{local_ip.rsplit('.', 1)[0]}.0/24"
-
-    results = []
-    base_ip = cidr.split('/')[0].rsplit('.', 1)[0]
-
-    # Common TV ports to scan
-    tv_ports = [5555, 22, 80, 554, 8080, 1900, 7676, 3000, 8060, 36669, 8009, 49152]
-
-    for i in range(1, 255):
-        ip = f"{base_ip}.{i}"
-        open_ports = []
-        for port in tv_ports:
-            try:
-                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                s.settimeout(0.3)
-                result = s.connect_ex((ip, port))
-                s.close()
-                if result == 0:
-                    open_ports.append(port)
-            except Exception:
-                pass
-
-        if open_ports:
-            # Try to identify device type
-            device_type = "Unknown"
-            if 5555 in open_ports:
-                device_type = "Android TV/Fire TV"
-            elif 7676 in open_ports:
-                device_type = "Samsung Tizen"
-            elif 3000 in open_ports:
-                device_type = "LG webOS"
-            elif 8060 in open_ports:
-                device_type = "Roku"
-            elif 36669 in open_ports:
-                device_type = "Vizio"
-            elif 8009 in open_ports:
-                device_type = "Chromecast"
-
-            results.append({
-                "ip": ip,
-                "open_ports": open_ports,
-                "device_type": device_type,
-                "vulnerable": len(open_ports) > 0,
-                "scanned_at": utc_now_iso()
-            })
-
-    return results
 
 
 def record_scan_results(results):
@@ -331,10 +372,26 @@ class C2Handler(BaseHTTPRequestHandler):
             self.serve_cves()
         elif path == "/api/cve/feed":
             self.serve_cve_feed()
+        elif path.startswith("/api/cve/whitepaper_doc/"):
+            self.serve_cve_whitepaper_doc(path)
+        elif path.startswith("/api/cve/artifacts/"):
+            self.serve_cve_artifacts(path)
         elif path.startswith("/api/cve/whitepaper/"):
             self.serve_cve_whitepaper(path)
+        elif path == "/api/audit/status":
+            self.serve_audit_status()
+        elif path == "/api/audit/report.pdf":
+            self.serve_engagement_report("audit")
+        elif path == "/api/audit/authorization.pdf":
+            self.serve_authorization_pdf()
+        elif path == "/api/patch/status":
+            self.serve_patch_status()
+        elif path == "/api/patch/report.pdf":
+            self.serve_engagement_report("patch")
         elif path == "/api/local_ip":
             self.send_json(200, {"ip": get_local_ip()})
+        elif path == "/api/host_info":
+            self.serve_host_info()
         elif path == "/api/ai-keys":
             self.serve_ai_keys_status()
         elif path.startswith("/docs/"):
@@ -368,6 +425,18 @@ class C2Handler(BaseHTTPRequestHandler):
             self.serve_cve_generate()
         elif path == "/api/ai-keys":
             self.serve_ai_keys_save()
+        elif path == "/api/check":
+            self.handle_check()
+        elif path == "/api/audit/authorize":
+            self.handle_audit_authorize()
+        elif path == "/api/audit/sign":
+            self.handle_audit_sign()
+        elif path == "/api/patch/start":
+            self.handle_patch_start()
+        elif path == "/api/patch/report":
+            self.handle_patch_report()
+        elif path == "/api/connections/kill":
+            self.handle_kill_connections()
         else:
             self.send_error(404)
 
@@ -477,6 +546,34 @@ class C2Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
+
+    def serve_cve_whitepaper_doc(self, path):
+        """Raw whitepaper markdown for the dashboard output panel (T-01).
+
+        Prefers the generated file in docs/whitepapers/; falls back to the
+        deterministic template so the viewer always has content.
+        """
+        cve_id = path.rsplit("/", 1)[-1]
+        doc = get_whitepaper_markdown(cve_id)
+        if not doc:
+            self.send_json(404, {"error": f"unknown CVE {cve_id}"})
+            return
+        markdown, source = doc
+        self.send_json(200, {
+            "id": cve_id,
+            "markdown": markdown,
+            "source": source,          # "file" (generated) | "template"
+            "generated": source == "file",
+        })
+
+    def serve_cve_artifacts(self, path):
+        """Per-CVE artifact inventory — files + T-02 flags (T-01 viewer)."""
+        cve_id = path.rsplit("/", 1)[-1]
+        status = artifact_status(cve_id)
+        if not status:
+            self.send_json(404, {"error": f"unknown CVE {cve_id}"})
+            return
+        self.send_json(200, status)
 
     def serve_cve_generate(self):
         """Generate an exploit module for a CVE via the configured AI provider."""
@@ -634,8 +731,9 @@ class C2Handler(BaseHTTPRequestHandler):
     def serve_cve_patch(self):
         """Execute the remediation commands for a matched TV (Patch button).
 
-        Runs the device-family patch commands against the target, capturing
-        per-command output so the dashboard can show what was fixed.
+        Runs the device-family patch commands against the target via
+        c2_ops.execute_patches, capturing per-command output so the
+        dashboard can show exactly what ran and what failed.
         """
         try:
             length = int(self.headers.get('Content-Length', 0))
@@ -655,33 +753,7 @@ class C2Handler(BaseHTTPRequestHandler):
                 })
                 return
 
-            import shlex
-            patches = cve_scanner.get_patch_commands(tv_type)
-            patch_results = []
-            for cmd in patches:
-                cmd_formatted = cmd.replace("{ip}", ip)
-                entry = {"command": cmd_formatted, "status": "executed",
-                         "output": "", "returncode": 0}
-                if cmd_formatted.startswith("echo "):
-                    entry["output"] = cmd_formatted[5:].strip("'\"")
-                else:
-                    try:
-                        proc = subprocess.run(
-                            shlex.split(cmd_formatted),
-                            capture_output=True, text=True, timeout=45)
-                        entry["returncode"] = proc.returncode
-                        entry["status"] = "ok" if proc.returncode == 0 else "failed"
-                        entry["output"] = (proc.stdout or proc.stderr or "")[:500]
-                    except FileNotFoundError:
-                        entry["status"] = "skipped"
-                        entry["output"] = "tool not installed on operator host"
-                    except subprocess.TimeoutExpired:
-                        entry["status"] = "timeout"
-                        entry["output"] = "command timed out after 45s"
-                    except Exception as e:  # noqa: BLE001
-                        entry["status"] = "error"
-                        entry["output"] = str(e)
-                patch_results.append(entry)
+            result = execute_patches(ip, tv_type, cve_scanner)
 
             # Remove the device's vulnerable CVEs from its record + mark patched.
             with devices_lock:
@@ -692,15 +764,15 @@ class C2Handler(BaseHTTPRequestHandler):
                         dev["patched_cves"] = TV_CVE_DATABASE[tv_type]["cves"]
             save_devices()  # acquires devices_lock itself — must be outside the block
 
-            ok = sum(1 for p in patch_results if p["status"] in ("ok", "executed"))
+            ok = result["ok"]
             self.send_json(200, {
                 "status": "ok" if ok else "partial",
                 "ip": ip,
                 "tv_type": tv_type,
                 "patched": ok,
-                "total": len(patch_results),
-                "cves_fixed": [c["id"] for c in TV_CVE_DATABASE[tv_type]["cves"]],
-                "patches": patch_results,
+                "total": result["total"],
+                "cves_fixed": result["cves_fixed"],
+                "patches": result["patches"],
             })
         except Exception as e:
             self.send_json(500, {"error": str(e)})
@@ -840,71 +912,10 @@ class C2Handler(BaseHTTPRequestHandler):
             data = json.loads(body)
             cidr = data.get('cidr', None)
 
-            results = scan_network(cidr)
-
-            # Enrich with CVE-database matching: add the vulnerability
-            # signature ports for every known TV family so those TVs are
-            # discovered too, then attach the CVE list per finding.
-            cve_ports = sorted({p for info in TV_CVE_DATABASE.values()
-                                for p in info["ports"]})
-            scanned_ips = {r["ip"] for r in results}
-            extra_ports = [p for p in cve_ports
-                           if p not in (5555, 22, 80, 8080, 8060, 36669)]
-            for r in results:
-                for port in extra_ports:
-                    if port in r["open_ports"]:
-                        continue
-                    try:
-                        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                        s.settimeout(0.3)
-                        if s.connect_ex((r["ip"], port)) == 0:
-                            r["open_ports"].append(port)
-                        s.close()
-                    except Exception:
-                        pass
-
-            # CVE-scan pass over the whole range (picks up families the
-            # generic pass missed, e.g. Samsung 26101 / LG 30000 / Hisense 56789).
-            try:
-                cve_findings = cve_scanner.scan_network(cidr)
-            except Exception:
-                cve_findings = []
-            by_ip = {r["ip"]: r for r in results}
-            for f in cve_findings:
-                if f["ip"] in by_ip:
-                    tgt = by_ip[f["ip"]]
-                    tgt["tv_type"] = f["tv_type"]
-                    tgt["device_type"] = f["name"]
-                    tgt["cves"] = f["cves"]
-                    tgt["mac"] = f.get("mac", "Unknown")
-                    tgt["bluetooth"] = f.get("bluetooth", False)
-                    tgt["ssh"] = f.get("ssh", False)
-                    tgt["patch_available"] = f.get("patch_available", False)
-                    for port in f["open_ports"]:
-                        if port not in tgt["open_ports"]:
-                            tgt["open_ports"].append(port)
-                elif f["ip"] not in scanned_ips:
-                    results.append(f)
-                    by_ip[f["ip"]] = f
-
-            # Attach CVE details to every finding that matched a family.
-            for r in results:
-                if r.get("cves"):
-                    r["vulnerable"] = True
-                    r["cve_ids"] = [c["id"] for c in r["cves"]]
-                    r["severity"] = max(
-                        (c.get("severity") or "LOW" for c in r["cves"]),
-                        key=lambda s: ["LOW", "MEDIUM", "HIGH", "CRITICAL"].index(s)
-                        if s in ("LOW", "MEDIUM", "HIGH", "CRITICAL") else 0)
-                else:
-                    tv_type, info = cve_scanner.detect_tv_type(
-                        r["ip"], r.get("open_ports", []))
-                    if info:
-                        r["tv_type"] = tv_type
-                        r["name"] = info["name"]
-                        r["cves"] = info["cves"]
-                        r["cve_ids"] = [c["id"] for c in info["cves"]]
-                        r["vulnerable"] = True
+            # Shared discovery pipeline (generic ports + CVE signature
+            # ports + family/CVE matching) lives in c2_ops.perform_scan so
+            # the Scan button and the Audit engagement stay in lockstep.
+            results = perform_scan(cidr, cve_scanner)
 
             record_scan_results(results)
 
@@ -927,6 +938,379 @@ class C2Handler(BaseHTTPRequestHandler):
 
             payload = generate_payload(target_ip, family, c2_ip)
             self.send_json(200, {"status": "ok", "payload": payload, "target_ip": target_ip, "family": family, "c2_ip": c2_ip})
+        except Exception as e:
+            self.send_json(500, {"error": str(e)})
+
+    # -- engagement endpoints (Audit / Patch-all buttons) -------------------
+    def _read_json_body(self):
+        length = int(self.headers.get('Content-Length', 0) or 0)
+        body = self.rfile.read(length) if length else b""
+        if not body:
+            return {}
+        return json.loads(body)
+
+    def handle_check(self):
+        """POST /api/check — read-only verification of one target.
+
+        T-03 phase 2: probe ports, match family/CVEs and confirm exploit
+        availability WITHOUT transmitting any payloads.
+        """
+        try:
+            data = self._read_json_body()
+            ip = str(data.get("ip", "")).strip()
+            if not ip:
+                self.send_json(400, {"error": "Missing ip"})
+                return
+            result = check_target(ip, cve_scanner)
+            self.send_json(200, {"status": "ok", "result": result})
+        except json.JSONDecodeError as e:
+            self.send_json(400, {"error": str(e)})
+        except Exception as e:
+            self.send_json(500, {"error": str(e)})
+
+    def handle_audit_authorize(self):
+        """POST /api/audit/authorize — validate the client details and stage
+        the unsigned authorization form (Rules of Engagement) for e-signature.
+        """
+        try:
+            data = self._read_json_body()
+            client, errors = validate_client(data.get("client") or data)
+            if errors:
+                self.send_json(400, {"error": "Invalid client details",
+                                     "errors": errors})
+                return
+
+            auth_id = c2_audit.new_report_id("AUTH")
+            out_dir = _auth_dir(auth_id)
+            os.makedirs(out_dir, exist_ok=True)
+            pdf = build_authorization_pdf(client, auth_id)
+            with open(os.path.join(out_dir, "authorization.pdf"), "wb") as f:
+                f.write(pdf)
+
+            expires = (datetime.datetime.now(datetime.timezone.utc)
+                       + datetime.timedelta(days=c2_audit.AUTH_VALID_DAYS))
+            rec = {
+                "auth_id": auth_id,
+                "client": client,
+                "signed": False,
+                "created_at": utc_now_iso(),
+                "expires_at": expires.isoformat().replace("+00:00", ""),
+                "signer_ip": None,
+                "signed_at": None,
+                "record_hash": authorization_record_hash(auth_id, client,
+                                                         None, None),
+                "report_id": None,
+            }
+            save_authorization(auth_id, rec)
+            self.send_json(200, {
+                "status": "ok",
+                "auth_id": auth_id,
+                "client": client,
+                "pdf_url": f"/api/audit/authorization.pdf?auth_id={auth_id}"
+                           "&state=unsigned",
+                "expires_days": c2_audit.AUTH_VALID_DAYS,
+                "record_hash": rec["record_hash"],
+            })
+        except json.JSONDecodeError as e:
+            self.send_json(400, {"error": str(e)})
+        except Exception as e:
+            self.send_json(500, {"error": str(e)})
+
+    def handle_audit_sign(self):
+        """POST /api/audit/sign — execute the authorization with the client's
+        drawn signature (provider is pre-signed), archive the signed
+        instrument, then start the audit engagement.
+        """
+        global audit_engagement
+        try:
+            data = self._read_json_body()
+            auth_id = str(data.get("auth_id", "")).strip()
+            rec = load_authorization(auth_id)
+            if not rec:
+                self.send_json(404, {"error": "Unknown authorization id"})
+                return
+            if rec.get("signed"):
+                self.send_json(409, {"error": "This authorization has already "
+                                              "been signed."})
+                return
+
+            signature_png, errors = _decode_signature(data.get("signature"))
+            if errors:
+                self.send_json(400, {"error": "Invalid signature",
+                                     "errors": errors})
+                return
+
+            # The signer may confirm/override the client entity they are
+            # signing on behalf of — it feeds the executed instrument.
+            signer_company = str(data.get("signer_company", "") or "").strip()
+            if signer_company:
+                rec["client"]["company"] = signer_company
+
+            client = rec["client"]
+            signed_at = utc_now_iso()
+            signer_ip = self.client_address[0] if self.client_address else None
+            record_hash = authorization_record_hash(auth_id, client,
+                                                    signature_png, signed_at)
+            pdf = build_authorization_pdf(client, auth_id,
+                                          signature_png=signature_png,
+                                          signer_ip=signer_ip,
+                                          signed_at=signed_at,
+                                          record_hash=record_hash)
+            out_dir = _auth_dir(auth_id)
+            with open(os.path.join(out_dir, "authorization-signed.pdf"),
+                      "wb") as f:
+                f.write(pdf)
+            rec.update({"signed": True, "signed_at": signed_at,
+                        "signer_ip": signer_ip, "record_hash": record_hash})
+            save_authorization(auth_id, rec)
+
+            eng = AuditEngagement(
+                cidr=str(data.get("cidr") or "").strip() or None,
+                scan_fn=lambda cidr: perform_scan(cidr, cve_scanner),
+                check_fn=lambda ip: check_target(ip, cve_scanner),
+                exploit_fn=lambda tv_type, ip: run_exploit(tv_type, ip),
+                kill_fn=lambda ips: kill_all_connections(ips),
+                client=client,
+            )
+            with engagements_lock:
+                if audit_engagement is not None and audit_engagement.running:
+                    raced = True
+                else:
+                    audit_engagement = eng
+                    raced = False
+            if raced:
+                self.send_json(409, {"error": "An audit engagement is "
+                                              "already running."})
+                return
+            rec["report_id"] = eng.report_id
+            save_authorization(auth_id, rec)
+            eng.start()
+
+            self.send_json(200, {
+                "status": "started",
+                "auth_id": auth_id,
+                "report_id": eng.report_id,
+                "record_hash": record_hash,
+                "signed_pdf_url": f"/api/audit/authorization.pdf?"
+                                  f"auth_id={auth_id}&state=signed",
+                "status_url": "/api/audit/status",
+            })
+        except json.JSONDecodeError as e:
+            self.send_json(400, {"error": str(e)})
+        except Exception as e:
+            self.send_json(500, {"error": str(e)})
+
+    def handle_patch_start(self):
+        """POST /api/patch/start — begin patching every discovered device.
+        The client details are collected afterwards (report stage)."""
+        global patch_engagement
+        try:
+            with engagements_lock:
+                busy_audit = (audit_engagement is not None
+                              and audit_engagement.running)
+                busy_patch = (patch_engagement is not None
+                              and patch_engagement.running)
+            if busy_audit:
+                self.send_json(409, {"error": "An audit engagement is running "
+                                              "— let it finish first."})
+                return
+            if busy_patch:
+                self.send_json(409, {"error": "A patch engagement is already "
+                                              "running."})
+                return
+
+            def targets_fn():
+                # Fresh discovery so patch-all covers every device on the
+                # LAN, then merge in registered devices the scan missed.
+                try:
+                    findings = perform_scan(None, cve_scanner)
+                except Exception:  # noqa: BLE001
+                    findings = []
+                targets = [{"ip": f["ip"], "tv_type": f.get("tv_type"),
+                            "name": f.get("name") or f.get("device_type"),
+                            "source": "scan"}
+                           for f in findings if f.get("ip")]
+                known = {t["ip"] for t in targets}
+                with devices_lock:
+                    regs = list(devices.values())
+                for d in regs:
+                    if d.get("ip") and d["ip"] not in known:
+                        targets.append({
+                            "ip": d["ip"], "tv_type": d.get("tv_type"),
+                            "name": d.get("name") or d.get("family"),
+                            "source": "registry", "device_id": d.get("id"),
+                        })
+                return targets
+
+            def patch_fn(ip, tv_type):
+                result = execute_patches(ip, tv_type, cve_scanner)
+                fully = bool(result["total"]) and result["ok"] == result["total"]
+                with devices_lock:
+                    for dev in devices.values():
+                        if dev.get("ip") == ip:
+                            dev["patched"] = fully
+                            dev["patched_at"] = utc_now_iso()
+                            dev["patched_cves"] = result["cves_fixed"]
+                save_devices()  # acquires devices_lock itself — outside the block
+                return result
+
+            eng = PatchEngagement(targets_fn=targets_fn, patch_fn=patch_fn)
+            with engagements_lock:
+                if patch_engagement is not None and patch_engagement.running:
+                    raced = True
+                else:
+                    patch_engagement = eng
+                    raced = False
+            if raced:
+                self.send_json(409, {"error": "A patch engagement is already "
+                                              "running."})
+                return
+            eng.start()
+            self.send_json(200, {"status": "started",
+                                 "report_id": eng.report_id,
+                                 "status_url": "/api/patch/status"})
+        except Exception as e:
+            self.send_json(500, {"error": str(e)})
+
+    def handle_patch_report(self):
+        """POST /api/patch/report — client details in, remediation PDF out."""
+        try:
+            data = self._read_json_body()
+            client, errors = validate_client(data.get("client") or data)
+            if errors:
+                self.send_json(400, {"error": "Invalid client details",
+                                     "errors": errors})
+                return
+            with engagements_lock:
+                eng = patch_engagement
+            if eng is None:
+                self.send_json(404, {"error": "No patch engagement has been "
+                                              "started."})
+                return
+            if eng.report_path:
+                self.send_json(409, {"error": "The remediation report has "
+                                              "already been rendered.",
+                                     "report_url": "/api/patch/report.pdf"})
+                return
+            if eng.running and eng.phase != "awaiting_client":
+                self.send_json(409, {"error": "The patch engagement is still "
+                                              "running."})
+                return
+            eng.render(client)
+            self.send_json(200, {
+                "status": "ok",
+                "report_id": eng.report_id,
+                "report_url": "/api/patch/report.pdf",
+                "summary": eng.results.get("summary", {}),
+            })
+        except json.JSONDecodeError as e:
+            self.send_json(400, {"error": str(e)})
+        except Exception as e:
+            self.send_json(500, {"error": str(e)})
+
+    def serve_audit_status(self):
+        with engagements_lock:
+            eng = audit_engagement
+        self.send_json(200, eng.snapshot() if eng
+                       else _idle_engagement("audit"))
+
+    def serve_patch_status(self):
+        with engagements_lock:
+            eng = patch_engagement
+        self.send_json(200, eng.snapshot() if eng
+                       else _idle_engagement("patch"))
+
+    def serve_engagement_report(self, kind):
+        """GET /api/{audit|patch}/report.pdf — the rendered engagement PDF."""
+        with engagements_lock:
+            eng = audit_engagement if kind == "audit" else patch_engagement
+        path = eng.report_path if eng else None
+        if not path or not os.path.exists(path):
+            self.send_json(404, {"error": "Report not ready yet."})
+            return
+        label = "Audit" if kind == "audit" else "Patch"
+        filename = f"{eng.report_id}-{label}-Report.pdf"
+        self.send_file(path, filename, disposition="attachment")
+
+    def serve_authorization_pdf(self):
+        """GET /api/audit/authorization.pdf?auth_id=…[&state=unsigned|signed]
+        — the Rules of Engagement instrument (pre-signature or executed)."""
+        query = parse_qs(urlparse(self.path).query)
+        auth_id = (query.get("auth_id", [""])[0] or "").strip()
+        state = (query.get("state", [""])[0] or "").strip().lower()
+        rec = load_authorization(auth_id) if auth_id else None
+        out_dir = _auth_dir(auth_id) if auth_id else None
+        if not rec or not out_dir:
+            self.send_json(404, {"error": "Unknown authorization id"})
+            return
+        signed_path = os.path.join(out_dir, "authorization-signed.pdf")
+        unsigned_path = os.path.join(out_dir, "authorization.pdf")
+        if state == "signed":
+            path = signed_path if os.path.exists(signed_path) else None
+        elif state == "unsigned":
+            path = unsigned_path if os.path.exists(unsigned_path) else None
+        elif os.path.exists(signed_path):
+            path = signed_path
+        else:
+            path = unsigned_path if os.path.exists(unsigned_path) else None
+        if not path:
+            self.send_json(404, {"error": "Authorization document not found"})
+            return
+        suffix = "-Signed" if path == signed_path else ""
+        self.send_file(path, f"SpyTV-Authorization-{auth_id}{suffix}.pdf",
+                       disposition="inline")
+
+    def send_file(self, path, filename, disposition="inline"):
+        try:
+            with open(path, "rb") as f:
+                data = f.read()
+        except IOError:
+            self.send_json(404, {"error": "File not found"})
+            return
+        ctype = ("application/pdf" if str(path).endswith(".pdf")
+                 else "application/octet-stream")
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Disposition",
+                         f'{disposition}; filename="{filename}"')
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(data)
+
+    def serve_host_info(self):
+        """GET /api/host_info — real host facts for the Server tab
+        (nothing simulated: hostname, OS, Python, MAC, uptime)."""
+        try:
+            hostname = socket.gethostname()
+            try:
+                ipv6 = socket.getaddrinfo(hostname, None, socket.AF_INET6)[0][4][0]
+            except (socket.gaierror, OSError, IndexError):
+                ipv6 = None
+            mac = ":".join(f"{b:02x}" for b in
+                           uuid.UUID(int=uuid.getnode()).bytes[-6:])
+            self.send_json(200, {
+                "hostname": hostname,
+                "local_ip": get_local_ip(),
+                "ipv6": ipv6 or "—",
+                "mac": mac,
+                "os": f"{platform.system()} {platform.release()} {platform.version()}".strip(),
+                "python": platform.python_version(),
+                "platform": platform.platform(),
+                "c2_port": C2_PORT,
+                "started_at": SERVER_STARTED_AT,
+                "uptime_s": max(0, int(time.time() - SERVER_STARTED_MONO)),
+            })
+        except Exception as e:
+            self.send_json(500, {"error": str(e)})
+
+    def handle_kill_connections(self):
+        """POST /api/connections/kill — real teardown: close every tracked
+        socket, terminate exploit child tools and verify the connection
+        table of this process."""
+        try:
+            result = kill_all_connections(None)
+            self.send_json(200, {"status": "ok", "result": result})
         except Exception as e:
             self.send_json(500, {"error": str(e)})
 
