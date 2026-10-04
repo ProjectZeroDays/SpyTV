@@ -1,5 +1,35 @@
 # SpyTV Code Changes Log
 
+## [2026-10-04] — /Push Release Pipeline: error-correct, refactor, tests, debug
+
+### New command
+- **`/Push`** (`.opencode/commands/push.md`) — full release pipeline: error-correct
+  & refactor → test all code → debug → generate release assets → push → merge into
+  `main` (fixing merge blockers) → delete superseded branches → tag + GitHub release
+  with all assets
+
+### Error correction / refactoring
+- **`core/implant.py`** — was a stale markdown-wrapped JS snippet (invalid Python,
+  broke `compileall`, port drift vs. live implant). Refactored into a valid module
+  that exposes the canonical implant source from `tvreaper.js` (single source of
+  truth): `get_implant_js()` / `implant_path()`
+- **`c2_server.py` `/api/scan` deadlock fixed** — `save_scans()` (which acquires the
+  non-reentrant `scans_lock`) was called *while holding the lock*, hanging the scan
+  handler. Extracted into `record_scan_results()` which releases the lock before
+  persisting
+- `file_structure.txt` description updated for `implant.py`
+
+### Tests (39 → 42)
+- `tests/test_c2_server.py` — regression tests: scan persistence never deadlocks on
+  `scans_lock`, history caps at 100 entries, implant module exposes `tvreaper.js`
+- Full verification: `pytest` 42/42, `py_compile` over all tracked `.py`, dashboard
+  `<script>` block + `tvreaper.js` pass `node --check`, all YAML parses
+
+### Release
+- Release APK asset standardized as **`SpyTV.apk`** (builder `create_apk.py`
+  updated) with `SHA256SUMS.txt` checksum manifest attached to releases
+- Repo default branch: **`main`** (superseded `master` deleted after merge)
+
 ## [2026-10-04] — CVE Feed Pipeline, AI Auto-Exploit Generation, Live Patching
 
 ### Vulnerability updater run

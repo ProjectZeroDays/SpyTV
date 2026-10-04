@@ -8,7 +8,7 @@ spytv/
 │   ├── __init__.py
 │   ├── discovery.py         # (Refactored tv_fingerprint.py + Port Scan)
 │   ├── exploit_dispatcher.py # (Refactored tv_install.py - Main Router)
-│   ├── implant.py           # (Refactored tvreaper.js - The JS payload)
+│   ├── implant.py           # Python accessor for the JS payload (tvreaper.js)
 │   ├── receiver.py          # (Refactored C4 receiver - Capture Endpoint)
 │   ├── withdrawal.py        # (Refactored tv_withdraw.py)
 -│   ├── builder.py           # (Refactored build_widget.py)
