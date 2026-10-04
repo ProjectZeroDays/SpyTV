@@ -1,0 +1,24 @@
+title: SSH Brute Force Attempt Against sshd
+id: 9e4b0d17-c3a5-4f21-8d7e-6b5c2a9014fd
+status: experimental
+description: >
+  Detects multiple failed sshd authentications from a single source within a
+  short window — the signature of credential brute-forcing against Linux-based
+  TVs, cameras, and hosts.
+author: SpyTV defensive toolkit
+date: 2026-10-03
+logsource:
+    product: linux
+    service: auth
+detection:
+    keywords:
+        - 'Failed password'
+        - 'Invalid user'
+    condition: keywords | count() by src_ip > 5
+timeframe: 1m
+falsepositives:
+    - Misconfigured automation/scripts retrying with stale credentials
+level: high
+tags:
+    - attack.credential_access
+    - attack.t1110.001

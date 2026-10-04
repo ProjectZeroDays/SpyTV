@@ -1,0 +1,10 @@
+# SpyTV TVREAPER v2.0 — 8-family + DLNA + hospitality + broadcast
+# G-status: fingerprint [VALIDATED]; installers [PATTERN-VALIDATED per
+# family — G3 per family before live use]; tvreaper.js [PATTERN-VALIDATED
+# on Tizen/webOS/Android surfaces]; C4 [DEPLOYABLE]; withdrawal [works]
+# New in v2 per the exploit-corpus review: HiSense-ADB (Giese-class),
+# Philips NetTV/Jointspace, Sony BRAVIA + Fire TV Edition via Android
+# ADB, Vizio SmartCast DIAL, Roku ECP, DLNA AVTransport fallback entry,
+# hotel-mode delivery class, broadcast-injection mode for HbbTV.
+# Skill-29 matrix updated to match; MISSION [MIC-USAGE] flag for
+# fake-off occupancy-folded into TELESCREEN [SONAR-USAGE] family.

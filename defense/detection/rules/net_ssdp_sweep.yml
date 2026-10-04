@@ -1,0 +1,25 @@
+title: SSDP Discovery Sweep
+id: b1f6c884-2d09-4a7b-b3c4-8e5f6a7190ce
+status: experimental
+description: >
+  Detects one source generating high-rate SSDP (UDP/1900) traffic — the
+  discovery-sweep signature used by smart-TV/IoT targeting tooling and by
+  SSDP reflection abuse. Normal devices send periodic low-rate NOTIFY/M-SEARCH.
+author: SpyTV defensive toolkit
+date: 2026-10-03
+logsource:
+    category: network_connection
+    product: windows
+detection:
+    selection:
+        DestinationPort: 1900
+        Protocol: udp
+    condition: selection | count() by src_ip > 50
+timeframe: 1m
+falsepositives:
+    - Large legitimate media-controller deployments on initial discovery
+    - Network management stations performing scheduled asset discovery
+level: medium
+tags:
+    - attack.discovery
+    - attack.t1046

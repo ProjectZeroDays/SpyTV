@@ -1,0 +1,27 @@
+title: Connection to DLNA/UPnP AVTransport Control Port
+id: d4a9e723-1f6b-4c08-9d2e-7b3c5a8f10d6
+status: experimental
+description: >
+  Detects connections to UPnP AVTransport SOAP control ports (49152-49153 and
+  common alternates). These surfaces accept media-control commands and are a
+  known command-injection class on several TV/DLNA stacks; unexpected sources
+  controlling them should be investigated.
+author: SpyTV defensive toolkit
+date: 2026-10-03
+logsource:
+    category: network_connection
+    product: windows
+detection:
+    selection:
+        DestinationPort:
+            - 49152
+            - 49153
+            - 49154
+            - 49155
+    condition: selection
+falsepositives:
+    - Media controllers, streaming servers, and legitimate DLNA renderers on the same segment
+level: low
+tags:
+    - attack.execution
+    - attack.t1210

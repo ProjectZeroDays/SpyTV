@@ -1,0 +1,44 @@
+spytv/
+├── README.md
+├── LICENSE
+├── requirements.txt
+├── setup.py                 # Unified setup script (installs python deps + system tools)
+│
+├── core/                    # Core Logic
+│   ├── __init__.py
+│   ├── discovery.py         # (Refactored tv_fingerprint.py + Port Scan)
+│   ├── exploit_dispatcher.py # (Refactored tv_install.py - Main Router)
+│   ├── implant.py           # (Refactored tvreaper.js - The JS payload)
+│   ├── receiver.py          # (Refactored C4 receiver - Capture Endpoint)
+│   ├── withdrawal.py        # (Refactored tv_withdraw.py)
+-│   ├── builder.py           # (Refactored build_widget.py)
+│   └── config.py            # (Centralized Yaml Config)
+│
+├── families/                # Family-Specific Exploits
+│   ├── tizen/
+│   │   ├── install.py       # Tizen DevMode/Hotel exploit
+│   │   └── payloads/        # .wgt files
+│   ├── webos/
+│   │   ├── install.py       # Ares-install exploit
+│   │   └── payloads/        # .ipk files
+│   ├── android/
+│   │   ├── install.py       # ADB/Net exploit
+│   │   └── payloads/        # .apk files
+│   ├── dlna/
+│   │   └── install.py       # AVTransport injection
+│   └── hbbtv/
+│       └── install.py       # Red-button injection
+│
+├── tools/                   # Utilities
+│   ├── ping_test.py
+│   ├── banner.py
+│   └── utils.py             # Helper functions (b32encode, etc.)
+│
+├── resources/               # Assets
+│   ├── icon.png
+│   ├── tvreaper.js
+│   └── config.yaml          # Default settings
+│
+└── logs/                    # Runtime Logs
+    ├── spytv.log
+    └── receiver.log

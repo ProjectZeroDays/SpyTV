@@ -1,0 +1,29 @@
+[
+  {
+    "name": "Living room TV",
+    "vendor": "samsung",
+    "model": "QN55Q80A",
+    "firmware": "T-HKPA2KUCUH-2001.2",
+    "auto_update": true,
+    "last_checked": "2026-09-15",
+    "notes": ""
+  },
+  {
+    "name": "Bedroom TV",
+    "vendor": "amazon",
+    "model": "43DF610NA21",
+    "firmware": "PS7292/3005",
+    "auto_update": false,
+    "last_checked": "2026-01-02",
+    "notes": "Fire TV Edition; fix auto-update flag"
+  },
+  {
+    "name": "Den cast dongle",
+    "vendor": "google",
+    "model": "Chromecast with Google TV 4K",
+    "firmware": "TT-1162",
+    "auto_update": true,
+    "last_checked": "2026-09-28",
+    "notes": ""
+  }
+]

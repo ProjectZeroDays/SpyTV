@@ -1,0 +1,25 @@
+title: Outbound Connection to ADB Port (5555/5037)
+id: 7c2d5a91-b84e-4f30-9a6b-1d3e8c05f7b2
+status: experimental
+description: >
+  Detects network connections to Android Debug Bridge ports. TCP/5555 is
+  network ADB on Android/Fire TVs; TCP/5037 is an adb server. Connections not
+  from approved development hosts indicate unauthorized debugging access.
+author: SpyTV defensive toolkit
+date: 2026-10-03
+logsource:
+    category: network_connection
+    product: windows
+detection:
+    selection:
+        DestinationPort:
+            - 5555
+            - 5037
+        Initiated: 'true'
+    condition: selection
+falsepositives:
+    - Approved development/debugging workstations (exclude them explicitly)
+level: high
+tags:
+    - attack.command_and_control
+    - attack.t1219

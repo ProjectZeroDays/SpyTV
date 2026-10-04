@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "mimosa-hook-status/v1",
+  "recordedAt": "2026-10-03T20:32:03.773Z",
+  "sessionId": "sess_d7f1ddbc-fbed-45b5-b900-792b667bbeee",
+  "event": "PostToolUse",
+  "toolName": "Edit",
+  "file": "C:\\Users\\Project Zero\\.zcode\\cli\\memories\\projects\\spytv-c4acabd6a7de1972\\memory\\spytv-project-scope.md",
+  "outcome": "clear",
+  "coverage": "complete",
+  "findingCount": 0,
+  "durationMs": 18,
+  "hostState": "hook_complete",
+  "reportHint": ".mimosa/reports/"
+}

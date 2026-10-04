@@ -1,0 +1,25 @@
+title: ADB Network Connect Initiated on Windows
+id: 3f8a1c52-9d47-4b6e-a1f0-5c2d9e7b41aa
+status: experimental
+description: >
+  Detects use of 'adb connect' against a network target on a Windows host.
+  Network ADB (TCP/5555) against Android-based TVs grants a shell without an
+  on-device prompt; this command is the first step of network-ADB takeover.
+author: SpyTV defensive toolkit
+date: 2026-10-03
+logsource:
+    category: process_creation
+    product: windows
+detection:
+    selection_image:
+        Image|endswith: '\adb.exe'
+    selection_cmd:
+        CommandLine|contains: 'connect'
+    condition: selection_image and selection_cmd
+falsepositives:
+    - Legitimate development against developer-owned devices/emulators
+level: high
+tags:
+    - attack.execution
+    - attack.command_and_control
+    - attack.t1059

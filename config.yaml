@@ -1,0 +1,29 @@
+stealth:
+  enabled: true
+  delay_min: 1.5
+  delay_max: 3.5
+  user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
+
+scanner:
+  interface: eth0
+  timeout: 30
+  # CR-03 fix: Removed duplicate 554 entries
+  scan_ports: "80,554,8080,7100,5555,22"
+
+exploits:
+  adb:
+    enabled: true
+    port: 5555
+  ssh:
+    enabled: true
+    port: 22
+    user: "root"
+    password: "admin"
+
+stream:
+  vlc_path: "vlc"
+  output_dir: "./captures"
+  duration_seconds: 600  # 10 minutes
+
+session:
+  log_file: "./sessions.log"

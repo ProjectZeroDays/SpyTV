@@ -1,0 +1,11 @@
+{
+  "trusted_subnet": "192.168.10.0/24",
+  "iot_subnet": "192.168.20.0/24",
+  "iot_gateway_ip": "192.168.20.1",
+  "allow": {
+    "dns_servers": ["192.168.10.1", "1.1.1.1"],
+    "ntp_udp": true,
+    "outbound_tcp": [80, 443]
+  },
+  "block_iot_to_rfc1918": false
+}

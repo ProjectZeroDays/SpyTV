@@ -1,0 +1,59 @@
+{
+  "schemaVersion": "mimosa-finding-history/v1",
+  "runId": "20261003T074713983Z-18740-d551d482b77b",
+  "runStatus": "inconclusive",
+  "errors": [
+    "candidate-select:tests/test_hardening.py: candidate_limit_exceeded: 2 changed reviewable file(s) were not scanned because the limit is 20",
+    "scan:defense/__init__.py: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT",
+    "scan:defense/common.py: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT",
+    "scan:defense/hardening/__init__.py: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT",
+    "scan:defense/hardening/attack_surface.py: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT",
+    "scan:defense/hardening/adb_disable.py: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT",
+    "scan:defense/hardening/upnp_close.py: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT",
+    "scan:defense/hardening/vlan_segmentation.py: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT",
+    "scan:defense/hardening/firmware_audit.py: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT",
+    "scan:defense/detection/__init__.py: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT",
+    "scan:defense/detection/events.py: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT",
+    "scan:defense/detection/ssh_detector.py: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT",
+    "scan:defense/detection/adb_detector.py: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT",
+    "scan:defense/detection/ssdp_detector.py: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT",
+    "scan:defense/detection/adapters.py: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT",
+    "scan:defense/detection/monitor.py: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT",
+    "scan:defense/cve_monitor/__init__.py: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT",
+    "scan:defense/cve_monitor/monitor.py: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT",
+    "scan:tests/test_detectors.py: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT",
+    "scan:tests/test_cve_monitor.py: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT"
+  ],
+  "target": ".",
+  "revision": null,
+  "diffHash": "a5885dfccd5202ddfb01ccbc5c51109c892a7130ba302e371d2c6396cc7bb3f8",
+  "rulesVersion": "unavailable",
+  "recordedAt": "2026-10-03T07:47:13.983Z",
+  "timing": {
+    "startedAt": "2026-10-03T07:47:07.230Z",
+    "completedAt": "2026-10-03T07:47:13.983Z",
+    "durationMs": 6753
+  },
+  "tokens": {
+    "input": 0,
+    "output": 0,
+    "total": 0,
+    "modelCalls": 0,
+    "measurement": "known-zero"
+  },
+  "findings": {
+    "total": 0,
+    "bySeverity": {},
+    "byStatus": {}
+  },
+  "coverage": {
+    "status": "partial",
+    "reasonCounts": {
+      "candidate_limit_exceeded": 1,
+      "scanner_failed": 19,
+      "project_check_failed": 20
+    }
+  },
+  "evidenceBoundary": "static_only",
+  "immutableReport": ".mimosa/reports/task-review-sess_d7f1ddbc-fbed-45b5-b900-792b667bbeee-20261003T074713983Z-18740-d551d482b77b.json"
+}

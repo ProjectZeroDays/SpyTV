@@ -1,0 +1,55 @@
+{
+  "schemaVersion": "mimosa-finding-history/v1",
+  "runId": "20261003T203237173Z-8464-aa7f5fe20b81",
+  "runStatus": "inconclusive",
+  "errors": [
+    "baseline-read:data/exploits/adb_wireless_exploit.py: baseline_snapshot_unreadable: file is missing from task baseline",
+    "baseline-read:data/exploits/ssh_brute.py: baseline_snapshot_unreadable: file is missing from task baseline",
+    "baseline-read:data/exploits/vendor_specific.py: baseline_snapshot_unreadable: file is missing from task baseline",
+    "baseline-read:core/exploit_engine.py: baseline_snapshot_unreadable: file is missing from task baseline",
+    "baseline-read:core/scanner.py: baseline_snapshot_unreadable: file is missing from task baseline",
+    "baseline-read:core/stealth.py: baseline_snapshot_unreadable: file is missing from task baseline",
+    "scan:defense/detection/drill.py: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT",
+    "scan:defense/detection/report.py: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT",
+    "scan:defense/cve_monitor/whitepaper.py: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT",
+    "scan:tests/test_drill_report.py: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT",
+    "scan:data/exploits/adb_wireless_exploit.py: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT",
+    "scan:data/exploits/ssh_brute.py: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT",
+    "scan:data/exploits/vendor_specific.py: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT",
+    "scan:core/exploit_engine.py: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT",
+    "scan:core/scanner.py: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT",
+    "scan:core/stealth.py: scanner_failed: spawnSync C:\\Program Files\\nodejs\\node.exe ETIMEDOUT"
+  ],
+  "target": ".",
+  "revision": null,
+  "diffHash": "0d1e2cbaeb444140ad40604acab3e10544d4cdf64228d12e58a6bf8b577de1a8",
+  "rulesVersion": "unavailable",
+  "recordedAt": "2026-10-03T20:32:37.173Z",
+  "timing": {
+    "startedAt": "2026-10-03T20:32:33.343Z",
+    "completedAt": "2026-10-03T20:32:37.173Z",
+    "durationMs": 3830
+  },
+  "tokens": {
+    "input": 0,
+    "output": 0,
+    "total": 0,
+    "modelCalls": 0,
+    "measurement": "known-zero"
+  },
+  "findings": {
+    "total": 0,
+    "bySeverity": {},
+    "byStatus": {}
+  },
+  "coverage": {
+    "status": "partial",
+    "reasonCounts": {
+      "baseline_snapshot_unreadable": 6,
+      "scanner_failed": 10,
+      "project_check_failed": 16
+    }
+  },
+  "evidenceBoundary": "static_only",
+  "immutableReport": ".mimosa/reports/task-review-sess_d7f1ddbc-fbed-45b5-b900-792b667bbeee-20261003T203237173Z-8464-aa7f5fe20b81.json"
+}
