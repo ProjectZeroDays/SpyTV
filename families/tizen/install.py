@@ -2,14 +2,15 @@
 import subprocess
 import sys
 import os
+import shutil
 from core.utils import logger
 
 def install(target_ip):
     logger.info(f"Attempting Tizen Dev Mode exploit on {target_ip}...")
 
-    # CR-41 fix: os.system returns 0 when tool IS found.
-    # Old code: if not os.system(...) → errors when tool IS present.
-    if os.system("which sdb > /dev/null 2>&1") != 0:
+    if shutil.which("sdb") is None:
+        logger.error("Samsung Device Bridge (sdb) not found.")
+        return False
         logger.error("Samsung Device Bridge (sdb) not found.")
         return False
 

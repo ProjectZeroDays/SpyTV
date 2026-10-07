@@ -4,11 +4,18 @@ import sys
 import os
 from core.utils import logger
 
+def _tool_exists(tool):
+    """Check if a CLI tool is available (shutil.which wrapper)."""
+    return shutil.which(tool) is not None
+
+import shutil
+
 def install(target_ip):
     logger.info(f"Attempting WebOS ares-install exploit on {target_ip}...")
 
-    # CR-41 fix: os.system returns 0 when tool IS found.
-    if os.system("which ares-install > /dev/null 2>&1") != 0:
+    if not _tool_exists("ares-install"):
+        logger.error("LG ares-install CLI not found.")
+        return False
         logger.error("LG ares-install CLI not found.")
         return False
 
