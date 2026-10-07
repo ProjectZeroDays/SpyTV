@@ -61,8 +61,7 @@ jobs:
         run: |
           # PyInstaller is used to create a standalone Windows EXE
           pip install pyinstaller
-          # On Linux, use --target-arch x86_64 and WINE if cross-compiling,
-          # or build the Python server package for the current platform
+          # Build standalone executable for the current platform
           pyinstaller --onefile --name "SpyTV-C2-standalone" \
             --add-data "c2_dashboard.html:." \
             --add-data "c2_data:c2_data" \

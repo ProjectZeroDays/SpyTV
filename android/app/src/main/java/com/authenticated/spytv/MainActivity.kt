@@ -27,11 +27,17 @@ import java.net.URL
 import java.util.*
 
 /**
- * SpyTV Android C2 Console or Standalone Server.
+ * SpyTV Android C2 — Self-Hosted or Connect-Remote.
  * 
  * Two modes:
- * 1. CONSOLE MODE: Connects to an external C2 server (default - same as before)
- * 2. STANDALONE MODE: Runs the C2 server locally on this Android device
+ * 1. SELF-HOSTED MODE (default): This device runs the full C2 server locally.
+ *    The dashboard is served at http://<device-ip>:8443/ by the embedded
+ *    C2Server.kt (java.net.ServerSocket based HTTP server).
+ * 2. CONNECT-REMOTE MODE: This device acts as a console and connects to an
+ *    external C2 server by URL.
+ * 
+ * On every launch, a "Setup C2 Server" dialog prompts the user to choose.
+ * A 3-second countdown precedes the server start in Self-Hosted mode.
  */
 class MainActivity : AppCompatActivity() {
 
@@ -58,7 +64,6 @@ class MainActivity : AppCompatActivity() {
         const val PREFS = "spytv_console"
         const val KEY_URL = "c2_url"
         const val KEY_STANDALONE = "c2_standalone_mode"
-        const val KEY_FIRST_RUN = "first_run_complete"
         const val DEFAULT_URL = "http://localhost:8443/"
         const val BODY_LIMIT = 8192
         
