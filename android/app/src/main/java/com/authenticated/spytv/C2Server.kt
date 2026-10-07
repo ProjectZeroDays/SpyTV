@@ -447,7 +447,9 @@ class C2Server(private val port: Int = 8443) {
     
     private fun loadDashboardHtml(): String {
         return try {
-            val stream = javaClass.classLoader?.getResourceAsStream("c2_dashboard.html")
+            // Load from Android assets folder
+            val context = MainActivity.instance?.applicationContext
+            val stream = context?.assets?.open("c2_dashboard.html")
             if (stream != null) {
                 stream.bufferedReader().use { it.readText() }
             } else {
@@ -463,7 +465,8 @@ class C2Server(private val port: Int = 8443) {
             <!DOCTYPE html>
             <html>
             <head>
-                <title>SpyTV C2 Dashboard</title>
+                <title>SpyTV C2 Platform</title>
+                <meta charset="utf-8">
                 <meta charset="utf-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1">
                 <style>
