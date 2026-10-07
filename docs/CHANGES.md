@@ -1,5 +1,59 @@
 # SpyTV Code Changes Log
 
+## [2026-10-07] — Standalone APK C2 Mode (v1.0.8)
+
+### APK can now run as a full C2 server on Android
+
+The SpyTV APK now operates in two modes, toggleable from the settings menu (⚙ button):
+
+1. **Console Mode** (default): The APK connects to an external C2 server and loads
+   its dashboard in a WebView. Same behavior as before.
+
+2. **Standalone Mode** (new): The APK runs an embedded HTTP C2 server directly on
+   the Android device, serving the full dashboard and all API endpoints at
+   `http://<device-ip>:8443/`. Other devices on the same network can reach the
+   C2 through the phone's IP.
+
+#### Android C2 Server (`C2Server.kt`)
+- Uses `java.net.ServerSocket` for maximum Android compatibility (no `com.sun.net.httpserver` deps)
+- Implements all core API endpoints: `/api/devices`, `/api/clips`, `/api/commands`, `/api/scans`, `/api/cves`, `/api/cve/feed`, `/api/local_ip`, `/api/host_info`, `/api/register`, `/api/exfil`, `/api/command`, `/api/poll`, `/api/scan`, `/api/check`, `/api/cve/update`, `/api/connections/kill`
+- Device registry, command queue, scan history all maintained in-memory on-device
+- Dashboard served from bundled `c2_dashboard.html` asset
+- CVE database includes 3 smart-TV CVEs (Samsung Tizen, LG webOS, Android TV)
+
+#### Mode UI
+- New mode indicator (top-left): shows "CONSOLE MODE" or "STANDALONE MODE"
+- Server toggle switch (top-right): enable/disable standalone mode
+- Server status text: shows port and running state
+- Settings dialog: switch between modes, configure endpoint
+
+#### Android Manifest
+- Added `INTERNET` permission (was already present, now required for standalone mode too)
+- Added `ACCESS_NETWORK_STATE`, `CHANGE_NETWORK_STATE`, `ACCESS_WIFI_STATE`, `CHANGE_WIFI_STATE`
+- Added `BLUETOOTH`, `BLUETOOTH_ADMIN`, `NEAR_BY_DEVICES` (Android 13+) for device discovery
+- Set `screenOrientation="fullSensor"` for tablet flexibility
+
+#### Build System
+- `create_apk.py`: copies dashboard HTML to assets folder before Gradle build, adds `--release` flag
+- Bundled `c2_dashboard.html` as an Android asset (`app/src/main/assets/`)
+- Added `org.json` dependency for JSON handling in Kotlin
+- GitHub Actions workflow builds APK + standalone EXE on every tag/push
+
+#### Electron Wrapper Fix
+- Replaced `req.setTimeout()` with plain `setTimeout` (Electron's `net.ClientRequest` lacks Node's setTimeout)
+- Added `.catch()` to `loadApp()` calls to prevent unhandled promise rejections
+- Added `showGuard` timeout so the window appears even if `ready-to-show` never fires
+
+### Standalone Windows EXE
+
+A new `build_standalone_exe.py` script uses PyInstaller to bundle the Python C2 server
+into a single Windows executable that runs without Python installed.
+
+```bash
+python build_standalone_exe.py
+# Output: dist/SpyTV-C2-standalone.exe
+```
+
 ## [2026-10-04] — A host could be "Vulnerable" with no CVEs, and every row's Exploit button targeted DLNA (v1.0.7)
 
 ### "A device shows as vuln but doesn't list device type or cve"

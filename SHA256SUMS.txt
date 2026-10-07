@@ -1,2 +1,11 @@
+# SpyTV v1.0.8 Release - SHA-256 Checksums
+# Generated: 2026-10-07
+# Each platform can now operate as a full C2 server
+
+# APK (Android) - APK standalone C2 mode + console mode
+# Verify: sha256sum -c SHA256SUMS.txt
 6395ff97891500c8b53067b28a3a4f4574af2dce4f405c13f24c3daba1deca1f  SpyTV.apk
-061eb2d3fbb5307336982f004e320b537f2667b2417afaecacd3fd81ce826e5b  SpyTV-C2-1.0.7-portable.exe
+
+# EXE (Windows) - standalone executable (bundled Python)
+# Built from: python build_standalone_exe.py
+# 061eb2d3fbb5307336982f004e320b537f2667b2417afaecacd3fd81ce826e5b  SpyTV-C2-1.0.7-portable.exe
