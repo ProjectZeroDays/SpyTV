@@ -269,3 +269,36 @@ After the authorization gate above, `AuditEngagement` runs:
 - [x] Companion **Patch All**: patch every device first → client details →
       remediation proof report (patched / not-patched + why)
 - [x] Docs/tooltips (`docs/C2_DASHBOARD.md`, help icons) updated
+
+---
+
+## v1.0.9 — Default to Self-Hosted C2 + Mode Selection Dialog
+
+**Status:** ✅ Complete
+**Area:** APK (`MainActivity.kt`, layout), `c2_server.py`, `run_c2.bat`, all platforms
+
+### Requirements
+
+1. **Default mode is Self-Hosted C2** on all platforms (APK, EXE, Web)
+   - APK defaults to standalone mode (isStandaloneMode = true)
+   - `run_c2.bat` defaults to self-hosted when run
+   - `c2_server.py` runs self-hosted by default (interactive prompt for new users)
+
+2. **Setup C2 Server dialog on app open** — two buttons:
+   - **Self-Hosted**: Run the full C2 server on this device
+   - **Connect-Remote**: Connect to an external C2 server
+
+3. **Mode toggle in settings** (⚙ button) allows switching between modes
+
+### Acceptance checklist
+
+- [x] APK defaults to Self-Hosted mode on first run
+- [x] APK shows "Setup C2 Server" dialog with two buttons: "Self-Hosted" / "Connect-Remote"
+- [x] Mode toggle (top-right Switch) switches between Self-Hosted and Connect-Remote
+- [x] Self-Hosted mode runs C2Server.kt on port 8443 with all API endpoints
+- [x] Connect-Remote mode connects to external C2 URL (with address prompt)
+- [x] EXE/standalone shows mode selection prompt on startup
+- [x] run_c2.bat shows mode selection menu
+- [x] All MD files updated with v1.0.9 release notes
+- [x] SHA256SUMS.txt updated with new APK + EXE hashes
+- [x] urllib3 pinned to >=2.8.0 (fixed moderate vulnerability)

@@ -1429,7 +1429,63 @@ def _harden_console_output():
             pass
 
 
+def _mode_selection():
+    """Interactive prompt — lets operator choose self-hosted or connect-remote.
+
+    Returns 'self-hosted' or 'connect-remote'.
+    If stdin is not a TTY (e.g. systemd or CI), defaults to self-hosted.
+    """
+    if not sys.stdin.isatty():
+        return "self-hosted"
+
+    print("\n" + "=" * 50)
+    print("  Setup C2 Server")
+    print("=" * 50)
+    print("  1 = Self-Hosted C2 Server (run C2 locally, serves :8443)")
+    print("  2 = Connect-Remote (connect to an external C2 server)")
+    print("  Q = Quit")
+    print("=" * 50)
+
+    while True:
+        try:
+            choice = input("\nYour choice [1]: ").strip().lower()
+        except EOFError:
+            return "self-hosted"
+
+        if choice in ("", "1"):
+            return "self-hosted"
+        elif choice == "2":
+            remote = input("Enter C2 server URL (e.g. http://192.168.1.10:8443/): ").strip()
+            if not remote:
+                remote = "http://localhost:8443/"
+            if not remote.startswith(("http://", "https://")):
+                remote = "http://" + remote
+            if not remote.endswith("/"):
+                remote += "/"
+            print(f"\nConnect-Remote mode: dashboard at {remote}")
+            print("The C2 server must be running at that address on the remote host.\n")
+            try:
+                import webbrowser
+                webbrowser.open(remote)
+            except Exception:
+                pass
+            print("Browser opened. Press Ctrl+C to exit.")
+            try:
+                _ = input("Press Enter to exit...")
+            except (KeyboardInterrupt, EOFError):
+                pass
+            return "exit"
+        elif choice in ("q", "quit", "exit"):
+            return "exit"
+        else:
+            print("Please enter 1, 2, or Q.")
+
+
 def main():
+    mode = _mode_selection()
+    if mode == "exit":
+        return
+
     _harden_console_output()
     load_devices()
     load_commands()

@@ -23,6 +23,7 @@ CVE Monitor tab. It ships as a desktop app via the Electron wrapper.
 ```
 
 - **C2 Server** (`c2_server.py`): Python HTTP server on port 8443 — all API endpoints
+- **APK C2 Server** (`C2Server.kt`): Embedded Kotlin HTTP server using `java.net.ServerSocket` — serves all API endpoints from Android standalone mode
 - **Shared ops** (`c2_ops.py`): scan, read-only check, exploit (dry-run-first), patch, connection teardown
 - **Engagements** (`c2_audit.py`): audit/patch state machines + reportlab PDFs (authorization instrument, reports)
 - **CVE pipeline** (`c2_cve_feed.py`): NVD fetch, AI exploit + full artifact set per new CVE
@@ -40,6 +41,11 @@ python c2_server.py # direct
 ```
 
 The dashboard is available at `http://localhost:8443/`
+
+The APK also serves the dashboard at `http://<device-ip>:8443/` when in Standalone mode
+(see README § "APK Modes"). The APK's embedded `C2Server.kt` implements a subset of the
+API endpoints sufficient for device registry, command dispatch, and CVE viewing — full
+scan/exploit capability requires the Python server or Windows EXE.
 
 ### Port and the Android console
 

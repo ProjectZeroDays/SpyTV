@@ -1,11 +1,11 @@
-# SpyTV v1.0.8 Release - SHA-256 Checksums
+# SpyTV v1.0.9 Release - SHA-256 Checksums
 # Generated: 2026-10-07
-# Each platform can now operate as a full C2 server
+# Default mode: Self-Hosted C2 Server (standalone on all platforms)
 
-# APK (Android) - Console + Standalone C2 mode
-# SHA256 1a859f6ac9052235c21e655d57528c8776a4dd133bcfcc96764e6f26a78db40f  SpyTV.apk
+# APK (Android) - Self-Hosted C2 mode default, Connect-Remote available
+# SHA256 736d9219df88477fd9425d4fa9b1838b489a7060add4497cf225c5aa25319baa  SpyTV.apk
 
-# EXE (Windows) - Standalone C2 server (bundled Python via PyInstaller)
-# SHA256 e3731a2aa0c0e9d752b86a5a72aa2e0df97fcf2c2f0da020fae3ab6d344ff623  SpyTV-C2-standalone.exe
-1a859f6ac9052235c21e655d57528c8776a4dd133bcfcc96764e6f26a78db40f  SpyTV.apk
-e3731a2aa0c0e9d752b86a5a72aa2e0df97fcf2c2f0da020fae3ab6d344ff623  SpyTV-C2-standalone.exe
+# EXE (Windows) - Self-Hosted C2 server (bundled Python via PyInstaller)
+# SHA256 76f53aa7c4ecb2499b9f9cb049c38ddffffecb2cd480cd6dcbfa79fba2f8365f  SpyTV-C2-standalone.exe
+736d9219df88477fd9425d4fa9b1838b489a7060add4497cf225c5aa25319baa  SpyTV.apk
+76f53aa7c4ecb2499b9f9cb049c38ddffffecb2cd480cd6dcbfa79fba2f8365f  SpyTV-C2-standalone.exe

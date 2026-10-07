@@ -7,7 +7,8 @@ plus the defensive toolkit and defect review produced alongside it.
 1. **C2 dashboard** (`c2_server.py` + `c2_dashboard.html`) — scan networks,
    verify targets read-only, deploy exploit modules with dry-run-first
    behavior, patch devices, and manage engagements from a responsive web UI
-   (also shipped as a desktop `.exe` via `electron/`).
+   (also shipped as a desktop `.exe` via `electron/` and as a standalone APK
+   with embedded C2 server on Android).
 2. **Audit & Patch-all engagements (T-03)** — `c2_audit.py` drives the full
    engagement flow: client details → **industry-standard authorization form
    e-signed by both parties** → scan → verify → exploit → kill connections →
@@ -81,7 +82,7 @@ The standalone EXE bundles the Python C2 server + dashboard into a single
 executable. It runs without Python installed and serves the full web dashboard at
 `http://<machine-ip>:8443/`.
 
-Latest: [v1.0.7](https://github.com/ProjectZeroDays/SpyTV/releases/tag/v1.0.7).
+Latest: [v1.0.8](https://github.com/ProjectZeroDays/SpyTV/releases/tag/v1.0.8).
 
 ## Repository layout
 

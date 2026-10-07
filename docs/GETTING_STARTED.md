@@ -17,14 +17,20 @@
 
 ## Start here: the C2 dashboard (2 minutes)
 
+The C2 runs as a **self-hosted server** by default. When you launch SpyTV (EXE,
+APK, or `python c2_server.py`), you'll see a **Setup C2 Server** dialog with
+two options:
+
+1. **Self-Hosted**: This device runs the full C2 server. Dashboard at
+   `http://127.0.0.1:8443/` (or `http://<device-ip>:8443/` on Android).
+   This is the default mode.
+2. **Connect-Remote**: Connect this device to an existing C2 server on another
+   machine. Enter the C2 URL (e.g. `http://192.168.1.10:8443/`).
+
 ```bash
 cd <repo root>
-run_c2.bat            # prompts for AI keys (or skip), starts the C2
-# …or:  python c2_server.py
-
-# Dashboard:  http://127.0.0.1:8443/
-# Desktop:    electron\dist\SpyTV-C2-1.0.7-portable.exe   (from the release)
-```
+run_c2.bat            # prompts for mode, then AI keys, then starts the C2
+# …or:  python c2_server.py  # defaults to self-hosted (no prompt if non-interactive)
 
 1. **Network Discovery → Scan** your segment, then **Check** (read-only) or
    **Patch** per device.

@@ -1,25 +1,62 @@
 @echo off
 REM ============================================================
 REM  SpyTV C2 Launcher - Authenticated, Inc.
-REM  1) Checks .env for AI provider API keys
-REM  2) If NO keys are present, asks which providers to add (or skip)
-REM  3) Starts the C2 server (auto-updates the CVE feed on boot)
+REM  Mode selection: Self-Hosted C2 Server | Connect-Remote
+REM  1) Prompts for mode selection
+REM  2) Checks .env for AI provider API keys
+REM  3) Launches the appropriate mode
 REM ============================================================
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
 
+:MENU
 echo ==========================================
 echo  SpyTV C2 Launcher
 echo  Authenticated, Inc.
 echo ==========================================
 echo.
+echo  Select C2 mode:
+echo    1 = Self-Hosted C2 Server (run C2 locally, serves dashboard at :8443)
+echo    2 = Connect-Remote (connect to an external C2 server)
+echo    Q = Quit
+echo.
+set /p "CHOICE=Your choice: "
 
+if /i "!CHOICE!"=="1" goto :self_hosted
+if /i "!CHOICE!"=="2" goto :connect_remote
+if /i "!CHOICE!"=="Q" goto :eof
+if /i "!CHOICE!"=="q" goto :eof
+echo Invalid choice.
+goto :MENU
+
+:self_hosted
+echo.
+echo Starting Self-Hosted C2 Server...
+goto :check_keys
+
+:connect_remote
+echo.
+set /p "REMOTE_URL=Enter C2 server URL (e.g. http://192.168.1.10:8443/): "
+if "!REMOTE_URL!"=="" set "REMOTE_URL=http://localhost:8443/"
+echo.
+echo Opening Connect-Remote dashboard at !REMOTE_URL!
+echo.
+echo The C2 server must be running at that address.
+echo.
+REM Launch default browser to the remote C2
+start "" "!REMOTE_URL!"
+echo.
+echo SpyTV C2 Console mode. Press any key to exit.
+pause
+goto :eof
+
+:check_keys
 REM ---------- Step 1: check .env for keys ----------
 set "HAVE_KEYS=0"
 if exist ".env" (
     findstr /b /c:"OPENROUTER_API_KEY=" ".env" >nul 2>&1 && findstr /v /r /c:"OPENROUTER_API_KEY=$" /c:"OPENROUTER_API_KEY= *$" ".env" >nul 2>&1 && set "HAVE_KEYS=1"
-    findstr /b /c:"VENICE_API_KEY=" ".env" >nul 2>&1 && findstr /v /r /c:"VENICE_API_KEY=$" ".env" >nul 2>&1 && set "HAVE_KEYS=1"
-    findstr /b /c:"ABLITERATION_API_KEY=" ".env" >nul 2>&1 && findstr /v /r /c:"ABLITERATION_API_KEY=$" ".env" >nul 2>&1 && set "HAVE_KEYS=1"
+    findstr /b /c:"VENICE_API_KEY=" ".env" >nul 2>&1 && findstr /v /r /c:"VENICE_API_KEY=$" /c:"VENICE_API_KEY= *$" ".env" >nul 2>&1 && set "HAVE_KEYS=1"
+    findstr /b /c:"ABLITERATION_API_KEY=" ".env" >nul 2>&1 && findstr /v /r /c:"ABLITERATION_API_KEY=$" /c:"ABLITERATION_API_KEY= *$" ".env" >nul 2>&1 && set "HAVE_KEYS=1"
 )
 
 REM More reliable check: count non-empty key assignments
@@ -85,7 +122,7 @@ if not exist "c2_data" mkdir c2_data
 if not exist "data\exploits\generated" mkdir data\exploits\generated
 
 echo ==========================================
-echo  Starting C2 Server
+echo  Starting C2 Server (Self-Hosted)
 echo  Dashboard: http://localhost:8443/
 echo.
 echo  CVE feed auto-updates on start and logs

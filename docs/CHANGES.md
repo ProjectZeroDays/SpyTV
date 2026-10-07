@@ -1,5 +1,46 @@
 # SpyTV Code Changes Log
 
+## [2026-10-07] — Default to Self-Hosted C2 + Mode Selection (v1.0.9)
+
+### Self-Hosted C2 is now the default on all platforms
+
+All platforms now default to **Self-Hosted C2** mode, with a clear mode
+selection dialog when the app opens:
+
+1. **Self-Hosted**: This device runs the full C2 server. The dashboard is
+   served locally at `http://<device-ip>:8443/`. This is the default.
+2. **Connect-Remote**: Connect this device to an existing C2 server on another
+   machine by entering its URL.
+
+### APK (Android)
+
+- `MainActivity.kt` now defaults to `isStandaloneMode = true`
+- New first-run dialog: **Setup C2 Server** with two buttons (Self-Hosted / Connect-Remote)
+- Mode indicator shows "SELF-HOSTED MODE" or "CONNECT-REMOTE MODE"
+- Settings button (⚙) opens the mode selection dialog for switching
+- Server toggle switch at top-right toggles between modes
+
+### EXE (Windows)
+
+- `run_c2.bat`: Mode selection menu at startup (Self-Hosted C2 Server / Connect-Remote)
+- `c2_server.py`: Added `_mode_selection()` — interactive prompt with the same two options
+  (defaults to self-hosted if stdin is not a TTY, e.g. CI/systemd)
+
+### Web (Browser)
+
+- `python c2_server.py` now shows the mode selection prompt on startup
+
+### Security
+
+- Fixed moderate vulnerability: `urllib3` pinned to >=2.8.0 (was 2.7.0)
+- Fixed: `requests` pinned to >=2.32.0 (was >=2.31.0)
+- Added `.github/dependabot.yml` for automated dependency updates
+
+### Build
+
+- All MD files updated with v1.0.9 release notes
+- `SHA256SUMS.txt` updated with new APK + EXE checksums
+
 ## [2026-10-07] — Standalone APK C2 Mode (v1.0.8)
 
 ### APK can now run as a full C2 server on Android

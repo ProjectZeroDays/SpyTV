@@ -118,7 +118,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="12dp"
-            android:text="Standalone"
+            android:text="Self-Hosted"
             android:textColor="#F3F4F6"
             android:textSize="12sp" />
     </LinearLayout>

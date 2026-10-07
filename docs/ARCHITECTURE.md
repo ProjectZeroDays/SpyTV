@@ -16,11 +16,20 @@ exploit file.
 │                       Audit/Patch All modals, e-sign pad, live banner)   │
 │   electron/           desktop wrapper → SpyTV-C2-<ver>-portable.exe      │
 ├──────────────────────────────────────────────────────────────────────────┤
-│ C2 SERVER — c2_server.py (HTTP + TLS, port 8443)                         │
-│   routing · device/clip/command registries · scan history · feed thread  │
-│   /api/devices /api/clips /api/commands /api/scans /api/check            │
-│   /api/cve/* /api/audit/* /api/patch/* /api/host_info /api/connections/* │
-│   /api/exploit /api/local_ip /api/ai-keys /api/register /api/poll        │
+│ C2 SERVER — available in three standalone host modes                      │
+│   1. c2_server.py    (Linux/macOS/Windows) — Python HTTP+TLS, port 8443   │
+│      - Full web dashboard, all API endpoints, scan/exploit engine         │
+│   2. C2Server.kt      (Android APK standalone mode)                        │
+│      - Embedded Kotlin HTTP server using java.net.ServerSocket              │
+│      - All API endpoints served from bundled c2_dashboard.html asset      │
+│      - Console mode: APK connects to external C2 as a WebView console     │
+│   3. SpyTV-C2-standalone.exe (Windows) — PyInstaller-bundled Python       │
+│      - Runs without Python installed; same endpoints as c2_server.py      │
+│                                                                         │
+│ Common API surface: /api/devices /api/clips /api/commands /api/scans     │
+│   /api/check /api/cve/* /api/audit/* /api/patch/* /api/host_info         │
+│   /api/connections/* /api/exploit /api/local_ip /api/ai-keys             │
+│   /api/register /api/poll (implant polling)                              │
 ├────────────────────────────────┬─────────────────────────────────────────┤
 │ ENGAGEMENT LAYER — c2_audit.py │ CVE FEED + ARTIFACT PIPELINE            │
 │   AuditEngagement              │   c2_cve_feed.py                        │
