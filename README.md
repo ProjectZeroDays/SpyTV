@@ -82,7 +82,7 @@ The standalone EXE bundles the Python C2 server + dashboard into a single
 executable. It runs without Python installed and serves the full web dashboard at
 `http://<machine-ip>:8443/`.
 
-Latest: [v1.0.8](https://github.com/ProjectZeroDays/SpyTV/releases/tag/v1.0.8).
+Latest: [v1.0.9](https://github.com/ProjectZeroDays/SpyTV/releases/tag/v1.0.9).
 
 ## Repository layout
 
