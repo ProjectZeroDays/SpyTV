@@ -36,7 +36,11 @@ spytv/
 ├── .opencode/
 │   └── commands/push.md        # /Push pipeline: cleanup · file_structure · vulns · test · ship
 │
-├── android/                    # Gradle project — SpyTV Android console (the real APK)
+├── android/                    # Gradle project — SpyTV Android APK (console + standalone C2)
+│   ├── app/src/main/
+│   │   ├── java/com/authenticated/spytv/
+│   │   │   ├── MainActivity.kt   # Mode toggle (console/standalone), WebView for console mode
+│   │   │   └── C2Server.kt       # Embedded Kotlin HTTP server for standalone C2 mode
 │   ├── settings.gradle.kts / build.gradle.kts / gradle.properties
 │   ├── gradlew / gradlew.bat   # Wrapper (Gradle 8.2)
 │   ├── gradle/wrapper/         # gradle-wrapper.jar + gradle-wrapper.properties
@@ -126,6 +130,10 @@ spytv/
 │   ├── clips/                  # Captured audio/video
 │   ├── cve_state.json          # Feed source of truth
 │   └── devices.json / commands.json / ai_keys.json
+│
+├── .github/workflows/build-release.yml  # CI: build APK + standalone EXE + release
+├── .github/RELEASE_TEMPLATE.md
+├── build_standalone_exe.py             # PyInstaller build for standalone Windows EXE
 │
 └── logs/                       # Runtime logs (git-ignored)
     ├── spytv.log

@@ -1,6 +1,9 @@
 package com.authenticated.spytv
 
+import android.Manifest
 import android.app.AlertDialog
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.text.InputType
 import android.view.View
@@ -10,22 +13,25 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
+import android.widget.Switch
+import android.widget.Slider
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import java.io.IOException
 import java.io.Reader
 import java.net.HttpURLConnection
 import java.net.MalformedURLException
 import java.net.URL
+import java.util.*
 
 /**
- * SpyTV Android console.
- *
- * The C2 dashboard is NOT served on the phone, so "localhost" here would be the
- * phone itself — historically that sent this WebView to whatever else happened
- * to own port 8443 on the device, and the user saw that program's raw JSON
- * instead of the dashboard. The endpoint is therefore configurable, and every
- * load is verified first: if the answer isn't the SpyTV dashboard we say so and
- * show what came back rather than rendering it as if it were ours.
+ * SpyTV Android C2 Console or Standalone Server.
+ * 
+ * Two modes:
+ * 1. CONSOLE MODE: Connects to an external C2 server (default - same as before)
+ * 2. STANDALONE MODE: Runs the C2 server locally on this Android device
  */
 class MainActivity : AppCompatActivity() {
 
@@ -36,17 +42,74 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnRetry: Button
     private lateinit var btnAddress: Button
     private lateinit var btnSettings: Button
-
+    private lateinit var modeIndicator: TextView
+    private lateinit var serverStatus: TextView
+    private lateinit var serverToggle: Switch
+    
     private val prefs by lazy { getSharedPreferences(PREFS, MODE_PRIVATE) }
     private var c2Url: String = DEFAULT_URL
-
+    private var isStandaloneMode: Boolean = false
+    private var c2Server: C2Server? = null
+    
     /** Text that only the real dashboard contains (its <title>). */
-    private val dashboardMarker = "TV Security Assessment Platform"
-
+    private val dashboardMarker = "SpyTV C2 Platform"
+    
+    companion object {
+        const val PREFS = "spytv_console"
+        const val KEY_URL = "c2_url"
+        const val KEY_STANDALONE = "c2_standalone_mode"
+        const val DEFAULT_URL = "http://localhost:8443/"
+        const val BODY_LIMIT = 8192
+        
+        var instance: MainActivity? = null
+    }
+    
+    // Permission launcher for Android 13+
+    private val permissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val allGranted = permissions.all { it.value }
+        if (allGranted) {
+            initC2Server()
+        } else {
+            Toast.makeText(this, "Network permissions required for C2 mode", Toast.LENGTH_LONG).show()
+        }
+    }
+    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        instance = this
         setContentView(R.layout.activity_main)
-
+        
+        initViews()
+        initPermissions()
+        
+        // Check mode preference
+        isStandaloneMode = prefs.getBoolean(KEY_STANDALONE, false)
+        updateModeIndicator()
+        
+        if (isStandaloneMode) {
+            // Check and request permissions first
+            if (hasAllPermissions()) {
+                initC2Server()
+            } else {
+                requestPermissions()
+            }
+        } else {
+            // Console mode - ask for C2 address or use saved
+            val saved = prefs.getString(KEY_URL, null)
+            c2Url = saved?.takeIf { it.isNotBlank() } ?: DEFAULT_URL
+            
+            if (saved.isNullOrBlank()) {
+                // First run in console mode: ask where the C2 lives
+                promptForAddress()
+            } else {
+                open(c2Url)
+            }
+        }
+    }
+    
+    private fun initViews() {
         webView = findViewById(R.id.webView)
         errorView = findViewById(R.id.errorView)
         errorTitle = findViewById(R.id.errorTitle)
@@ -54,7 +117,10 @@ class MainActivity : AppCompatActivity() {
         btnRetry = findViewById(R.id.btnRetry)
         btnAddress = findViewById(R.id.btnAddress)
         btnSettings = findViewById(R.id.btnSettings)
-
+        modeIndicator = findViewById(R.id.modeIndicator)
+        serverStatus = findViewById(R.id.serverStatus)
+        serverToggle = findViewById(R.id.serverToggle)
+        
         webView.webViewClient = WebViewClient()
         webView.settings.apply {
             javaScriptEnabled = true
@@ -67,26 +133,127 @@ class MainActivity : AppCompatActivity() {
             builtInZoomControls = true
             displayZoomControls = false
         }
-
-        val saved = prefs.getString(KEY_URL, null)
-        c2Url = saved?.takeIf { it.isNotBlank() } ?: DEFAULT_URL
-
-        btnRetry.setOnClickListener { open(c2Url) }
+        
+        btnRetry.setOnClickListener { 
+            if (isStandaloneMode) {
+                restartC2Server()
+            } else {
+                open(c2Url) 
+            }
+        }
         btnAddress.setOnClickListener { promptForAddress() }
-        btnSettings.setOnClickListener { promptForAddress() }
-
-        if (saved.isNullOrBlank()) {
-            // First run: ask where the C2 lives instead of guessing.
-            promptForAddress()
-        } else {
-            open(c2Url)
+        btnSettings.setOnClickListener { showSettings() }
+        serverToggle.setOnCheckedChangeListener { _, isChecked ->
+            toggleStandaloneMode(isChecked)
         }
     }
-
+    
+    private fun initPermissions() {
+        val requiredPermissions = mutableListOf<String>()
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.INTERNET) != PackageManager.PERMISSION_GRANTED) {
+            requiredPermissions.add(Manifest.permission.INTERNET)
+        }
+        
+        // Android 13+ needs approximately not one percent of users to worry about
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.NEAR_BY_DEVICES) != PackageManager.PERMISSION_GRANTED) {
+                requiredPermissions.add(Manifest.permission.NEAR_BY_DEVICES)
+            }
+        }
+        
+        permissionLauncher.launch(requiredPermissions.toTypedArray())
+    }
+    
+    private fun hasAllPermissions(): Boolean {
+        val internet = ContextCompat.checkSelfPermission(this, Manifest.permission.INTERNET) == PackageManager.PERMISSION_GRANTED
+        val network = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(this, Manifest.permission.NEAR_BY_DEVICES) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true
+        }
+        return internet && network
+    }
+    
+    private fun requestPermissions() {
+        permissionLauncher.launch(arrayOf(Manifest.permission.INTERNET))
+    }
+    
+    private fun updateModeIndicator() {
+        modeIndicator.text = if (isStandaloneMode) {
+            "STANDALONE C2 MODE"
+        } else {
+            "CONSOLE MODE"
+        }
+        modeIndicator.setTextColor(
+            if (isStandaloneMode) 0xFF10B981.toInt() else 0xFF3B82F6.toInt()
+        )
+        
+        serverToggle.isChecked = isStandaloneMode
+        serverStatus.visibility = if (isStandaloneMode) View.VISIBLE else View.GONE
+        webView.visibility = if (isStandaloneMode) View.GONE else View.VISIBLE
+        errorView.visibility = if (isStandaloneMode) View.GONE else View.VISIBLE
+    }
+    
+    private fun toggleStandaloneMode(enabled: Boolean) {
+        if (enabled && !isStandaloneMode) {
+            // Switch to standalone mode
+            if (hasAllPermissions()) {
+                initC2Server()
+            } else {
+                requestPermissions()
+                return
+            }
+        } else if (!enabled && isStandaloneMode) {
+            // Switch to console mode
+            stopC2Server()
+            isStandaloneMode = false
+            prefs.edit().putBoolean(KEY_STANDALONE, false).apply()
+            updateModeIndicator()
+            promptForAddress()
+        }
+        
+        isStandaloneMode = enabled
+        prefs.edit().putBoolean(KEY_STANDALONE, enabled).apply()
+        updateModeIndicator()
+    }
+    
+    private fun initC2Server() {
+        try {
+            val defaultPort = 8443
+            c2Server = C2Server(defaultPort)
+            c2Server?.start()
+            
+            // Start local dashboard
+            val localUrl = "http://127.0.0.1:$defaultPort/"
+            runOnUiThread {
+                serverStatus.text = "C2 Server running on $defaultPort"
+                Toast.makeText(this, "C2 Server started on port $defaultPort", Toast.LENGTH_SHORT).show()
+                open(localUrl)
+            }
+        } catch (e: Exception) {
+            runOnUiThread {
+                Toast.makeText(this, "Failed to start C2: ${e.message}", Toast.LENGTH_LONG).show()
+                isStandaloneMode = false
+                prefs.edit().putBoolean(KEY_STANDALONE, false).apply()
+                updateModeIndicator()
+            }
+        }
+    }
+    
+    private fun restartC2Server() {
+        stopC2Server()
+        initC2Server()
+    }
+    
+    private fun stopC2Server() {
+        c2Server?.stop()
+        c2Server = null
+    }
+    
     // ------------------------------------------------------------------
     // endpoint handling
     // ------------------------------------------------------------------
-
+    
     private fun open(url: String) {
         hideError()
         Toast.makeText(this, "Checking $url …", Toast.LENGTH_SHORT).show()
@@ -95,25 +262,16 @@ class MainActivity : AppCompatActivity() {
             runOnUiThread { deliver(url, probe) }
         }.start()
     }
-
+    
     private fun deliver(url: String, probe: Probe) {
         when {
             !probe.reachable -> showError(
-                "SpyTV C2 not reachable",
-                "Tried: $url\n\n${probe.error}\n\nCheck that:\n" +
-                    "  • the C2 is running on that machine  (python c2_server.py)\n" +
-                    "  • this device is on the same network as it\n" +
-                    "  • the address is the C2 machine's LAN IP, not localhost\n" +
-                    "    (on this phone localhost IS this phone)\n" +
-                    "  • the firewall allows the C2 port"
+                "C2 not reachable",
+                "Tried: $url\n\n${probe.error}\n\nIn Console mode, the C2 server should be running on another device.\nIn Standalone mode, tap retry to start the local C2 server."
             )
             !probe.isSpyTV -> showError(
-                "This is not the SpyTV dashboard",
-                "Tried: $url\nHTTP ${probe.status}\n\n" +
-                    "Something answered, but it is not SpyTV — another program owns\n" +
-                    "this address/port, so the console would be talking to the wrong\n" +
-                    "thing. The response it returned was:\n\n" +
-                    probe.body.ifBlank { "(empty body)" }
+                "This is not the SpyTV C2 Dashboard",
+                "Tried: $url\nHTTP ${probe.status}\n\nSomething answered, but it is not SpyTV — another program owns this address/port, so the console would be talking to the wrong thing."
             )
             probe.status !in 200..299 -> showError(
                 "Unexpected response from the C2",
@@ -125,7 +283,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
-
+    
     /** Probe off the UI thread; never throws. */
     private fun probe(rawUrl: String): Probe {
         var conn: HttpURLConnection? = null
@@ -157,7 +315,7 @@ class MainActivity : AppCompatActivity() {
             conn?.disconnect()
         }
     }
-
+    
     private fun readHead(reader: Reader, limit: Int): String {
         val buf = CharArray(1024)
         val sb = StringBuilder()
@@ -169,23 +327,23 @@ class MainActivity : AppCompatActivity() {
         }
         return sb.toString()
     }
-
+    
     // ------------------------------------------------------------------
     // error UI / address dialog
     // ------------------------------------------------------------------
-
+    
     private fun showError(title: String, detail: String) {
         errorTitle.text = title
         errorDetail.text = detail
         errorView.visibility = View.VISIBLE
         webView.visibility = View.GONE
     }
-
+    
     private fun hideError() {
         errorView.visibility = View.GONE
         webView.visibility = View.VISIBLE
     }
-
+    
     private fun promptForAddress() {
         val input = EditText(this).apply {
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
@@ -194,14 +352,17 @@ class MainActivity : AppCompatActivity() {
             setSelection(text.length)
         }
         AlertDialog.Builder(this)
-            .setTitle("SpyTV C2 address")
+            .setTitle("C2 Address")
             .setMessage(
-                "Where is the machine running the C2?\n\n" +
-                    "Use its LAN IP and port. 'localhost' on this device points at " +
-                    "this device, not at the C2."
+                "Where is the SpyTV C2 server?\n\n" +
+                    "Use its LAN IP and port. 'localhost' on this device points at this device, not at an external C2.\n" +
+                    "\n\nMode: Console (connect to external C2)"
             )
             .setView(input)
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton("Cancel") { _, _ ->
+                // Offer mode selection
+                showModeSelection()
+            }
             .setPositiveButton("Connect") { _, _ ->
                 val url = normalize(input.text.toString())
                 if (url == null) {
@@ -214,7 +375,58 @@ class MainActivity : AppCompatActivity() {
             }
             .show()
     }
-
+    
+    private fun showModeSelection() {
+        val options = arrayOf("Console Mode: Connect to external C2", "Standalone Mode: Run C2 on this device")
+        AlertDialog.Builder(this)
+            .setTitle("SpyTV Mode")
+            .setMessage("Choose how SpyTV should operate:")
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> {
+                        isStandaloneMode = false
+                        prefs.edit().putBoolean(KEY_STANDALONE, false).apply()
+                        updateModeIndicator()
+                        promptForAddress()
+                    }
+                    1 -> {
+                        isStandaloneMode = true
+                        if (hasAllPermissions()) {
+                            initC2Server()
+                        } else {
+                            requestPermissions()
+                        }
+                        prefs.edit().putBoolean(KEY_STANDALONE, true).apply()
+                        updateModeIndicator()
+                    }
+                }
+            }
+            .show()
+    }
+    
+    private fun showSettings() {
+        AlertDialog.Builder(this)
+            .setTitle("SpyTV Settings")
+            .setMessage("Standalone Mode: ${if (isStandaloneMode) "ENABLED" else "DISABLED"}\n\n" +
+                    "In Standalone mode, this APK runs its own C2 server.\n" +
+                    "In Console mode, it connects to an external C2 server.")
+            .setPositiveButton("Switch Mode") { _, _ ->
+                if (isStandaloneMode) {
+                    // Stop server and go to console mode
+                    stopC2Server()
+                    isStandaloneMode = false
+                    prefs.edit().putBoolean(KEY_STANDALONE, false).apply()
+                    updateModeIndicator()
+                    promptForAddress()
+                } else {
+                    // Ask which C2 to connect to
+                    promptForAddress()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+    
     /** Accept a bare host:port, force a scheme, require a host, normalise. */
     private fun normalize(input: String): String? {
         var u = input.trim()
@@ -230,15 +442,26 @@ class MainActivity : AppCompatActivity() {
             null
         }
     }
-
+    
     override fun onBackPressed() {
-        if (webView.visibility == View.VISIBLE && webView.canGoBack()) {
+        if (isStandaloneMode) {
+            // In standalone mode, confirm exit
+            AlertDialog.Builder(this)
+                .setTitle("Exit C2 Server")
+                .setMessage("Are you sure you want to exit?\nThe C2 server will be stopped.")
+                .setPositiveButton("Exit") { _, _ ->
+                    stopC2Server()
+                    finish()
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        } else if (webView.visibility == View.VISIBLE && webView.canGoBack()) {
             webView.goBack()
         } else {
             super.onBackPressed()
         }
     }
-
+    
     private data class Probe(
         val reachable: Boolean,
         val isSpyTV: Boolean,
@@ -246,11 +469,12 @@ class MainActivity : AppCompatActivity() {
         val body: String,
         val error: String?
     )
-
-    companion object {
-        const val PREFS = "spytv_console"
-        const val KEY_URL = "c2_url"
-        const val DEFAULT_URL = "http://localhost:8443/"
-        const val BODY_LIMIT = 8192
+    
+    override fun onDestroy() {
+        if (isStandaloneMode) {
+            stopC2Server()
+        }
+        instance = null
+        super.onDestroy()
     }
 }

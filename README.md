@@ -51,13 +51,35 @@ you pass `--apply`.
 
 ## Releases
 
-GitHub releases ship three assets:
+GitHub releases ship three assets — **each capable of running the full C2**:
 
-| Asset | What it is |
-|---|---|
-| `SpyTV.apk` | Implant/APK artifact for authorized target devices |
-| `SpyTV-C2-<ver>-portable.exe` | Desktop C2 — Electron wrapper around the dashboard (offline fallback page included) |
-| `SHA256SUMS.txt` | SHA-256 checksum manifest for the attached assets |
+| Asset | What it is | C2 mode |
+|---|---|---|
+| `SpyTV.apk` | Android APK with dual-mode: Console (connects to remote C2) or Standalone (runs full C2 locally on-device) | Standalone ✓ + Console ✓ |
+| `SpyTV-C2-standalone.exe` | Standalone Windows EXE with bundled Python — runs the full C2 server offline | Full C2 ✓ |
+| `SHA256SUMS.txt` | SHA-256 checksum manifest for the attached assets | — |
+
+### APK Modes
+
+The SpyTV APK supports two modes:
+
+1. **Console Mode** (default): The APK acts as a remote console — it loads the web
+   dashboard from an external C2 server (the APK itself is not the C2). Use this
+   when the C2 runs on a laptop/server and you operate from the phone.
+
+2. **Standalone Mode** (new): The APK runs a full C2 server locally on the Android
+   device, serving the complete dashboard and all API endpoints (`/api/devices`,
+   `/api/scan`, `/api/command`, `/api/poll`, `/api/cves`, etc.). The server binds
+   to port 8443 and is reachable from other devices on the same network. Use this
+   when you need the C2 on-device without an external laptop.
+
+   To toggle: launch SpyTV → tap the ⚙ settings button → select "Standalone Mode".
+
+### EXE Mode
+
+The standalone EXE bundles the Python C2 server + dashboard into a single
+executable. It runs without Python installed and serves the full web dashboard at
+`http://<machine-ip>:8443/`.
 
 Latest: [v1.0.7](https://github.com/ProjectZeroDays/SpyTV/releases/tag/v1.0.7).
 

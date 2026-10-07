@@ -1,4 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">SpyTV C2</string>
+    
+    <!-- Mode selection strings -->
+    <string name="mode_console">CONSOLE MODE</string>
+    <string name="mode_standalone">STANDALONE MODE</string>
+    <string name="mode_label">Mode</string>
+    
+    <!-- Server status strings -->
+    <string name="server_starting">C2 Server starting...</string>
+    <string name="server_running">C2 Server running on port %1$d</string>
+    <string name="server_offline">C2 Server offline</string>
+    
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="switch_mode">Switch Mode</string>
+    <string name="cancel">Cancel</string>
+    
+    <!-- Mode selection dialog -->
+    <string name="mode_selection_title">SpyTV Mode</string>
+    <string name="mode_selection_message">Choose how SpyTV should operate:</string>
+    <string name="mode_console_desc">Connect to external C2 server</string>
+    <string name="mode_standalone_desc">Run C2 on this device</string>
 </resources>
