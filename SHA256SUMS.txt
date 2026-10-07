@@ -2,10 +2,10 @@
 # Generated: 2026-10-07
 # Each platform can now operate as a full C2 server
 
-# APK (Android) - APK standalone C2 mode + console mode
-# Verify: sha256sum -c SHA256SUMS.txt
-6395ff97891500c8b53067b28a3a4f4574af2dce4f405c13f24c3daba1deca1f  SpyTV.apk
+# APK (Android) - Console + Standalone C2 mode
+# SHA256 1a859f6ac9052235c21e655d57528c8776a4dd133bcfcc96764e6f26a78db40f  SpyTV.apk
 
-# EXE (Windows) - standalone executable (bundled Python)
-# Built from: python build_standalone_exe.py
-# 061eb2d3fbb5307336982f004e320b537f2667b2417afaecacd3fd81ce826e5b  SpyTV-C2-1.0.7-portable.exe
+# EXE (Windows) - Standalone C2 server (bundled Python via PyInstaller)
+# SHA256 e3731a2aa0c0e9d752b86a5a72aa2e0df97fcf2c2f0da020fae3ab6d344ff623  SpyTV-C2-standalone.exe
+1a859f6ac9052235c21e655d57528c8776a4dd133bcfcc96764e6f26a78db40f  SpyTV.apk
+e3731a2aa0c0e9d752b86a5a72aa2e0df97fcf2c2f0da020fae3ab6d344ff623  SpyTV-C2-standalone.exe
