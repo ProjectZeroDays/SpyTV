@@ -42,9 +42,14 @@ function isLoopbackUrl(url) {
 function checkServer(timeoutMs = CHECK_TIMEOUT_MS) {
   return new Promise((resolve) => {
     let settled = false;
+    let timer = null;
     const done = (value) => {
       if (settled) return;
       settled = true;
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
       resolve(value);
     };
 
@@ -55,18 +60,24 @@ function checkServer(timeoutMs = CHECK_TIMEOUT_MS) {
       return done(false);
     }
 
+    // Electron's net.ClientRequest has no setTimeout() — that is Node's
+    // http.ClientRequest API, and calling it threw a TypeError. The throw
+    // rejected this promise, loadApp() then died at its await BEFORE calling
+    // loadURL(), and because the window is created with show:false and only
+    // shown on 'ready-to-show', the app came up with every process alive and
+    // no window at all. Time out with a plain timer instead.
+    timer = setTimeout(() => {
+      try { req.abort(); } catch (_) {}
+      done(false);
+    }, timeoutMs);
+
     req.on('response', (res) => {
       // Any HTTP response means the server is up (even 401/404).
       res.resume();
       done(true);
     });
     req.on('error', () => done(false));
-    req.setTimeout(timeoutMs, () => {
-      try {
-        req.abort();
-      } catch (_) {}
-      done(false);
-    });
+    req.on('abort', () => done(false));
 
     try {
       req.end();
@@ -115,7 +126,12 @@ async function loadApp() {
 // IPC (used by offline.html "Retry" button)
 // ---------------------------------------------------------------------------
 ipcMain.handle('retry', async () => {
-  return await loadApp();
+  try {
+    return await loadApp();
+  } catch (err) {
+    console.error('retry failed:', err);
+    return false;
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -138,7 +154,9 @@ if (!app.requestSingleInstanceLock()) {
     }
 
     createWindow();
-    loadApp();
+    // A rejection here used to be unhandled, which is how the setTimeout
+    // TypeError vanished into stderr while the app silently showed nothing.
+    loadApp().catch((err) => console.error('loadApp failed:', err));
   });
 }
 
@@ -159,7 +177,19 @@ function createWindow() {
     }
   });
 
+  // Safety net: show:false means nothing is visible until 'ready-to-show'
+  // fires. If that never happens the app looks like it did nothing at all —
+  // every process running, no window — so show it anyway rather than leave a
+  // blank invisible shell.
+  const showGuard = setTimeout(() => {
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  }, 8000);
+
   mainWindow.once('ready-to-show', () => {
+    clearTimeout(showGuard);
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show();
   });
 
@@ -207,6 +237,6 @@ app.on('window-all-closed', () => {
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow();
-    loadApp();
+    loadApp().catch((err) => console.error('loadApp failed:', err));
   }
 });
