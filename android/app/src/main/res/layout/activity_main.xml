@@ -80,7 +80,10 @@
         android:layout_gravity="top|start"
         android:layout_margin="16dp"
         android:background="#151B27"
-        android:padding="8px 16px"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="16dp"
         android:text="CONSOLE MODE"
         android:textColor="#3B82F6"
         android:textSize="12sp"
@@ -94,7 +97,10 @@
         android:layout_gravity="top|end"
         android:layout_margin="16dp"
         android:orientation="horizontal"
-        android:padding="8px 16px"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="16dp"
         android:background="#151B27"
         android:visibility="gone">
 

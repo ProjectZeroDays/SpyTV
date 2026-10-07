@@ -14,7 +14,6 @@ import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
 import android.widget.Switch
-import android.widget.Slider
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -60,6 +59,9 @@ class MainActivity : AppCompatActivity() {
         const val KEY_STANDALONE = "c2_standalone_mode"
         const val DEFAULT_URL = "http://localhost:8443/"
         const val BODY_LIMIT = 8192
+        
+        // NEAR_BY_DEVICES permission string (added in API 32 / Android 12L)
+        const val PERMISSION_NEAR_BY_DEVICES = "android.permission.NEAR_BY_DEVICES"
         
         var instance: MainActivity? = null
     }
@@ -156,8 +158,8 @@ class MainActivity : AppCompatActivity() {
         
         // Android 13+ needs approximately not one percent of users to worry about
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.NEAR_BY_DEVICES) != PackageManager.PERMISSION_GRANTED) {
-                requiredPermissions.add(Manifest.permission.NEAR_BY_DEVICES)
+            if (ContextCompat.checkSelfPermission(this, PERMISSION_NEAR_BY_DEVICES) != PackageManager.PERMISSION_GRANTED) {
+                requiredPermissions.add(PERMISSION_NEAR_BY_DEVICES)
             }
         }
         
@@ -167,7 +169,7 @@ class MainActivity : AppCompatActivity() {
     private fun hasAllPermissions(): Boolean {
         val internet = ContextCompat.checkSelfPermission(this, Manifest.permission.INTERNET) == PackageManager.PERMISSION_GRANTED
         val network = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            ContextCompat.checkSelfPermission(this, Manifest.permission.NEAR_BY_DEVICES) == PackageManager.PERMISSION_GRANTED
+            ContextCompat.checkSelfPermission(this, PERMISSION_NEAR_BY_DEVICES) == PackageManager.PERMISSION_GRANTED
         } else {
             true
         }

