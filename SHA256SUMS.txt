@@ -3,9 +3,9 @@
 # Default mode: Self-Hosted C2 (standalone on all platforms)
 
 # APK (Android) - Self-Hosted C2 default, Connect-Remote available
-# SHA256 01d17b2544e60fc8b0c41db4ef1ecf4accf98a1545b3a59c4c52d46a954a4832  SpyTV.apk
+# SHA256 e2b857bf896013c191ae19f106f6c0cc8d75cf0b295dbe92bced6e492c0007a8  SpyTV.apk
 
 # EXE (Windows) - Self-Hosted C2 server (bundled Python via PyInstaller)
 # SHA256 1f85b55abe8b8e658ea068bd77249e2e877a55dfa883260be2a92725a22e3287  SpyTV-C2-standalone.exe
-01d17b2544e60fc8b0c41db4ef1ecf4accf98a1545b3a59c4c52d46a954a4832  SpyTV.apk
+e2b857bf896013c191ae19f106f6c0cc8d75cf0b295dbe92bced6e492c0007a8  SpyTV.apk
 1f85b55abe8b8e658ea068bd77249e2e877a55dfa883260be2a92725a22e3287  SpyTV-C2-standalone.exe
