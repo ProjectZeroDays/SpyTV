@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:id="@+id/nav_c2" android:title="Self-Host C2" android:icon="@drawable/ic_c2" />
-    <item android:id="@+id/nav_root" android:title="ROOT" android:icon="@drawable/ic_root" />
-    <item android:id="@+id/nav_vpn" android:title="VPN" android:icon="@drawable/ic_vpn" />
-    <item android:id="@+id/nav_scan" android:title="SCAN NET" android:icon="@drawable/ic_scan" />
-    <item android:id="@+id/nav_kill" android:title="Kill Switch" android:icon="@drawable/ic_kill" />
+    <item android:id="@+id/nav_c2" android:title="Self-Host C2" />
+    <item android:id="@+id/nav_root" android:title="ROOT" />
+    <item android:id="@+id/nav_vpn" android:title="VPN" />
+    <item android:id="@+id/nav_scan" android:title="SCAN NET" />
+    <item android:id="@+id/nav_kill" android:title="Kill Switch" />
 </menu>
