@@ -1,2 +1,2 @@
-b132c248c2ebfde7a26f88026e70decaef303cea7c4660055ec6cfdb95cd4262  SpyTV.apk
-8f558b3a41e288f0e51dbd0966c15360c6a5dd59f81bfbf8cabf00a89ebbfadf  SpyTV-C2-standalone.exe
+9ca49436eb9147ed66928a98ecb5d7e3d19a7ced4c1a3f14e0f26b7f7a6373c7  SpyTV.apk
+f7f88fce657f6e199cea2fb8e9c4344d880d306cbd05b9d265418f0bec17021d  SpyTV-C2-standalone.exe

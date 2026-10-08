@@ -439,6 +439,7 @@
     font-size: 13px;
     cursor: pointer;
   }
+  .payload-targets { max-width: 280px; }
   .form-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
   .form-row .form-group { flex: 1; min-width: 200px; }
 
@@ -859,7 +860,7 @@
       <div class="card-header">
         <span class="card-title">Exploit Payload Generator</span>
         <div class="help-icon">?
-          <div class="tooltip">Generates family-specific exploit payloads that connect back to this C2 server. Select target IP and device family, then click Generate to create the payload. Click Exploit to execute the exploit module against the target right now — the activity log reports the module's real outcome (success, failure, timeout or error, with duration).</div>
+          <div class="tooltip">Select a target TV from the dropdown (populated from scan results and connected devices) or add a custom IP with the "Custom IP" button, pick a device family, then click Generate to create the payload. Click Exploit to execute the exploit module against the target right now — the activity log reports the module's real outcome (success, failure, timeout or error, with duration).</div>
         </div>
       </div>
       <div class="card-body">
@@ -868,8 +869,10 @@
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label">Target IP Address</label>
-            <input type="text" id="payload-ip" class="form-input" placeholder="192.168.1.100">
+            <label class="form-label">Target IP</label>
+            <select id="payload-ip" class="form-select">
+              <option value="">Select a vulnerable TV</option>
+            </select>
           </div>
           <div class="form-group">
             <label class="form-label">Device Family</label>
@@ -890,6 +893,9 @@
           </div>
           <div class="form-group" style="flex:0">
             <button class="btn btn-success" id="payload-exploit" onclick="deployPayload()" data-tooltip="Run the exploit module against the target and report the real result">Exploit</button>
+          </div>
+          <div class="form-group" style="flex:0">
+            <button class="btn" id="payload-custom-ip" onclick="addCustomIp()" data-tooltip="Add a custom IP address to the target dropdown">&#128738; Custom IP</button>
           </div>
         </div>
         <div id="payload-output"></div>
@@ -1692,7 +1698,7 @@ async function exploitTarget(ip, deviceType, tvType) {
   const tv = String(tvType || familyToTvType(deviceType) || '').trim();
   const family = TVTYPE_TO_FAMILY[tv] || null;
 
-  document.getElementById('payload-ip').value = ip;
+  setPayloadIp(ip);
   // select.value only sticks when the option exists; otherwise it silently
   // keeps whatever was chosen before, which would run the wrong family.
   if (family) document.getElementById('payload-family').value = family;
@@ -1728,6 +1734,84 @@ async function exploitTarget(ip, deviceType, tvType) {
   await deployPayload();
 }
 
+// Populate the Target IP dropdown with vulnerable TVs from scan results
+function updatePayloadTargets() {
+  const sel = document.getElementById('payload-ip');
+  if (!sel) return;
+  const vulnIps = new Set();
+  // From scan results
+  if (Array.isArray(lastScanResults)) {
+    lastScanResults.forEach(r => {
+      if (r && r.vulnerable && r.ip) vulnIps.add(r.ip);
+    });
+  }
+  // From registered devices
+  if (Array.isArray(devices)) {
+    devices.forEach(d => {
+      if (d && d.vulnerable && d.ip) vulnIps.add(d.ip);
+    });
+  }
+  // Preserve currently-entered custom IPs that aren't in scan results
+  const existingValues = new Set();
+  if (sel.options) {
+    Array.from(sel.options).forEach(o => {
+      if (o.value) existingValues.add(o.value);
+    });
+  }
+  // Keep any custom IPs the user previously added
+  vulnIps.forEach(ip => existingValues.add(ip));
+  // Clear and rebuild
+  sel.innerHTML = '<option value="">Select a vulnerable TV</option>';
+  existingValues.forEach(ip => {
+    const opt = document.createElement('option');
+    opt.value = ip;
+    opt.textContent = ip;
+    sel.appendChild(opt);
+  });
+}
+
+// Set the selected target IP in the dropdown (fallback to adding a custom option)
+function setPayloadIp(ip) {
+  const sel = document.getElementById('payload-ip');
+  if (!sel) return;
+  const options = sel.options ? Array.from(sel.options) : [];
+  let found = false;
+  for (const opt of options) {
+    if (opt.value === ip) {
+      sel.value = ip;
+      found = true;
+      break;
+    }
+  }
+  if (!found) {
+    const opt = document.createElement('option');
+    opt.value = ip;
+    opt.textContent = ip;
+    sel.appendChild(opt);
+    sel.value = ip;
+  }
+}
+
+// Prompt for a custom IP and add it to the dropdown
+function addCustomIp() {
+  const ip = prompt('Enter a custom target IP address:', '192.168.1.100');
+  if (!ip || !ip.trim()) return;
+  if (!/^(?:\d{1,3}\.){3}\d{1,3}$/.test(ip.trim())) {
+    alert('Please enter a valid IPv4 address.');
+    return;
+  }
+  setPayloadIp(ip.trim());
+  document.getElementById('payload-ip').value = ip.trim();
+  // Auto-select the device family based on the entered IP
+  const row = (Array.isArray(lastScanResults) ? lastScanResults : [])
+    .find(r => r && r.ip === ip.trim()) || {};
+  if (row.tv_type) {
+    const family = TVTYPE_TO_FAMILY[row.tv_type] || FAMILY_TVTYPE[row.tv_type];
+    if (family) document.getElementById('payload-family').value = family;
+  }
+  addLog(`Custom IP added: ${ip.trim()}`);
+}
+
 // Payload Generator
 // Status lands in #payload-output on the card itself: this button used to
 // report nothing at all, so an empty form, a refused request or a reply
@@ -1741,14 +1825,13 @@ async function generatePayload() {
   const btn = document.getElementById('payload-generate');
   const ipEl = document.getElementById('payload-ip');
   const targetIp = (ipEl.value || '').trim();
+  // If the dropdown still holds the placeholder, treat as empty
+  const effectiveIp = targetIp || '';
   const family = document.getElementById('payload-family').value;
   const label = btn ? btn.textContent : 'Generate';
 
-  if (!targetIp) {
-    // Inline rather than alert(): a suppressed or missed dialog is invisible,
-    // and the card gave no other sign that anything was expected of you.
-    setPayloadStatus('<div class="alert alert-warning">Enter a target IP '
-      + 'address, then press Generate.</div>');
+  if (!effectiveIp) {
+    setPayloadStatus('<div class="alert alert-warning">Enter a target IP by selecting from the dropdown, or press "Custom IP" to add one.</div>');
     ipEl.focus();
     addLog('Payload generation skipped: no target IP address');
     return;
@@ -1799,8 +1882,7 @@ async function deployPayload() {
   const family = document.getElementById('payload-family').value;
   const label = btn ? btn.textContent : 'Exploit';
   if (!targetIp) {
-    setPayloadStatus('<div class="alert alert-warning">Enter a target IP '
-      + 'address, then press Exploit.</div>');
+    setPayloadStatus('<div class="alert alert-warning">Enter a target IP by selecting from the dropdown, or press "Custom IP" to add one.</div>');
     ipEl.focus();
     addLog('Exploit skipped: no target IP address');
     return;
@@ -2854,7 +2936,7 @@ async function restoreEngagement() {
 // Poll for updates
 async function poll() {
   await loadDevices();
-  await loadClips();
+  updatePayloadTargets();
   await loadLocalIp();
   await loadServerInfo();
   setTimeout(poll, 3000);
