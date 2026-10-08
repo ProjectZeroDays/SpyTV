@@ -15,13 +15,16 @@ selection dialog when the app opens:
 ### APK (Android)
 
 - `MainActivity.kt` defaults to Self-Hosted mode (`isStandaloneMode = true`)
-- **Setup C2 Server dialog shows on every app open** with two buttons:
-  - **Self-Hosted**: Run C2 on this device → 3-second countdown → auto-starts C2 and navigates to dashboard
-  - **Connect-Remote**: Enter a remote C2 URL
-- Mode indicator shows "SELF-HOSTED MODE" or "CONNECT-REMOTE MODE"
-- Settings button (⚙) opens the mode selection dialog for switching
+- **On app open, two buttons are visible at the bottom of the screen**:
+  - **Self-Host C2**: Run C2 on this device → 3-second countdown → auto-starts C2 and navigates to dashboard
+  - **Remote-Connect C2**: Enter a remote C2 URL
+- 3-second countdown shown automatically, with alert text: "Self-Hosted C2 will start in 3 seconds..."
+- If user does not select a mode within 3 seconds, Self-Hosted is auto-selected
+- Mode indicator (top-left) shows "SELF-HOSTED MODE" or "CONNECT-REMOTE MODE"
+- Dashboard loads from Android assets via `context.assets.open()` (fixed resource path)
+- Settings button (⚙) opens mode selection dialog for switching
 - Server toggle switch at top-right toggles between modes
-- Server toggle switch at top-right toggles between modes
+- Fixed: broken duplicate `startC2Server()` function causing compilation issues
 
 ### EXE (Windows)
 
