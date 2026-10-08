@@ -1,5 +1,34 @@
 # SpyTV Code Changes Log
 
+## [2026-10-08] — Payload Generator UX: Vulnerable TV Target Dropdown + Custom IP (v1.2.0)
+
+### Payload Generator Tab
+
+- **Target IP is now a dropdown** (`<select>`) instead of a free-text input.
+  The dropdown is auto-populated from scan results and connected devices that
+  are marked `vulnerable: true`, so the operator selects a known target instead
+  of guessing an IP.
+- **Exploit button moved left, next to Generate** — Generate and Exploit sit on
+  the left of the row; the new Custom IP button sits on the far right.
+- **Custom IP button** (`&#128738; Custom IP`) prompts for an IPv4 address,
+  validates it, adds it as a new option in the Target IP dropdown, and
+  auto-selects the matching device family from the scan row if one exists.
+- `updatePayloadTargets()` rebuilds the dropdown from `lastScanResults` and the
+  registered `devices` list on every poll cycle; `setPayloadIp()` safely selects
+  or appends an option (used by `exploitTarget()`).
+- Tooltip updated to describe the dropdown + Custom IP workflow.
+
+### Verification
+
+- **116 tests pass** (full pytest suite, all green).
+- Dashboard inline-script tests pass (Node harness, 67 assertions).
+
+### Build
+
+- APK rebuilt with the latest dashboard (6,430,665 bytes).
+- EXE rebuilt with the latest dashboard (37,672,041 bytes).
+- `SHA256SUMS.txt` updated with new asset checksums.
+
 ## [2026-10-07] — Dashboard Enhancements, Network Info, Exploits Tab (v1.1.0)
 
 ### Dashboard Enhancements
