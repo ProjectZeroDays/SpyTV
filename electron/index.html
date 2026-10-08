@@ -3,47 +3,659 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SpyTV C2 — Authenticated, Inc.</title>
+  <title>SpyTV C2</title>
   <style>
     :root {
-      --bg: #0B1220;
-      --panel: #111A2E;
-      --border: #1E2A44;
-      --accent: #0F766E;
-      --text: #E2E8F0;
-      --muted: #94A3B8;
+      --bg:            #0B1220;
+      --panel:         #111A2E;
+      --panel-2:       #131E3A;
+      --border:        #1E2A44;
+      --border-2:      #27365F;
+      --accent:        #0F766E;
+      --accent-hover:  #14B8A6;
+      --text:          #E2E8F0;
+      --muted:         #94A3B8;
+      --danger:        #F87171;
+      --success:       #22C58E;
+      --warn:          #FACC15;
+      --terminal-bg:   #0a0f1c;
+      --terminal-glow: #14B8A6;
     }
+
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { height: 100%; }
+    html, body { height: 100%; overflow: hidden; }
+
     body {
       background: var(--bg);
       color: var(--text);
-      font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-family: "Segoe UI", -apple-system, Roboto, Helvetica, Arial, sans-serif;
+      user-select: none;
+      -webkit-user-drag: none;
+    }
+
+    /* ===== Custom title bar ===== */
+    .title-bar {
+      height: 36px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+      position: relative;
+      -webkit-app-region: drag;
+      z-index: 100;
+    }
+
+    .title-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      color: var(--muted);
+      letter-spacing: 0.5px;
+    }
+
+    .title-left .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 8px var(--accent);
+      transition: opacity 0.2s;
+    }
+
+    .title-left .dot.online {
+      background: var(--success);
+      box-shadow: 0 0 8px var(--success);
+    }
+
+    .title-left .dot.offline {
+      background: var(--danger);
+      box-shadow: 0 0 8px var(--danger);
+    }
+
+    .title-left span {
+      color: var(--text);
+      font-weight: 500;
+    }
+
+    .title-right {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      -webkit-app-region: no-drag;
+    }
+
+    .window-btn {
+      width: 36px;
+      height: 36px;
       display: flex;
       align-items: center;
       justify-content: center;
-      text-align: center;
-      padding: 24px;
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      border-radius: 0;
     }
-    .card {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 40px 34px;
-      max-width: 520px;
+
+    .window-btn:hover {
+      background: var(--border-2);
+      color: var(--text);
+    }
+
+    .window-btn:active {
+      transform: scale(0.92);
+    }
+
+    .window-btn.close:hover {
+      background: var(--danger);
+      color: #fff;
+    }
+
+    .window-btn#max-btn.maximized {
+      background: var(--border-2);
+    }
+
+    /* ===== Main app container ===== */
+    .app-container {
+      height: calc(100% - 36px);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ===== Dashboard iframe ===== */
+    .dashboard-wrapper {
+      flex: 1;
+      background: var(--bg);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .dashboard-wrapper iframe {
       width: 100%;
+      height: 100%;
+      border: none;
+      background: var(--bg);
     }
-    h1 { font-size: 24px; margin-bottom: 10px; }
-    p { color: var(--muted); font-size: 15px; line-height: 1.6; }
-    .accent { color: #14B8A6; }
-    footer { margin-top: 24px; font-size: 12px; color: var(--muted); letter-spacing: 1px; }
+
+    /* Loading overlay shown while the C2 server is starting */
+    .loading-overlay {
+      position: absolute;
+      inset: 0;
+      background: var(--bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 16px;
+      z-index: 10;
+      transition: opacity 0.3s ease;
+    }
+
+    .loading-overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .spinner {
+      width: 32px;
+      height: 32px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.9s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .loading-text {
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .loading-text .accent {
+      color: var(--accent);
+    }
+
+    /* ===== Terminal panel ===== */
+    .terminal-bar {
+      height: 32px;
+      background: var(--panel);
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+      cursor: pointer;
+      -webkit-app-region: drag;
+      user-select: none;
+    }
+
+    .terminal-bar:hover {
+      background: var(--panel-2);
+    }
+
+    .terminal-bar .left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--muted);
+      -webkit-app-region: no-drag;
+    }
+
+    .terminal-bar .left .icon-toggle {
+      font-size: 11px;
+      color: var(--accent);
+      transition: transform 0.2s ease;
+    }
+
+    .terminal-bar .left.expanded .icon-toggle {
+      transform: rotate(180deg);
+    }
+
+    .terminal-bar .right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      -webkit-app-region: no-drag;
+    }
+
+    .terminal-bar .right .btn {
+      width: 28px;
+      height: 24px;
+      border-radius: 4px;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .terminal-bar .right .btn:hover {
+      background: var(--accent);
+      color: var(--bg);
+    }
+
+    .terminal-panel {
+      height: 180px;
+      background: var(--terminal-bg);
+      border-top: 1px solid var(--border);
+      font-family: "JetBrains Mono", "Fira Code", Consolas, "Courier New", monospace;
+      font-size: 12.5px;
+      line-height: 1.5;
+      color: #d1d5db;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 10px 14px;
+      white-space: pre-wrap;
+      word-break: break-all;
+      position: relative;
+    }
+
+    .terminal-panel.collapsed {
+      height: 0;
+      padding: 0 14px;
+      border-top: none;
+      overflow: hidden;
+    }
+
+    .terminal-output {
+      /* grows with content, anchored at top */
+    }
+
+    .terminal-output .line {
+      margin-bottom: 2px;
+      padding-right: 4px;
+    }
+
+    .terminal-output .line.error {
+      color: var(--danger);
+    }
+
+    .terminal-output .line.success {
+      color: var(--success);
+    }
+
+    .terminal-output .line.warn {
+      color: var(--warn);
+    }
+
+    .terminal-output .line.info {
+      color: #93c5fd;
+    }
+
+    .terminal-output .line.debug {
+      color: var(--muted);
+    }
+
+    .terminal-output .line .time {
+      color: var(--muted);
+      margin-right: 6px;
+    }
+
+    /* Scrollbar styling */
+    .terminal-panel::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    .terminal-panel::-webkit-scrollbar-track {
+      background: var(--terminal-bg);
+    }
+
+    .terminal-panel::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 4px;
+    }
+
+    .terminal-panel::-webkit-scrollbar-thumb:hover {
+      background: var(--muted);
+    }
+
+    /* Resizer */
+    .resizer {
+      height: 6px;
+      background: var(--border);
+      cursor: row-resize;
+      -webkit-app-region: no-drag;
+      transition: background 0.15s ease;
+    }
+
+    .resizer:hover {
+      background: var(--accent);
+    }
+
+    /* ===== Offline / error state ===== */
+    .offline-message {
+      padding: 16px;
+      background: rgba(248, 113, 113, 0.1);
+      border: 1px solid var(--danger);
+      border-radius: 8px;
+      margin: 12px 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .offline-message .danger {
+      color: var(--danger);
+      font-weight: 600;
+    }
+
+    .offline-message code {
+      background: #0a1020;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-size: 12px;
+      color: var(--accent-hover);
+      word-break: break-all;
+    }
+
+    .retry-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 8px 20px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      margin-top: 8px;
+    }
+
+    .retry-btn:hover {
+      background: var(--accent-hover);
+    }
+
+    .retry-btn:disabled {
+      opacity: 0.6;
+      cursor: wait;
+    }
+
+    .status-blink {
+      animation: blink 1.2s infinite;
+    }
+
+    @keyframes blink {
+      0%, 50% { opacity: 1; }
+      51%, 100% { opacity: 0.3; }
+    }
+
+    /* Hide scrollbar for iframe */
+    iframe::-webkit-scrollbar {
+      display: none;
+    }
   </style>
 </head>
 <body>
-  <div class="card">
-    <h1>SpyTV <span class="accent">C2</span></h1>
-    <p>Connecting to the local dashboard at <code>127.0.0.1:8443</code>…</p>
-    <footer>&copy; Authenticated, Inc.</footer>
+  <!-- ===== Custom title bar ===== -->
+  <div class="title-bar">
+    <div class="title-left">
+      <span class="dot" id="statusDot"></span>
+      <span>SpyTV C2</span>
+      <span class="status-text" id="statusText" style="font-size:12px;color:var(--muted);">Starting server…</span>
+    </div>
+    <div class="title-right">
+      <button class="window-btn" id="min-btn" title="Minimize (Ctrl+Shift+M)">
+        <span>—</span>
+      </button>
+      <button class="window-btn" id="max-btn" title="Maximize (Ctrl+Shift+X)">
+        <span>□</span>
+      </button>
+      <button class="window-btn close" id="close-btn" title="Close (Ctrl+W)">
+        <span>×</span>
+      </button>
+    </div>
   </div>
+
+  <!-- ===== Main container ===== -->
+  <div class="app-container">
+    <!-- Dashboard iframe -->
+    <div class="dashboard-wrapper">
+      <iframe id="dashboard-frame" src="" frameborder="0"></iframe>
+
+      <!-- Loading overlay -->
+      <div class="loading-overlay" id="loading-overlay">
+        <div class="spinner"></div>
+        <div class="loading-text">Starting <span class="accent">C2 server</span>… please wait</div>
+      </div>
+
+      <!-- Offline message (shown when server fails) -->
+      <div class="offline-message" id="offline-msg" style="display:none;">
+        <div><span class="danger">⚠</span> The C2 server is not reachable.</div>
+        <div style="margin-top:6px;">The server may still be starting up, or it failed to launch.</div>
+        <code>Check the terminal panel below for error details.</code>
+        <div>
+          <button class="retry-btn" id="retry-btn">Retry connection</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Terminal panel toggle bar -->
+    <div class="terminal-bar" id="terminal-bar">
+      <div class="left" id="terminal-bar-left">
+        <span class="icon-toggle">▼</span>
+        <span>Console</span>
+      </div>
+      <div class="right">
+        <button class="btn" id="clear-btn" title="Clear console output">⌫</button>
+        <button class="btn" id="restart-btn" title="Restart C2 server">↻</button>
+      </div>
+    </div>
+
+    <!-- Terminal panel -->
+    <div class="resizer" id="resizer"></div>
+    <div class="terminal-panel" id="terminal-panel">
+      <div class="terminal-output" id="terminal-output"></div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      // --- Cache DOM ---
+      const frame        = document.getElementById('dashboard-frame');
+      const loadingEl    = document.getElementById('loading-overlay');
+      const offlineEl    = document.getElementById('offline-msg');
+      const retryBtn     = document.getElementById('retry-btn');
+      const statusDot    = document.getElementById('statusDot');
+      const statusText   = document.getElementById('statusText');
+
+      const terminalBar  = document.getElementById('terminal-bar');
+      const terminalPanel = document.getElementById('terminal-panel');
+      const terminalOut  = document.getElementById('terminal-output');
+      const clearBtn     = document.getElementById('clear-btn');
+      const restartBtn   = document.getElementById('restart-btn');
+      const resizer      = document.getElementById('resizer');
+      const terminalLeft = document.getElementById('terminal-bar-left');
+
+      const minBtn       = document.getElementById('min-btn');
+      const maxBtn       = document.getElementById('max-btn');
+      const closeBtn     = document.getElementById('close-btn');
+
+      let terminalCollapsed = false;
+      let terminalHeight = 180;
+
+      // --- Append a line to the terminal output ---
+      function appendTerminal(text) {
+        const line = document.createElement('div');
+        line.className = 'line';
+
+        const time = document.createElement('span');
+        time.className = 'time';
+        const now = new Date();
+        time.textContent = `[${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}]`;
+
+        // Classify line content for coloring
+        const lower = text.toLowerCase();
+        let cls = 'line';
+        if (lower.startsWith('[error]') || lower.startsWith('error:') || lower.includes('traceback')) {
+          cls += ' error';
+        } else if (lower.includes('success') || lower.includes('started') || lower.includes('listening')) {
+          cls += ' success';
+        } else if (lower.includes('warn') || lower.includes('warning') || lower.includes('deprecated')) {
+          cls += ' warn';
+        } else if (lower.includes('info') || lower.includes('[cve]') || lower.includes('[ai]')) {
+          cls += ' info';
+        } else if (lower.includes('debug') || lower.includes('trace')) {
+          cls += ' debug';
+        }
+        line.className = cls;
+
+        line.appendChild(time);
+        const content = document.createElement('span');
+        content.textContent = text;
+        line.appendChild(content);
+
+        terminalOut.appendChild(line);
+        // Auto-scroll
+        terminalPanel.scrollTop = terminalPanel.scrollHeight;
+      }
+
+      // --- Update server status indicator ---
+      function setStatus(online, message) {
+        statusDot.className = 'dot ' + (online ? 'online' : 'offline');
+        statusText.textContent = message;
+      }
+
+      // --- Window controls ---
+      minBtn?.addEventListener('click', () => window.spytv.windowMinimize());
+      maxBtn?.addEventListener('click', () => window.spytv.windowMaximize());
+      closeBtn?.addEventListener('click', () => window.spytv.windowClose());
+
+      // Update maximize button icon based on state
+      async function updateMaxBtn() {
+        if (!maxBtn) return;
+        const isMax = await window.spytv.isMaximized();
+        maxBtn.innerHTML = isMax ? '❐' : '□';
+        maxBtn.classList.toggle('maximized', isMax);
+      }
+      updateMaxBtn();
+      setInterval(updateMaxBtn, 500);
+
+      // Title bar drag
+      document.querySelector('.title-bar').addEventListener('mousedown', (e) => {
+        if (e.button === 0) {
+          window.spytv.windowStartDrag();
+        }
+      });
+
+      // --- Terminal panel controls ---
+      terminalBar?.addEventListener('click', (e) => {
+        // Only toggle if clicking the bar itself (not buttons)
+        if (e.target.closest('.btn')) return;
+        terminalCollapsed = !terminalCollapsed;
+        terminalPanel.classList.toggle('collapsed', terminalCollapsed);
+        terminalLeft.classList.toggle('expanded', terminalCollapsed);
+      });
+
+      clearBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        terminalOut.innerHTML = '';
+      });
+
+      restartBtn?.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const ok = await window.spytv.restartServer();
+        if (ok) {
+          appendTerminal('[INFO] C2 server restart requested…');
+        }
+      });
+
+      // --- Resizable terminal panel ---
+      let isResizing = false;
+      let startY, startHeight;
+
+      resizer?.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        isResizing = true;
+        startY = e.clientY;
+        startHeight = terminalHeight;
+        terminalPanel.style.height = startHeight + 'px';
+        document.body.style.cursor = 'row-resize';
+      });
+
+      document.addEventListener('mousemove', (e) => {
+        if (!isResizing) return;
+        const delta = startY - e.clientY;
+        terminalHeight = Math.max(60, Math.min(600, startHeight + delta));
+        if (!terminalCollapsed) {
+          terminalPanel.style.height = terminalHeight + 'px';
+        }
+      });
+
+      document.addEventListener('mouseup', () => {
+        if (isResizing) {
+          isResizing = false;
+          document.body.style.cursor = '';
+          // Persist height for next time
+          try { localStorage.setItem('terminalHeight', terminalHeight); } catch(_) {}
+        }
+      });
+
+      // Restore saved height
+      try {
+        const saved = localStorage.getItem('terminalHeight');
+        if (saved) terminalHeight = parseInt(saved, 10);
+      } catch(_) {}
+
+      // --- IPC listeners ---
+      const removeOutput = window.spytv.onServerOutput((text) => {
+        appendTerminal(text);
+      });
+
+      const removeStatus = window.spytv.onServerStatus((status) => {
+        if (status.online) {
+          loadingEl.classList.add('hidden');
+          offlineEl.style.display = 'none';
+          frame.src = 'http://127.0.0.1:8443/';
+          setStatus(true, 'Server online');
+        } else {
+          loadingEl.classList.add('hidden');
+          offlineEl.style.display = 'block';
+          setStatus(false, status.error ? 'Server error' : 'Server offline');
+          if (status.error) {
+            appendTerminal('[ERROR] ' + status.error);
+          }
+        }
+      });
+
+      // --- Retry button ---
+      retryBtn?.addEventListener('click', async () => {
+        retryBtn.disabled = true;
+        retryBtn.innerHTML = '<span>↻</span> Checking…';
+        const ok = await window.spytv.retry();
+        retryBtn.disabled = false;
+        retryBtn.innerHTML = '<span>↻</span> Retry connection';
+      });
+
+      // Prevent text selection in terminal
+      terminalOut.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+      });
+
+      // Clean up on unload
+      window.addEventListener('beforeunload', () => {
+        removeOutput();
+        removeStatus();
+      });
+    })();
+  </script>
 </body>
 </html>

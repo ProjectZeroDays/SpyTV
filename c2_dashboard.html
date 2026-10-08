@@ -51,6 +51,12 @@
     flex-wrap: wrap;
   }
   .header-logo { width: 40px; height: 40px; border-radius: var(--radius-sm); }
+  .header-tv-icon {
+    width: 40px; height: 40px;
+    display: inline-flex; align-items: center; justify-content: center;
+    flex-shrink: 0; color: var(--accent);
+  }
+  .header-tv-icon svg { width: 26px; height: 26px; }
   .header-title h1 { font-size: 18px; font-weight: 700; letter-spacing: -0.025em; }
   .header-title p { font-size: 12px; color: var(--text-muted); }
   .header-nav {
@@ -736,6 +742,14 @@
 <!-- Header -->
 <header class="header">
   <img src="/logo.png" alt="Authenticated, Inc." class="header-logo" onerror="this.style.display='none'">
+  <span class="header-tv-icon" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="currentColor">
+      <rect x="4" y="6" width="16" height="12" rx="2" ry="2"/>
+      <rect x="7" y="3" width="10" height="2" rx="1" ry="1"/>
+      <circle cx="12" cy="10" r="2.2"/>
+      <rect x="9" y="18" width="6" height="2" rx="1" ry="1"/>
+    </svg>
+  </span>
   <div class="header-title">
     <h1>TV Security Assessment Platform</h1>
     <p>Authenticated, Inc.</p>

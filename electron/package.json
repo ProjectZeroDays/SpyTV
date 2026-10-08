@@ -1,6 +1,6 @@
 {
   "name": "spytv-c2",
-  "version": "1.0.7",
+  "version": "1.1.0",
   "description": "SpyTV C2 desktop client — Authenticated, Inc.",
   "main": "main.js",
   "author": "Authenticated, Inc.",
@@ -19,22 +19,44 @@
       "main.js",
       "preload.js",
       "index.html",
-      "offline.html"
+      "offline.html",
+      "icon.png"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "compression": "normal",
+    "npmRebuild": false,
+    "extraResources": [
+      {
+        "from": "..",
+        "to": "../..",
+        "filter": [
+          "c2_server.py",
+          "c2_cve_feed.py",
+          "c2_audit.py",
+          "c2_ops.py",
+          "logo.png",
+          "c2_data/**/*",
+          "core/**/*",
+          "docs/**/*"
+        ]
+      }
     ],
     "win": {
       "target": [
         "portable"
       ],
-      "icon": "icon.png"
+      "icon": "icon.png",
+      "artifactName": "SpyTV-C2-${version}-portable",
+      "publisherName": "Authenticated, Inc."
     },
-    "portable": {
-      "artifactName": "SpyTV-C2-${version}-portable.exe"
+    "darwin": {
+      "target": "dmg",
+      "icon": "icon.png",
+      "category": "public.app-category.utilities"
     },
-    "directories": {
-      "output": "dist"
-    },
-    "compression": "normal",
-    "npmRebuild": false
+    "asar": false
   },
   "allowScripts": {
     "electron@44.5.1": true,

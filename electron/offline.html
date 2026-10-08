@@ -106,10 +106,48 @@
       h1 { font-size: 21px; }
       #retry { width: 100%; }
     }
+
+    /* ===== Native title bar (frameless window) ===== */
+    .title-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 36px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+      -webkit-app-region: drag;
+          app-region: drag;
+      z-index: 100;
+    }
+    .title-left { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+    .title-left .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); box-shadow: 0 0 8px var(--danger); }
+    .title-right { display: flex; align-items: center; gap: 2px; -webkit-app-region: no-drag; }
+    .window-btn { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border: none; background: transparent; color: var(--muted); font-size: 14px; cursor: pointer; transition: all 0.15s ease; }
+    .window-btn:hover { background: var(--border); color: var(--text); }
+    .window-btn:active { transform: scale(0.92); }
+    .window-btn.close:hover { background: var(--danger); color: #fff; }
   </style>
 </head>
 <body>
-  <main>
+  <!-- Native title bar -->
+  <div class="title-bar">
+    <div class="title-left">
+      <span class="dot"></span>
+      <span>SpyTV C2</span>
+    </div>
+    <div class="title-right">
+      <button class="window-btn" id="min-btn" title="Minimize">—</button>
+      <button class="window-btn" id="max-btn" title="Maximize">□</button>
+      <button class="window-btn close" id="close-btn" title="Close">×</button>
+    </div>
+  </div>
+
+  <main style="margin-top: 36px;">
     <div class="logo">SpyTV C2</div>
     <h1>SpyTV C2 server is <span class="status">not running</span></h1>
     <p class="lead">
@@ -119,9 +157,8 @@
 
     <div class="steps">
       <ol>
-        <li>Start the server with <code>run_c2.bat</code> (repo root), or</li>
-        <li>Run <code>python c2_server.py</code> from the repo root.</li>
-        <li>Wait for the dashboard on its default port <code>8443</code>.</li>
+        <li>The Electron app now spawns the C2 server automatically — no separate terminal needed.</li>
+        <li>If the server didn't start, check the console panel in the main app window.</li>
         <li>Click <strong>Retry</strong> below (or just wait — the client re-checks automatically).</li>
       </ol>
     </div>
@@ -135,6 +172,27 @@
 
   <script>
     (function () {
+      // Wire up native title-bar window controls
+      function setupBtn(id, handler) {
+        var btn = document.getElementById(id);
+        if (btn && window.spytv) {
+          btn.addEventListener('click', handler);
+        }
+      }
+      if (window.spytv) {
+        setupBtn('min-btn', () => window.spytv.windowMinimize());
+        setupBtn('max-btn', () => window.spytv.windowMaximize());
+        setupBtn('close-btn', () => window.spytv.windowClose());
+      }
+
+      // Title bar drag-to-move
+      var titleBar = document.querySelector('.title-bar');
+      if (titleBar && window.spytv) {
+        titleBar.addEventListener('mousedown', function (e) {
+          if (e.button === 0) window.spytv.windowStartDrag();
+        });
+      }
+
       var btn = document.getElementById('retry');
       var status = document.getElementById('status');
 

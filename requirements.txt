@@ -1,4 +1,6 @@
 # CR-53 fix: Removed unused dependencies (beautifulsoup4, lxml)
+# python-nmap: required by core/scanner.py for network scanning (CR-54 fix)
+python-nmap>=0.6.1
 colorama>=0.4.6
 pyyaml>=6.0
 requests>=2.32.0

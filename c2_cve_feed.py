@@ -50,9 +50,90 @@ AI_PROVIDERS = {
             "uncensored": os.environ.get(
                 "OPENROUTER_MODEL", "sao10k/l3-70b-euryale-v2.1"
             ),
+            # Free models available on OpenRouter (zero prompt pricing)
+            "nemotron_3_ultra": os.environ.get(
+                "OPENROUTER_MODEL_NEMOTRON_3_ULTRA", "nvidia/nemotron-3-ultra-550b-a55b:free"
+            ),
+            "nemotron_3_5_lightning": os.environ.get(
+                "OPENROUTER_MODEL_NEMOTRON_3_5_LIGHTNING", "nvidia/nemotron-3.5-lightning:free"
+            ),
+            "nemotron_3_super": os.environ.get(
+                "OPENROUTER_MODEL_NEMOTRON_3_SUPER", "nvidia/nemotron-3-super-120b-a12b:free"
+            ),
+            "nemotron_3_nano": os.environ.get(
+                "OPENROUTER_MODEL_NEMOTRON_3_NANO", "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
+            ),
+            "nemotron_3_5_content_safety": os.environ.get(
+                "OPENROUTER_MODEL_NEMOTRON_3_5_CS", "nvidia/nemotron-3.5-content-safety:free"
+            ),
+            "laguna_s_2_1": os.environ.get(
+                "OPENROUTER_MODEL_LAGUNA_S", "poolside/laguna-s-2.1:free"
+            ),
+            "laguna_xs_2_1": os.environ.get(
+                "OPENROUTER_MODEL_LAGUNA_XS", "poolside/laguna-xs-2.1:free"
+            ),
+            "inkling_small": os.environ.get(
+                "OPENROUTER_MODEL_INKING_SMALL", "thinkingmachines/inkling-small:free"
+            ),
+            "inkling": os.environ.get(
+                "OPENROUTER_MODEL_INKING", "thinkingmachines/inkling:free"
+            ),
+            "dots3_note_preview": os.environ.get(
+                "OPENROUTER_MODEL_DOTS3", "dots-studio/dots-3-note-preview:free"
+            ),
+            "ling_3_0_flash_sante": os.environ.get(
+                "OPENROUTER_MODEL_LING_3_0", "inclusionai/ling-3.0-flash-sante:free"
+            ),
+            "ling_3_1_flash": os.environ.get(
+                "OPENROUTER_MODEL_LING_3_1", "inclusionai/ling-3.1-flash"
+            ),
+            "gemma_4_26b": os.environ.get(
+                "OPENROUTER_MODEL_GEMMA_4_26B", "google/gemma-4-26b-a4b-it:free"
+            ),
+            "gemma_4_31b": os.environ.get(
+                "OPENROUTER_MODEL_GEMMA_4_31B", "google/gemma-4-31b-it:free"
+            ),
+            "lyria_3_pro_preview": os.environ.get(
+                "OPENROUTER_MODEL_LYRIA_3_PRO", "google/lyria-3-pro-preview"
+            ),
+            "lyria_3_clip_preview": os.environ.get(
+                "OPENROUTER_MODEL_LYRIA_3_CLIP", "google/lyria-3-clip-preview"
+            ),
+            "lfm_2_5_2_6b": os.environ.get(
+                "OPENROUTER_MODEL_LFM_2_5", "liquid/lfm-2.5-2.6b:free"
+            ),
+            "north_mini_code": os.environ.get(
+                "OPENROUTER_MODEL_NORTH_MINI", "cohere/north-mini-code:free"
+            ),
+            "apodex_1_1_mini": os.environ.get(
+                "OPENROUTER_MODEL_APEDEX", "apodex/apodex-1.1-mini:free"
+            ),
+            "openrouter_free_router": os.environ.get(
+                "OPENROUTER_MODEL_FREE_ROUTER", "openrouter/free"
+            ),
         },
         "model_labels": {
             "uncensored": "Uncensored",
+            "nemotron_3_ultra": "Nemotron 3 Ultra 550B (free)",
+            "nemotron_3_5_lightning": "Nemotron 3.5 Lightning (free)",
+            "nemotron_3_super": "Nemotron 3 Super 120B (free)",
+            "nemotron_3_nano": "Nemotron 3 Nano Omni 30B (free)",
+            "nemotron_3_5_content_safety": "Nemotron 3.5 Content Safety (free)",
+            "laguna_s_2_1": "Laguna S 2.1 (free)",
+            "laguna_xs_2_1": "Laguna XS 2.1 (free)",
+            "inkling_small": "Inkling Small (free)",
+            "inkling": "Inkling (free)",
+            "dots3_note_preview": "Dots3-Note Preview (free)",
+            "ling_3_0_flash_sante": "Ling 3.0 Flash Sante (free)",
+            "ling_3_1_flash": "Ling 3.1 Flash (free)",
+            "gemma_4_26b": "Gemma 4 26B (free)",
+            "gemma_4_31b": "Gemma 4 31B (free)",
+            "lyria_3_pro_preview": "Lyria 3 Pro Preview (free)",
+            "lyria_3_clip_preview": "Lyria 3 Clip Preview (free)",
+            "lfm_2_5_2_6b": "LFM2.5 2.6B (free)",
+            "north_mini_code": "North Mini Code (free)",
+            "apodex_1_1_mini": "Apodex 1.1 Mini (free)",
+            "openrouter_free_router": "Auto Router (free)",
         },
         "default_model": "uncensored",
     },
