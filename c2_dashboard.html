@@ -51,12 +51,14 @@
     flex-wrap: wrap;
   }
   .header-logo { width: 40px; height: 40px; border-radius: var(--radius-sm); }
-  .header-tv-icon {
-    width: 40px; height: 40px;
+  .header-app-icon {
+    width: 40px; height: 40px; flex-shrink: 0;
     display: inline-flex; align-items: center; justify-content: center;
-    flex-shrink: 0; color: var(--accent);
+    border-radius: 11px; color: #fff;
+    background: linear-gradient(135deg, var(--accent), #155E75);
+    box-shadow: 0 2px 10px rgba(15, 118, 110, 0.45);
   }
-  .header-tv-icon svg { width: 26px; height: 26px; }
+  .header-app-icon svg { width: 24px; height: 24px; }
   .header-title h1 { font-size: 18px; font-weight: 700; letter-spacing: -0.025em; }
   .header-title p { font-size: 12px; color: var(--text-muted); }
   .header-nav {
@@ -742,12 +744,10 @@
 <!-- Header -->
 <header class="header">
   <img src="/logo.png" alt="Authenticated, Inc." class="header-logo" onerror="this.style.display='none'">
-  <span class="header-tv-icon" aria-hidden="true">
-    <svg viewBox="0 0 24 24" fill="currentColor">
-      <rect x="4" y="6" width="16" height="12" rx="2" ry="2"/>
-      <rect x="7" y="3" width="10" height="2" rx="1" ry="1"/>
-      <circle cx="12" cy="10" r="2.2"/>
-      <rect x="9" y="18" width="6" height="2" rx="1" ry="1"/>
+  <span class="header-app-icon" role="img" aria-label="SpyTV app icon">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
+      <polyline points="17 2 12 7 7 2"/>
     </svg>
   </span>
   <div class="header-title">
