@@ -766,6 +766,7 @@
   <div class="nav-item" role="tab" tabindex="0" aria-selected="false" onclick="switchTab('payload')">Payload Generator</div>
   <div class="nav-item" role="tab" tabindex="0" aria-selected="false" onclick="switchTab('cve')">CVE Monitor</div>
   <div class="nav-item" role="tab" tabindex="0" aria-selected="false" onclick="switchTab('server')">Server Info</div>
+  <div class="nav-item" role="tab" tabindex="0" aria-selected="false" onclick="switchTab('exploits')">Exploits</div>
 </nav>
 
 <!-- Engagement status banner (Audit / Patch-all) -->
@@ -951,12 +952,11 @@
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label">Venice Model</label>
-            <select id="venice-model" class="form-select">
-              <option value="uncensored_v1_2">Uncensored V 1.2</option>
-              <option value="qwen_3_6_plus_uncensored">Qwen 3.6 Plus Uncensored</option>
-              <option value="glm_4_7_flash_heretic">GLM 4.7 Flash Heretic</option>
+            <label class="form-label">AI Provider & Model</label>
+            <select id="provider-model" class="form-select">
+              <option value="">Auto-select first configured</option>
             </select>
+            <small style="color:var(--text-muted);font-size:11px;display:block;margin-top:4px">All available providers and their models are listed here. Select one to use for exploit generation.</small>
           </div>
           <div class="form-group" style="flex:0">
             <button class="btn btn-primary" onclick="saveAiKeys()" data-tooltip="Save keys to c2_data/ai_keys.json">Save Keys</button>
@@ -965,6 +965,27 @@
             <button class="btn btn-success" onclick="testAiGeneration()" data-tooltip="Generate an exploit for the newest feed CVE as a test">&#9889; Test Generate</button>
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Exploits Dashboard Tab -->
+  <div id="tab-exploits" class="tab-content">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Exploits Dashboard</span>
+        <div class="help-icon">?
+          <div class="tooltip">Lists all generated exploit modules on this C2 with their CVE, TV type, severity, and historical success rate (based on past run results). Use "Generate Exploit" on a CVE in the feed to create one, then refresh here.</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="alert alert-info">
+          &#8505;&#65039; Generated exploits stored in <code>data/exploits/generated/</code>.
+        </div>
+        <div style="margin-bottom:16px">
+          <button class="btn btn-primary" onclick="loadExploits()" data-tooltip="Refresh the exploits list">Refresh</button>
+        </div>
+        <div id="exploits-results"></div>
       </div>
     </div>
   </div>
@@ -982,6 +1003,8 @@
         <div class="server-info" id="server-info">
           <div class="info-item"><span class="label">IPv4</span><span class="value" id="srv-ipv4">—</span></div>
           <div class="info-item"><span class="label">IPv6</span><span class="value" id="srv-ipv6">—</span></div>
+          <div class="info-item"><span class="label">Gateway IPv4</span><span class="value" id="srv-gateway">—</span></div>
+          <div class="info-item"><span class="label">Subnet Mask</span><span class="value" id="srv-subnet">—</span></div>
           <div class="info-item"><span class="label">MAC address</span><span class="value" id="srv-mac">—</span></div>
           <div class="info-item"><span class="label">Hostname</span><span class="value" id="srv-hostname">—</span></div>
           <div class="info-item"><span class="label">Operating system</span><span class="value" id="srv-os">—</span></div>
@@ -1021,7 +1044,8 @@
 <!-- CVE Feed (right sidebar) -->
 <aside class="feed-panel" id="feed-panel">
   <div class="card-header">
-    <span class="card-title">CVE Feed</span>
+    <span class="card-title">New CVE Feed</span>
+    <button class="btn btn-sm btn-primary" onclick="updateCVEsFromFeed()" data-tooltip="Fetch new CVEs from NVD and update the feed">Update</button>
     <div class="help-icon">?
       <div class="tooltip">Live feed of smart TV CVEs. Refreshed automatically every time the C2 starts and via the "Update CVEs" button on the CVE Monitor tab. New entries are logged to CVE_UPDATES.log in the repository root. Each entry links to its NVD advisory and whitepaper, and has "View Whitepaper" / "View Vulnerability Info" buttons that render into the Output panel. With an AI provider key configured, each new CVE gets a full artifact set: exploit module, whitepaper, a pytest test that must pass, a detection-signature proposal and a patch-check proposal.</div>
     </div>
@@ -2027,6 +2051,12 @@ function renderFeed() {
           title="Render this CVE's whitepaper in the Output panel">View Whitepaper</button>
         <button class="btn" onclick="viewVulnInfo('${c.id}')"
           title="Render vulnerability details in the Output panel">View Vulnerability Info</button>
+        ${c.exploit_generated ? '<span class="cve-chip" style="font-size:9px;background:rgba(255,255,255,0.1);font-size:9px">&#9889; Exploit ready</span>' : '<span class="cve-chip" style="font-size:9px;background:rgba(255,150,0,0.1);color:var(--warning);border-color:rgba(245,158,11,.4)">No exploit</span>'}
+        ${c.patch_check_generated ? '<span class="cve-chip" style="font-size:9px;background:rgba(0,200,160,0.1);color:var(--success);border-color:rgba(16,185,129,.4)">Patch ready</span>' : '<span class="cve-chip" style="font-size:9px;background:rgba(245,158,11,0.1);color:var(--warning);border-color:rgba(245,158,11,.4)">No patch</span>'}
+      </div>
+      <div class="feed-item-actions" style="margin-top:6px">
+        ${!c.exploit_generated ? `<button class="btn btn-sm btn-success" onclick="generateExploitForCVE('${c.id}')" data-tooltip="Generate an exploit module for this CVE">Generate Exploit</button>` : `<button class="btn btn-sm" onclick="generateExploitForCVE('${c.id}')" data-tooltip="Regenerate exploit for this CVE">Regenerate Exploit</button>`}
+        ${!c.patch_check_generated ? `<button class="btn btn-sm btn-warning" onclick="generatePatchForCVE('${c.id}')" data-tooltip="Generate a patch/remediation for this CVE">Add Patch</button>` : `<button class="btn btn-sm" onclick="generatePatchForCVE('${c.id}')" data-tooltip="Regenerate patch for this CVE">Regenerate Patch</button>`}
       </div>
     </div>
   `).join('');
@@ -2208,6 +2238,7 @@ async function saveAiKeys() {
   });
   addLog(`AI keys saved for: ${Object.keys(keys).join(', ')}`);
   await loadAiKeys();
+  await loadProviderModels();
   if (feedData) await loadFeed(true);
 }
 
@@ -2217,13 +2248,20 @@ async function testAiGeneration() {
     return;
   }
   const target = feedData.cves[0];
-  const model = (document.getElementById('venice-model') || {}).value || null;
+  // Use the provider-model dropdown if available
+  const sel = document.getElementById('provider-model');
+  let provider = null, model = null;
+  if (sel && sel.value) {
+    const parts = sel.value.split('|');
+    provider = parts[0];
+    model = parts[1];
+  }
   addLog(`Test-generating exploit for ${target.id}...`);
   try {
     const res = await api('/api/cve/generate', 'POST', {
       cve_id: target.id,
-      provider: null,
-      model: (aiStatus.venice && aiStatus.venice.configured) ? model : null,
+      provider: provider || null,
+      model: model || null,
     });
     if (res.error) { addLog(`Generation failed: ${res.error}`); return; }
     addLog(`Exploit generated for ${target.id} (${res.provider}) — saved to data/exploits/generated/${target.id}.py`);
@@ -2236,6 +2274,167 @@ async function testAiGeneration() {
   }
 }
 
+// Load AI provider list and populate the provider-model dropdown
+async function loadProviderModels() {
+  const sel = document.getElementById('provider-model');
+  if (!sel) return;
+  try {
+    const data = await api('/api/providers');
+    if (!data || typeof data !== 'object') return;
+    sel.innerHTML = '<option value="">Auto-select first configured</option>';
+    Object.entries(data).forEach(([pid, prov]) => {
+      const group = document.createElement('optgroup');
+      group.label = prov.name;
+      prov.models.forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = pid + '|' + m.id;
+        opt.textContent = m.label + (prov.configured ? ' ✓' : ' (not configured)');
+        group.appendChild(opt);
+      });
+      sel.appendChild(group);
+    });
+  } catch (e) { /* non-fatal */ }
+}
+
+// Generate exploit for a specific CVE from the feed
+async function generateExploitForCVE(cveId) {
+  const sel = document.getElementById('provider-model');
+  let provider = null, model = null;
+  if (sel && sel.value) {
+    const parts = sel.value.split('|');
+    provider = parts[0];
+    model = parts[1];
+  }
+  addLog(`Generating exploit for ${cveId}...`);
+  try {
+    const res = await api('/api/cve/generate', 'POST', {
+      cve_id: cveId,
+      provider: provider || null,
+      model: model || null,
+    });
+    if (res.error) {
+      addLog(`Exploit generation failed for ${cveId}: ${res.error}`);
+      alert('Exploit generation failed: ' + res.error);
+      return;
+    }
+    addLog(`Exploit generated for ${cveId} (${res.provider})`);
+    // Reload feed and provider models to reflect updated status
+    await loadFeed(true);
+    await loadProviderModels();
+  } catch (e) {
+    addLog(`Exploit generation error for ${cveId}: ${e}`);
+    alert('Generation error: ' + (e.message || e));
+  }
+}
+
+// Generate patch for a CVE from the feed
+async function generatePatchForCVE(cveId) {
+  const sel = document.getElementById('provider-model');
+  let provider = null, model = null;
+  if (sel && sel.value) {
+    const parts = sel.value.split('|');
+    provider = parts[0];
+    model = parts[1];
+  }
+  addLog(`Generating patch for ${cveId}...`);
+  try {
+    const res = await api('/api/cve/patch/generate', 'POST', {
+      cve_id: cveId,
+      provider: provider || null,
+      model: model || null,
+    });
+    if (res.error) {
+      addLog(`Patch generation failed for ${cveId}: ${res.error}`);
+      alert('Patch generation failed: ' + res.error);
+      return;
+    }
+    addLog(`Patch generated for ${cveId} (${res.provider})`);
+    document.getElementById('payload-text').textContent = res.code;
+    document.querySelector('#payload-modal .modal-title').textContent = `Generated Patch — ${cveId}`;
+    document.getElementById('payload-modal').classList.add('active');
+    await loadFeed(true);
+  } catch (e) {
+    addLog(`Patch generation error for ${cveId}: ${e}`);
+    alert('Generation error: ' + (e.message || e));
+  }
+}
+
+// Load and render the exploits dashboard
+async function loadExploits() {
+  const el = document.getElementById('exploits-results');
+  if (!el) return;
+  el.innerHTML = '<p style="color:var(--text-muted);font-size:13px;padding:16px 0">Loading exploits...</p>';
+  try {
+    const exploits = await api('/api/exploits');
+    if (!Array.isArray(exploits) || exploits.length === 0) {
+      el.innerHTML = '<p style="color:var(--text-muted);font-size:13px;padding:16px 0">No generated exploits yet. Use "Generate Exploit" on a CVE in the feed to create one.</p>';
+      return;
+    }
+    el.innerHTML = `
+      <div class="table-scroll">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>CVE ID</th>
+            <th>Device</th>
+            <th>Severity</th>
+            <th>Success Rate</th>
+            <th>Attempts</th>
+            <th>File</th>
+            <th>Last Run</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${exploits.map(e => {
+            const rate = e.success_rate || 0;
+            const color = rate >= 75 ? 'var(--success)' : rate >= 50 ? 'var(--accent)' : 'var(--warning)';
+            return `
+            <tr>
+              <td><a class="mono" href="https://nvd.nist.gov/vuln/detail/${e.cve_id}" target="_blank" style="color:var(--accent);text-decoration:none">${e.cve_id} &#8599;</a></td>
+              <td>${e.device_name || 'Unknown'}</td>
+              <td><span class="badge ${e.severity === 'CRITICAL' ? 'badge-danger' : e.severity === 'HIGH' ? 'badge-warning' : 'badge-success'}">${e.severity || 'UNKNOWN'}</span></td>
+              <td style="color:${color};font-weight:600">${rate}%</td>
+              <td>${e.attempts || 0}</td>
+              <td class="mono" style="font-size:11px">${e.file || '—'}</td>
+              <td style="color:var(--text-secondary);font-size:11px">${e.last_run || '—'}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+      </div>
+    `;
+  } catch (e) {
+    el.innerHTML = '<div class="alert alert-warning">Failed to load exploits: ' + (e.message || e) + '</div>';
+  }
+}
+
+// Update CVEs from the feed sidebar
+async function updateCVEsFromFeed() {
+  addLog('Updating CVE feed from NVD...');
+  const result = await api('/api/cve/update', 'POST', {});
+  addLog('CVE feed update started: ' + (result.status || 'in progress'));
+  // Poll the feed
+  let tries = 0;
+  const timer = setInterval(async () => {
+    tries++;
+    const done = await loadFeed(true);
+    if (!done || done.updating === false || tries > 40) {
+      clearInterval(timer);
+      await loadCVEs();
+      const msg = (feedData && feedData.last_result) || 'Update finished';
+      addLog('CVE update: ' + msg);
+    }
+  }, 3000);
+}
+
+const _origSwitchTab = switchTab;
+switchTab = function(tab) {
+  if (tab === 'exploits') {
+    loadExploits();
+  }
+  return _origSwitchTab(tab);
+};
+
 // Server Info — real host facts from /api/host_info (nothing simulated)
 async function loadServerInfo() {
   try {
@@ -2247,6 +2446,8 @@ async function loadServerInfo() {
     };
     set('srv-ipv4', info.local_ip);
     set('srv-ipv6', info.ipv6);
+    set('srv-gateway', info.gateway_ip);
+    set('srv-subnet', info.subnet_mask);
     set('srv-mac', info.mac);
     set('srv-hostname', info.hostname);
     set('srv-os', info.os);
@@ -2665,6 +2866,7 @@ async function poll() {
   await loadCveDb();
   await loadFeed(true);
   await loadAiKeys();
+  await loadProviderModels();
   await loadCVEs();
   restoreEngagement();          // re-attach to a running/past engagement
   // Refresh the feed every 60s to pick up startup/other-client updates.

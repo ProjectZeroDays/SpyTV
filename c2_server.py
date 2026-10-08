@@ -16,13 +16,15 @@ import subprocess
 import sys
 import platform
 import uuid
+import ipaddress
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 from core.cve_scanner import CVEScanner, TV_CVE_DATABASE
 from c2_cve_feed import (
     update_cve_database, get_feed, get_all_cves, load_ai_keys, save_ai_keys,
     generate_exploit_for_cve, ai_key_status, render_cve_whitepaper, AI_PROVIDERS,
-    artifact_status, get_whitepaper_markdown,
+    artifact_status, get_whitepaper_markdown, first_configured_provider,
+    generate_patch_for_cve,
 )
 import c2_audit
 from c2_audit import (AuditEngagement, PatchEngagement, validate_client,
@@ -194,6 +196,105 @@ def get_local_ip():
         return ip
     except Exception:
         return "127.0.0.1"
+
+
+def get_gateway_and_subnet():
+    """Detect the default gateway IPv4 and subnet mask.
+
+    Works on Windows, Linux and macOS. Returns (gateway, subnet_mask) or
+    ('—', '—'). Subnet mask is always returned in dotted notation (e.g.
+    255.255.255.0).
+    """
+    try:
+        system = platform.system().lower()
+        if system == "windows":
+            out = subprocess.check_output("route print", shell=True,
+                                          text=True, timeout=10)
+            for line in out.splitlines():
+                parts = line.split()
+                # Default route: 0.0.0.0  0.0.0.0  <gateway>  <if_ip>  <metric>
+                if len(parts) >= 5 and parts[0] == "0.0.0.0" and parts[1] == "0.0.0.0":
+                    gateway = parts[2]
+                    iface_ip = parts[3]
+                    mask = _windows_subnet_mask(iface_ip)
+                    if mask:
+                        return gateway, mask
+                    return gateway, "255.255.255.0"
+        else:
+            # Linux / macOS
+            try:
+                out = subprocess.check_output(["ip", "route"], text=True,
+                                              timeout=10)
+                for line in out.splitlines():
+                    if "default" in line:
+                        parts = line.split()
+                        gateway = parts[2] if len(parts) > 2 else None
+                        if gateway:
+                            mask = _linux_subnet_mask()
+                            return gateway, (mask or "255.255.255.0")
+            except (FileNotFoundError, subprocess.CalledProcessError):
+                pass
+            out = subprocess.check_output(["netstat", "-rn"],
+                                          text=True, timeout=10)
+            for line in out.splitlines():
+                if line.startswith("default"):
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        return parts[1], "255.255.255.0"
+    except Exception:
+        pass
+    return "—", "—"
+
+
+def _windows_subnet_mask(iface_ip: str) -> str | None:
+    """Look up the subnet mask for an interface from ipconfig output."""
+    try:
+        out = subprocess.check_output("ipconfig", shell=True,
+                                      text=True, timeout=10)
+        out_lines = out.splitlines()
+        for i, line in enumerate(out_lines):
+            if iface_ip in line:
+                for j in range(i + 1, min(i + 6, len(out_lines))):
+                    m = out_lines[j].strip()
+                    if "Subnet Mask" in m:
+                        parts = m.split(":", 1)
+                        if len(parts) == 2:
+                            mask = parts[1].strip()
+                            if mask:
+                                return mask
+    except Exception:
+        pass
+    return None
+
+
+def _linux_subnet_mask() -> str | None:
+    """Look up the subnet mask for the default interface on Linux."""
+    try:
+        import re
+        out = subprocess.check_output(["ip", "addr"],
+                                      text=True, timeout=10)
+        for line in out.splitlines():
+            m = re.search(r"inet \d+\.\d+\.\d+\.\d+/(\d+)", line)
+            if m:
+                prefix = int(m.group(1))
+                return _int_to_netmask(prefix)
+    except Exception:
+        pass
+    return None
+
+
+def _int_to_netmask(prefix: int) -> str:
+    """Convert a CIDR prefix (24) to dotted netmask (255.255.255.0)."""
+    return str(ipaddress.IPv4Network(f"0.0.0.0/{prefix}").netmask)
+
+
+def _provider_configured_safe(pid: str, keys: dict) -> bool:
+    """Safe version of _provider_configured for server context."""
+    from c2_cve_feed import _provider_configured
+    try:
+        return _provider_configured(pid, keys)
+    except Exception:
+        return False
 
 
 def load_devices():
@@ -415,6 +516,10 @@ class C2Handler(BaseHTTPRequestHandler):
             self.serve_host_info()
         elif path == "/api/ai-keys":
             self.serve_ai_keys_status()
+        elif path == "/api/providers":
+            self.serve_ai_providers()
+        elif path == "/api/exploits":
+            self.serve_exploits_list()
         elif path.startswith("/docs/"):
             self.serve_doc(path)
         elif path == "/logo.png":
@@ -444,6 +549,8 @@ class C2Handler(BaseHTTPRequestHandler):
             self.serve_cve_patch()
         elif path == "/api/cve/generate":
             self.serve_cve_generate()
+        elif path == "/api/cve/patch/generate":
+            self.serve_cve_patch_generate()
         elif path == "/api/ai-keys":
             self.serve_ai_keys_save()
         elif path == "/api/check":
@@ -624,6 +731,57 @@ class C2Handler(BaseHTTPRequestHandler):
         """Masked AI provider key status for the dashboard."""
         try:
             self.send_json(200, ai_key_status())
+        except Exception as e:
+            self.send_json(500, {"error": str(e)})
+
+    def serve_ai_providers(self):
+        """GET /api/providers — full provider/model listing for the dashboard dropdown."""
+        try:
+            from c2_cve_feed import AI_PROVIDERS, load_ai_keys
+            keys = load_ai_keys()
+            result = {}
+            for pid, prov in AI_PROVIDERS.items():
+                configured = _provider_configured_safe(pid, keys)
+                result[pid] = {
+                    "name": prov["name"],
+                    "configured": configured,
+                    "default_model": prov.get("default_model"),
+                    "models": [
+                        {"id": mid, "label": prov["model_labels"].get(mid, mid)}
+                        for mid in prov.get("models", {})
+                    ],
+                }
+            self.send_json(200, result)
+        except Exception as e:
+            self.send_json(500, {"error": str(e)})
+
+    def serve_exploits_list(self):
+        """GET /api/exploits — list all generated exploits with success rate."""
+        try:
+            from c2_cve_feed import list_exploits
+            self.send_json(200, list_exploits())
+        except Exception as e:
+            self.send_json(500, {"error": str(e)})
+
+    def serve_cve_patch_generate(self):
+        """POST /api/cve/patch/generate — generate a patch for a CVE via AI."""
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(length)
+            data = json.loads(body)
+            cve_id = data.get('cve_id', '')
+            provider = data.get('provider') or None
+            model = data.get('model') or None
+
+            code, error = generate_patch_for_cve(cve_id, provider, model)
+            if error:
+                self.send_json(400, {"error": error})
+            else:
+                self.send_json(200, {
+                    "cve_id": cve_id, "code": code,
+                    "provider": provider or "auto",
+                    "model": model or "default",
+                })
         except Exception as e:
             self.send_json(500, {"error": str(e)})
 
@@ -1375,10 +1533,13 @@ class C2Handler(BaseHTTPRequestHandler):
                 ipv6 = None
             mac = ":".join(f"{b:02x}" for b in
                            uuid.UUID(int=uuid.getnode()).bytes[-6:])
+            gateway, subnet_mask = get_gateway_and_subnet()
             self.send_json(200, {
                 "hostname": hostname,
                 "local_ip": get_local_ip(),
                 "ipv6": ipv6 or "—",
+                "gateway_ip": gateway,
+                "subnet_mask": subnet_mask,
                 "mac": mac,
                 "os": f"{platform.system()} {platform.release()} {platform.version()}".strip(),
                 "python": platform.python_version(),

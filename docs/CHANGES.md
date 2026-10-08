@@ -1,5 +1,74 @@
 # SpyTV Code Changes Log
 
+## [2026-10-07] — Dashboard Enhancements, Network Info, Exploits Tab (v1.1.0)
+
+### Dashboard Enhancements
+
+- **CVE Feed renamed to "New CVE Feed"** with a refreshable "Update" button that
+  polls NVD and reloads the feed in-place
+- **Network information** added to the C2 Server Info tab: Gateway IPv4 and
+  Subnet Mask fields (alongside existing IPv4, IPv6, MAC, hostname, OS, Python,
+  port, uptime)
+- **Provider/Model dropdown** replaces the hardcoded Venice model selector —
+  auto-populated from `/api/providers` with all configured providers and their
+  models; "Auto-select first configured" default
+- **Generate Exploit / Add Patch buttons** on each CVE feed item, with status
+  badges showing "Exploit ready" / "No exploit" and "Patch ready" / "No patch"
+- **Exploits dashboard tab** — lists all generated exploit modules with CVE, TV
+  device type, severity, success rate, attempts, file path, and last run time
+- **Fixed test generation** — `testAiGeneration()` now reads the provider/model
+  dropdown, sends `provider` and `model` from the selection (or null for
+  auto-select), and validates the model belongs to the chosen provider before
+  sending the request (prevents HTTP 400 from upstream API)
+- **Generate Patch for CVE** — calls `POST /api/cve/patch/generate` and renders
+  the result in the payload modal
+
+### C2 Server (`c2_server.py`)
+
+- `get_gateway_and_subnet()` rewritten: returns dotted subnet mask (e.g.
+  `255.255.255.0`) consistently across platforms; uses `ipconfig` on Windows
+  for accurate subnet-mask lookup (route table only gives the interface IP)
+- `/api/host_info` now returns `gateway_ip` and `subnet_mask` fields
+- `/api/providers` endpoint returns full provider/model listing with
+  `configured` flags
+- `/api/exploits` endpoint lists all generated exploits with success rates
+- `/api/cve/generate` validates `provider` → `model` mapping before forwarding;
+  falls back to the provider's default model when the requested model doesn't
+  belong to it
+- `/api/cve/patch/generate` — new endpoint for generating remediation patches
+- `first_configured_provider()` auto-selects the first provider with a saved key
+
+### C2 CVE Feed (`c2_cve_feed.py`)
+
+- `generate_patch_for_cve()` — generates a remediation patch/markdown for a CVE
+- `list_exploits()` — enumerates all generated exploit modules with metadata
+- `generate_exploit_for_cve()` now validates model belongs to selected provider
+  (fixes the HTTP 400 "Bad Request" error from mismatched provider/model combos)
+- `artifact_status()` returns per-CVE flags: `whitepaper_generated`,
+  `exploit_generated`, `tests_generated`, `signature_generated`,
+  `patch_check_generated`
+
+### Android APK (`C2Server.kt`)
+
+- `/api/host_info` includes `gateway_ip` and `subnet_mask` (via WifiManager
+  DHCP info)
+- `/api/providers` and `/api/exploits` endpoints added
+- Fixed `intToInetAddress` unresolved reference — replaced with manual
+  `intToIpString()` conversion (no Android framework dependency)
+- Fixed `ipMask` → `netmask` field name (correct `DhcpInfo` field)
+
+### Security
+
+- `urllib3>=2.8.0`, `requests>=2.32.0` in `requirements.txt` (audit clean)
+- `.pytest_cache/` and `.mypy_cache/` added to `.gitignore`
+- No hardcoded credentials or embedded tokens in the repo
+
+### Build
+
+- `file_structure.txt` regenerated from current tree
+- APK and EXE rebuilt with updated dashboard + server code
+- `SHA256SUMS.txt` updated with new asset checksums
+
 ## [2026-10-07] — Default to Self-Hosted C2 + Mode Selection (v1.0.9)
 
 ### Self-Hosted C2 is now the default on all platforms

@@ -375,12 +375,160 @@ Output ONLY raw Python source, no markdown fences, no commentary."""
 
 def generate_exploit_for_cve(cve_id: str, provider: str | None = None,
                              model: str | None = None):
-    """Generate + save an exploit for a CVE already in the state database."""
+    """Generate + save an exploit for a CVE already in the state database.
+
+    Provider/model resolution: when ``provider`` is falsy, the first
+    *configured* provider is auto-selected so the dashboard can send
+    ``provider=None`` and still get a result. ``model`` is only honoured
+    when it belongs to the resolved provider — a Venice model name sent
+    for the OpenRouter provider is silently dropped to the provider default,
+    which is what caused the original 400 "Bad Request" from the upstream API.
+    """
     state = load_state()
     cve = state.get("known_cves", {}).get(cve_id)
     if not cve:
         return None, "CVE not found in database"
+    # If provider is not explicitly chosen, auto-select first configured.
+    if not provider:
+        keys = load_ai_keys()
+        provider = first_configured_provider(keys)
+    # Validate model belongs to the chosen provider; fall back to default.
+    if provider and provider in AI_PROVIDERS:
+        prov = AI_PROVIDERS[provider]
+        if model and model not in prov.get("models", {}):
+            model = prov.get("default_model")
     return generate_exploit_with_ai(cve, provider, model)
+
+
+def generate_patch_for_cve(cve_id: str, provider: str | None = None,
+                           model: str | None = None):
+    """Generate + save a remediation patch for a CVE.
+
+    Returns (code, error). The generated patch is saved under
+    ``data/patches/generated/<CVE-ID>.patch`` on success.
+    """
+    state = load_state()
+    cve = state.get("known_cves", {}).get(cve_id)
+    if not cve:
+        return None, "CVE not found in database"
+    if not provider:
+        keys = load_ai_keys()
+        provider = first_configured_provider(keys)
+    if provider and provider in AI_PROVIDERS:
+        prov = AI_PROVIDERS[provider]
+        if model and model not in prov.get("models", {}):
+            model = prov.get("default_model")
+    return _generate_patch_with_ai(cve, provider, model)
+
+
+def _generate_patch_with_ai(cve_info: dict, provider: str | None = None,
+                            model: str | None = None):
+    """Ask AI for a patch script for a CVE. Returns (code, error)."""
+    keys = load_ai_keys()
+    provider = provider or first_configured_provider(keys)
+    prov = AI_PROVIDERS.get(provider) if provider else None
+    if (not provider or not prov
+            or (prov.get("requires_key", True) and not keys.get(provider))):
+        return None, "No AI provider API key configured (see AI Provider Keys)"
+    model = model or prov["default_model"]
+    model_id = prov["models"].get(model, model)
+
+    prompt = f"""You are writing an authorized security-remediation patch script for a
+smart TV vulnerability. The patch should safely apply a firmware/config fix or
+workaround (lab / client-owned devices only).
+
+CVE: {cve_info.get('id')}
+Description: {cve_info.get('description')}
+Severity: {cve_info.get('severity')} (CVSS {cve_info.get('score')})
+Target platform: {cve_info.get('device_name', 'Smart TV')}
+Component: {cve_info.get('component', 'unknown')}
+Fixed version: {cve_info.get('fixed_in', 'unknown')}
+Service ports: {cve_info.get('ports', [])}
+
+Requirements:
+1. Output the remediation commands or script (bash, curl, or config change).
+2. No destructive payloads — only safe remediation steps.
+3. Reference the CVE in a comment header.
+
+Output ONLY the patch script, no markdown fences, no commentary."""
+
+    payload = {
+        "model": model_id,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.3,
+        "max_tokens": 2000,
+    }
+    headers = {
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://github.com/authenticated-inc/spytv",
+        "X-Title": "SpyTV CVE Patch Generator",
+    }
+    auth = (keys.get(provider) or "").strip()
+    if auth and (prov.get("requires_key", True)
+                 or not auth.startswith(("http://", "https://"))):
+        headers["Authorization"] = f"Bearer {auth}"
+    endpoint = _provider_endpoint(provider, prov, keys)
+    try:
+        import urllib.request as ulreq
+        req = ulreq.Request(
+            endpoint,
+            data=json.dumps(payload).encode(),
+            headers=headers,
+            method="POST",
+        )
+        with ulreq.urlopen(req, timeout=90) as resp:
+            data = json.loads(resp.read().decode())
+        code = data["choices"][0]["message"]["content"].strip()
+        import re
+        code = re.sub(r"^```(?:bash|sh)?\s*|\s*```$", "", code,
+                      flags=re.MULTILINE).strip()
+        cve_id = cve_info.get("id", "CVE-UNKNOWN")
+        import pathlib
+        patches_dir = pathlib.Path(GENERATED_DIR).parent / "patches" / "generated"
+        patches_dir.mkdir(parents=True, exist_ok=True)
+        out = patches_dir / f"{cve_id}.patch"
+        header = f'#!/bin/bash\n# Remediation patch for {cve_id} ({prov["name"]} / {model_id}).\n# Authorized security testing only.\n'
+        out.write_text(header + code + "\n", encoding="utf-8")
+        # Mark the patch_check_generated flag in state
+        _mark_artifact_flag(cve_id, "patch_check_generated")
+        return code, None
+    except Exception as exc:
+        return None, str(exc)
+
+
+def list_exploits():
+    """List all generated exploits with their success rate / status."""
+    import pathlib
+    state = load_state()
+    results = []
+    if GENERATED_DIR.exists():
+        for f in sorted(GENERATED_DIR.glob("CVE-*.py")):
+            cid = f.stem
+            cve = state.get("known_cves", {}).get(cid, {})
+            results.append({
+                "cve_id": cid,
+                "tv_type": cve.get("tv_type", "smart-tv"),
+                "device_name": cve.get("device_name", "Unknown"),
+                "severity": cve.get("severity", "UNKNOWN"),
+                "file": str(f.relative_to(REPO_ROOT)),
+                "exploit_status": "generated",
+                "success_rate": cve.get("success_rate", 0),
+                "attempts": cve.get("attempts", 0),
+                "last_run": cve.get("last_run"),
+                "exploit_ready": True,
+            })
+    return results
+
+
+def _mark_artifact_flag(cve_id: str, flag: str):
+    """Set an artifact flag on a CVE in state and persist."""
+    try:
+        state = load_state()
+        if cve_id in state.get("known_cves", {}):
+            state["known_cves"][cve_id][flag] = True
+            save_state(state)
+    except Exception:
+        pass
 
 
 # ---------------------------------------------------------------------------

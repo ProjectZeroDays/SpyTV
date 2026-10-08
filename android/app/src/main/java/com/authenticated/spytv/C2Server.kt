@@ -232,8 +232,12 @@ class C2Server(private val port: Int = 8443) {
                     val info = JSONObject()
                     info.put("hostname", "SpyTV-Android-C2")
                     info.put("local_ip", localIp)
+                    info.put("ipv6", "—")
+                    info.put("gateway_ip", getGatewayIp())
+                    info.put("subnet_mask", getSubnetMask())
                     info.put("mac", getMacAddress())
                     info.put("os", "Android ${android.os.Build.VERSION.SDK_INT}")
+                    info.put("python", "N/A (native Android)")
                     info.put("c2_port", port)
                     info.put("started_at", Instant.now().toString())
                     info.put("uptime_s", (System.currentTimeMillis() - startTime) / 1000)
@@ -295,6 +299,56 @@ class C2Server(private val port: Int = 8443) {
                         put("detail", "Standalone Android mode")
                     })
                     Triple("200 OK", "application/json", response.toString())
+                }
+                path == "$API_PREFIX/providers" && method == "GET" -> {
+                    val response = JSONObject()
+                    response.put("openrouter", JSONObject().apply {
+                        put("name", "OpenRouter (Uncensored)")
+                        put("configured", false)
+                        put("default_model", "uncensored")
+                        put("models", JSONArray().apply {
+                            put(JSONObject().apply { put("id", "uncensored"); put("label", "Uncensored") })
+                        })
+                    })
+                    response.put("venice", JSONObject().apply {
+                        put("name", "Venice AI")
+                        put("configured", false)
+                        put("default_model", "uncensored_v1_2")
+                        put("models", JSONArray().apply {
+                            put(JSONObject().apply { put("id", "uncensored_v1_2"); put("label", "Uncensored V 1.2") })
+                            put(JSONObject().apply { put("id", "qwen_3_6_plus_uncensored"); put("label", "Qwen 3.6 Plus Uncensored") })
+                            put(JSONObject().apply { put("id", "glm_4_7_flash_heretic"); put("label", "GLM 4.7 Flash Heretic") })
+                        })
+                    })
+                    response.put("abliteration", JSONObject().apply {
+                        put("name", "Abliteration.ai")
+                        put("configured", false)
+                        put("default_model", "abliterated_large_v2")
+                        put("models", JSONArray().apply {
+                            put(JSONObject().apply { put("id", "abliterated_large_v2"); put("label", "Abliterated Large v2") })
+                        })
+                    })
+                    response.put("local", JSONObject().apply {
+                        put("name", "Local Model (GGUF / MLX)")
+                        put("configured", false)
+                        put("default_model", "local")
+                        put("models", JSONArray().apply {
+                            put(JSONObject().apply { put("id", "local"); put("label", "Local (llama.cpp GGUF / Apple MLX)") })
+                        })
+                    })
+                    Triple("200 OK", "application/json", response.toString())
+                }
+                path == "$API_PREFIX/exploits" && method == "GET" -> {
+                    // Static list of exploits for Android standalone mode
+                    val response = JSONArray()
+                    Triple("200 OK", "application/json", response.toString())
+                }
+                path == "$API_PREFIX/cve/generate" && method == "POST" -> {
+                    // Generate exploit on Android - limited (no AI)
+                    Triple("200 OK", "application/json", JSONObject().apply {
+                        put("status", "error")
+                        put("error", "Exploit generation requires the Python C2 server (use Desktop/Web mode)")
+                    }.toString())
                 }
                 else -> {
                     Triple("404 Not Found", "application/json", JSONObject().apply { put("error", "Not found") }.toString())
@@ -551,6 +605,38 @@ class C2Server(private val port: Int = 8443) {
             info?.macAddress ?: "Unknown"
         } catch (e: Exception) {
             "Unknown"
+        }
+    }
+
+    private fun intToIpString(ip: Int): String {
+        return "${ip and 0xFF}.${(ip shr 8) and 0xFF}.${(ip shr 16) and 0xFF}.${(ip shr 24) and 0xFF}"
+    }
+
+    private fun getGatewayIp(): String {
+        return try {
+            val wifiManager = MainActivity.instance?.applicationContext
+                ?.getSystemService(android.content.Context.WIFI_SERVICE) as? android.net.wifi.WifiManager
+            val dhcp = wifiManager?.dhcpInfo
+            val gatewayInt = dhcp?.gateway ?: 0
+            if (gatewayInt != 0) {
+                intToIpString(gatewayInt)
+            } else "—"
+        } catch (e: Exception) {
+            "—"
+        }
+    }
+
+    private fun getSubnetMask(): String {
+        return try {
+            val wifiManager = MainActivity.instance?.applicationContext
+                ?.getSystemService(android.content.Context.WIFI_SERVICE) as? android.net.wifi.WifiManager
+            val dhcp = wifiManager?.dhcpInfo
+            val maskInt = dhcp?.netmask ?: 0
+            if (maskInt != 0) {
+                intToIpString(maskInt)
+            } else "—"
+        } catch (e: Exception) {
+            "—"
         }
     }
     

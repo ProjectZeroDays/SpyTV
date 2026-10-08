@@ -1,140 +1,213 @@
 spytv/
-├── README.md
-├── TODO.md
-├── file_structure.txt              # This file — generated from `git ls-files`
-├── requirements.txt            # colorama, pyyaml, requests, reportlab (C2 PDFs)
-├── setup.py                    # Unified setup script (installs python deps + system tools)
-├── setup.sh                    # Linux/WSL bootstrap (downloads repo from ProjectZeroDays/SpyTV)
-├── run_c2.bat                  # C2 launcher (AI-key prompt, starts the server)
-├── .env.example                # AI / NVD key template (copy to .env)
+├── README.md  # Project overview + install/launch guide
+├── TODO.md  # Feature roadmap
+├── file_structure.txt  # This file — generated from git ls-files
+├── .env.example
+├── .github/  # CI workflows, dependabot, release templates
+│   ├── RELEASE_TEMPLATE.md
+│   ├── dependabot.yml
+│   └── workflows/
+│       └── build-release.yml
 ├── .gitignore
-├── create_apk.py               # Real Gradle build + verification → SpyTV.apk
-├── SHA256SUMS.txt              # Release asset checksum manifest
-#  SpyTV.apk is a generated release asset — git-ignored, rebuilt per release
-├── CVE_UPDATES.log             # Root JSONL CVE log (replayed into the C2 feed)
-├── registry.yaml               # Exploit / device-family registry
-├── config.yaml                 # Top-level configuration
-├── install_and_launch.bat / .sh # One-shot install + launch helpers
-├── icon.png                    # Widget/app icon used by both widget builders
-├── logo.png                    # Branding asset
-├── spytv_tagger.py             # Release tagging helper
-│
-├── c2_server.py                # C2 HTTP server (port 8443) — all API endpoints
-├── c2_ops.py                   # Shared ops: scan, read-only check, exploit, patch, teardown
-├── c2_audit.py                 # Audit/Patch engagement state machines + reportlab PDFs
-├── c2_cve_feed.py              # CVE feed manager: NVD fetch + AI exploit/artifact pipeline
-├── c2_dashboard.html           # Web dashboard (served at /)
-├── tvreaper.js                 # Implant payload (C2 polling)
-│
-├── main.py                     # Entry-point runner
-├── tv_fingerprint.py           # Discovery CLI
-├── tv_install.py               # Family install CLI (tizen / webos / android / nettv)
-├── tv_withdraw.py              # Implant withdrawal CLI
-├── tv_flow_receiver.py         # Media-flow receiver helper
-├── build_widget.py             # Legacy packager (.wgt / .ipk / NetTV page)
-│
-├── .opencode/
-│   └── commands/push.md        # /Push pipeline: cleanup · file_structure · vulns · test · ship
-│
-├── android/                    # Gradle project — SpyTV Android APK (console + standalone C2)
-│   ├── app/src/main/
-│   │   ├── java/com/authenticated/spytv/
-│   │   │   ├── MainActivity.kt   # Mode toggle (console/standalone), WebView for console mode
-│   │   │   └── C2Server.kt       # Embedded Kotlin HTTP server for standalone C2 mode
-│   ├── settings.gradle.kts / build.gradle.kts / gradle.properties
-│   ├── gradlew / gradlew.bat   # Wrapper (Gradle 8.2)
-│   ├── gradle/wrapper/         # gradle-wrapper.jar + gradle-wrapper.properties
-│   └── app/
-│       ├── build.gradle.kts    # applicationId com.authenticated.spytv · minSdk 24
-│       ├── proguard-rules.pro   # Release shrinker rules (minify disabled)
-│       └── src/main/           # MainActivity.kt (probes + loads a configurable C2 URL; error
-│                               #   screen when the answer isn't SpyTV) · AndroidManifest.xml · res
-│
-├── electron/                   # Desktop wrapper → SpyTV-C2-<ver>-portable.exe
-│   ├── main.js / preload.js / offline.html / index.html
-│   ├── package.json            # electron 44.5 · electron-builder 26.15 (npm audit: 0 vulns)
-│   ├── package-lock.json       # Lockfile (audited clean)
-│   ├── icon.png                # App icon (1024²) → build.win.icon; build-time input, not packed
-│   └── dist/                   # Build output (git-ignored)
-│
-├── core/                       # Core Logic
-│   ├── __init__.py
-│   ├── discovery.py            # (Refactored tv_fingerprint.py + Port Scan)
-│   ├── exploit_dispatcher.py   # (Refactored tv_install.py - Main Router)
-│   ├── exploit_engine.py       # Dry-run / live exploit orchestration
-│   ├── implant.py              # Python accessor for the JS payload (tvreaper.js)
-│   ├── receiver.py             # (Refactored C4 receiver - Capture Endpoint)
-│   ├── withdrawal.py           # (Refactored tv_withdraw.py)
-│   ├── builder.py              # (Refactored build_widget.py)
-│   ├── cve_scanner.py          # Family/CVE signature database + matching
-│   ├── scanner.py / session_manager.py / stealth.py / stream_manager.py
-│   ├── utils.py / config.py    # Helpers + centralized YAML config
-│   └── config.yaml             # Core settings
-│
-├── families/                   # Family-Specific Exploits
-│   ├── tizen/install.py        # Tizen DevMode/Hotel exploit (+ payloads/)
-│   ├── webos/install.py        # Ares-install exploit (+ payloads/)
-│   ├── android/install.py      # ADB/Net exploit (+ payloads/)
-│   └── dlna/install.py         # AVTransport injection
-│
-├── config/                     # Example configs (tracked)
+├── .opencode/  # /Push pipeline command docs
+│   └── commands/
+│       └── push.md
+├── CVE_UPDATES.log
+├── README.md
+├── SHA256SUMS.txt
+├── TODO.md
+├── android/  # Gradle project — SpyTV Android APK (standalone C2 + console mode)
+│   ├── app/
+│   │   ├── build.gradle.kts
+│   │   ├── proguard-rules.pro
+│   │   └── src/
+│   │       └── main/
+│   │           ├── AndroidManifest.xml
+│   │           ├── assets/
+│   │           │   └── c2_dashboard.html
+│   │           ├── java/
+│   │           │   └── com/
+│   │           │       └── authenticated/
+│   │           │           └── spytv/
+│   │           │               ├── C2Server.kt
+│   │           │               └── MainActivity.kt
+│   │           └── res/
+│   │               ├── drawable-hdpi/
+│   │               │   ├── ic_launcher_foreground.png
+│   │               │   └── ic_launcher_round_foreground.png
+│   │               ├── drawable-mdpi/
+│   │               │   ├── ic_launcher_foreground.png
+│   │               │   └── ic_launcher_round_foreground.png
+│   │               ├── drawable-xhdpi/
+│   │               │   ├── ic_launcher_foreground.png
+│   │               │   └── ic_launcher_round_foreground.png
+│   │               ├── drawable-xxhdpi/
+│   │               │   ├── ic_launcher_foreground.png
+│   │               │   └── ic_launcher_round_foreground.png
+│   │               ├── drawable-xxxhdpi/
+│   │               │   ├── ic_launcher_foreground.png
+│   │               │   └── ic_launcher_round_foreground.png
+│   │               ├── layout/
+│   │               │   └── activity_main.xml
+│   │               ├── mipmap-anydpi-v26/
+│   │               │   ├── ic_launcher.xml
+│   │               │   └── ic_launcher_round.xml
+│   │               ├── mipmap-hdpi/
+│   │               │   ├── ic_launcher.xml
+│   │               │   └── ic_launcher_round.xml
+│   │               └── values/
+│   │                   ├── colors.xml
+│   │                   ├── strings.xml
+│   │                   └── themes.xml
+│   ├── build.gradle.kts
+│   ├── gradle/
+│   │   └── wrapper/
+│   │       ├── gradle-wrapper.jar
+│   │       └── gradle-wrapper.properties
+│   ├── gradle.properties
+│   ├── gradlew
+│   ├── gradlew.bat
+│   └── settings.gradle.kts
+├── build_standalone_exe.py
+├── build_widget.py
+├── c2_audit.py
+├── c2_cve_feed.py
+├── c2_dashboard.html
+├── c2_ops.py
+├── c2_server.py
+├── config/  # Example configs (devices, known_hosts, vlan_policy)
 │   ├── devices.example.json
 │   ├── known_hosts.example.json
 │   └── vlan_policy.example.json
-│
-├── data/
-│   └── exploits/               # Stdlib modules: adb_wireless · ssh_brute · vendor_specific · cve_exploits
-│       └── generated/          # AI exploit modules (CVE-*.py, tracked once created) — dir is
-│                               #   created on the first CVE update; .quarantined when its test fails
-│
-├── defense/                    # Defensive toolkit (stdlib only)
-│   ├── __init__.py · common.py # Package init + shared helpers
-│   ├── hardening/              # attack_surface · adb_disable · upnp_close
-│   │                           # vlan_segmentation · firmware_audit
-│   ├── detection/              # ssh_detector · adb_detector · ssdp_detector ·
-│   │                           # monitor · drill · report · adapters · events
-│   │   └── rules/              # Sigma rules for SIEM import
-│   └── cve_monitor/            # NVD watcher · whitepaper generator · keywords.json
-│
-├── docs/                       # Wiki + generated documents
-│   ├── WIKI.md / GETTING_STARTED.md / ARCHITECTURE.md
-│   ├── C2_DASHBOARD.md         # Endpoints, features, engagement flows, AI providers
-│   ├── TROUBLESHOOTING.md      # Served live at /docs/TROUBLESHOOTING.md
-│   ├── CHANGES.md              # Release-by-release change log
-│   ├── whitepapers/            # Generated per-CVE whitepapers (CVE-*.md, git-ignored)
-│   └── …                       # threat model, hardening, detection, code review, etc.
-│
-├── tests/                      # pytest suite — 107 tests
-│   ├── test_audit_flow.py      # Engagement flows + endpoints
-│   ├── test_cve_artifacts.py   # T-01/T-02 artifact pipeline + viewer
-│   ├── test_local_provider.py  # Keyless local GGUF/MLX provider (probe + completions)
-│   ├── test_c2_server.py / test_cve_monitor.py / test_detectors.py
-│   ├── test_drill_report.py / test_hardening.py
-│   ├── test_dashboard_ui.py    # Dashboard inline script driven in Node (stub DOM)
-│   ├── test_probe_pool.py      # Probe pool: per-host fan-out cap + job ordering
-│   └── generated/              # Auto-generated exploit tests (test_CVE-*.py)
-│
-├── tools/
-│   ├── banner.py               # ASCII banner helper
-│   └── make_icon.py            # Derives every app icon from resources/logo_source.jpg →
-│                               #   electron/icon.png (1024²), icon.png, Android launcher art
-│
-├── output/                     # Generated reports kept as tracked samples
-│
-├── resources/                  # Runtime assets
-│   ├── logo_source.jpg         # Source artwork (TV/binoculars mark) — every app icon derives from it
-│   └── config.yaml             # Default settings (tvreaper.{apk,wgt,ipk} are build outputs, git-ignored)
-│
-├── c2_data/                    # Runtime state (git-ignored)
-│   ├── audits/<auth_id>/       # Authorization PDFs (unsigned/signed) + reports
-│   ├── clips/                  # Captured audio/video
-│   ├── cve_state.json          # Feed source of truth
-│   └── devices.json / commands.json / ai_keys.json
-│
-├── .github/workflows/build-release.yml  # CI: build APK + standalone EXE + release
-├── .github/RELEASE_TEMPLATE.md
-├── build_standalone_exe.py             # PyInstaller build for standalone Windows EXE
-│
-└── logs/                       # Runtime logs (git-ignored)
-    ├── spytv.log
-    └── receiver.log
+├── config.yaml
+├── core/  # Core logic: scanner, exploit engine, device implants, builder
+│   ├── __init__.py
+│   ├── builder.py
+│   ├── config.py
+│   ├── config.yaml
+│   ├── cve_scanner.py
+│   ├── discovery.py
+│   ├── exploit_dispatcher.py
+│   ├── exploit_engine.py
+│   ├── implant.py
+│   ├── receiver.py
+│   ├── scanner.py
+│   ├── session_manager.py
+│   ├── stealth.py
+│   ├── stream_manager.py
+│   ├── utils.py
+│   └── withdrawal.py
+├── create_apk.py
+├── data/  # Stdlib exploit modules (adb_wireless, ssh_brute, cve_exploits, vendor_specific)
+│   └── exploits/
+│       ├── adb_wireless_exploit.py
+│       ├── cve_exploits.py
+│       ├── ssh_brute.py
+│       └── vendor_specific.py
+├── defense/  # Defensive toolkit: hardening, detection, CVE monitoring
+│   ├── __init__.py
+│   ├── common.py
+│   ├── cve_monitor/
+│   │   ├── __init__.py
+│   │   ├── keywords.json
+│   │   ├── monitor.py
+│   │   └── whitepaper.py
+│   ├── detection/
+│   │   ├── __init__.py
+│   │   ├── adapters.py
+│   │   ├── adb_detector.py
+│   │   ├── drill.py
+│   │   ├── events.py
+│   │   ├── monitor.py
+│   │   ├── report.py
+│   │   ├── rules/
+│   │   │   ├── lnx_sshd_bruteforce.yml
+│   │   │   ├── net_adb_ports.yml
+│   │   │   ├── net_ssdp_sweep.yml
+│   │   │   ├── net_upnp_avtransport.yml
+│   │   │   └── win_adb_network_connect.yml
+│   │   ├── ssdp_detector.py
+│   │   └── ssh_detector.py
+│   └── hardening/
+│       ├── __init__.py
+│       ├── adb_disable.py
+│       ├── attack_surface.py
+│       ├── firmware_audit.py
+│       ├── upnp_close.py
+│       └── vlan_segmentation.py
+├── docs/  # Wikis, guides, whitepapers, release notes
+│   ├── ARCHITECTURE.md
+│   ├── C2_DASHBOARD.md
+│   ├── CHANGES.md
+│   ├── CODE_REVIEW.md
+│   ├── CVE_MONITORING_GUIDE.md
+│   ├── DETECTION_GUIDE.md
+│   ├── GETTING_STARTED.md
+│   ├── HARDENING_GUIDE.md
+│   ├── PRESENTATION.pptx.md
+│   ├── SEGMENTATION_GUIDE.md
+│   ├── THREAT_MODEL.md
+│   ├── TROUBLESHOOTING.md
+│   └── WIKI.md
+├── electron/  # Desktop wrapper for standalone C2 (portable EXE)
+│   ├── icon.png
+│   ├── index.html
+│   ├── main.js
+│   ├── offline.html
+│   ├── package-lock.json
+│   ├── package.json
+│   └── preload.js
+├── families/  # Family-specific exploit modules (tizen, webos, android, dlna)
+│   ├── android/  # Gradle project — SpyTV Android APK (standalone C2 + console mode)
+│   │   └── install.py
+│   ├── dlna/
+│   │   └── install.py
+│   ├── tizen/
+│   │   └── install.py
+│   └── webos/
+│       └── install.py
+├── file_structure.txt
+├── icon.png
+├── install_and_launch.bat
+├── install_and_launch.sh
+├── logo.png
+├── main.py
+├── output/  # Generated reports kept as tracked samples
+│   ├── cve_whitepaper.md
+│   ├── drill_alerts.jsonl
+│   ├── drill_summary.md
+│   ├── firmware_audit.md
+│   └── vlan/
+│       ├── iptables.rules
+│       └── nftables.rules
+├── registry.yaml
+├── requirements.txt
+├── resources/  # Runtime assets (logo source, default config)
+│   ├── config.yaml
+│   └── logo_source.jpg
+├── run_c2.bat
+├── setup.py
+├── setup.sh
+├── spytv_tagger.py
+├── tests/  # pytest suite — audit flow, artifacts, dashboard UI, detectors
+│   ├── __init__.py
+│   ├── generated/
+│   │   └── .gitignore
+│   ├── test_audit_flow.py
+│   ├── test_c2_server.py
+│   ├── test_cve_artifacts.py
+│   ├── test_cve_monitor.py
+│   ├── test_dashboard_ui.py
+│   ├── test_detectors.py
+│   ├── test_drill_report.py
+│   ├── test_hardening.py
+│   ├── test_local_provider.py
+│   └── test_probe_pool.py
+├── tools/  # Build helpers (banner, icon generator)
+│   ├── banner.py
+│   └── make_icon.py
+├── tv_fingerprint.py
+├── tv_flow_receiver.py
+├── tv_install.py
+├── tv_withdraw.py
+└── tvreaper.js

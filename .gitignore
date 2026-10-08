@@ -10,6 +10,8 @@ ENV/
 *.egg-info/
 dist/
 build/
+.pytest_cache/
+.mypy_cache/
 
 # C2 Data
 c2_data/
@@ -45,6 +47,8 @@ android/app/build/
 android/local.properties
 # Release APK is a generated asset (create_apk.py builds it on demand)
 SpyTV.apk
+# Standalone EXE is a generated asset (build_standalone_exe.py builds it on demand)
+SpyTV-C2-standalone.exe
 *.iml
 .idea/
 
