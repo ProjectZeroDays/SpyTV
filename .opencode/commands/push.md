@@ -1,25 +1,34 @@
 ---
-description: Full release pipeline — repo cleanup, file_structure refresh, vulnerability sweep, error-correct, refactor, test, debug, build assets, push, merge, tag + release
+description: Universal release pipeline — repo cleanup, vulnerability sweep, error-correct, test, debug, build assets, push, merge, tag + release for any git-tracked repo
 ---
 
-Run the complete SpyTV release pipeline for the repository at `C:\Projects\SpyTV`.
-Work through every phase in order, fix anything that fails, and report the result
-of each phase at the end. Optional argument: $ARGUMENTS (a target tag like
-`v1.2.0`; if empty, use the next semantic version after the latest GitHub
-release).
+Run the complete release pipeline for the current repository (any project, not
+project-specific). Work through every phase in order, fix anything that
+fails, and report the result of each phase at the end.
+
+The repo root is auto-detected (`git rev-parse --show-toplevel`). The GitHub
+owner/repo is auto-detected from `git remote -v`.
+
+Optional argument: $ARGUMENTS — a target tag like `v2.1.0`.
+If empty, use the next semantic version after the latest GitHub release
+(next patch if the latest tag is `vX.Y.Z`).
+
+Each phase that depends on project-specific tooling (APK build, Electron audit,
+YAML configs, etc.) is **skipped** with a note if the relevant file/dir is not
+present, so the command works on any repo.
 
 ## Phase 1 — Error-correct & refactor
 - `git status` / `git diff` review of all pending and recent changes.
 - Fix obvious errors: broken imports, dead code, deprecated API usage,
-  duplicated logic, inconsistent naming (SpyTV branding only — never any legacy pre-rename names).
+  duplicated logic, inconsistent naming.
 - Keep refactors behavior-preserving; do not redesign features.
 
 ## Phase 2 — Repo cleanup
 - Untrack and remove junk that must not be in the repo: agent/tool state
   (`.mimosa/`, `.v2c/`, `.video_agent/`, `.zcode/`, `.zcodeignore`),
-  `__pycache__`, build outputs (`android/**/build`, `electron/dist`,
-  `electron/node_modules`), stale logs — `git rm -r --cached` where tracked,
-  delete from disk where untracked and stale.
+  `__pycache__`, build outputs (`node_modules/`, `dist/`, `build/`,
+  `android/**/build`, `electron/dist`), stale logs — `git rm -r --cached`
+  where tracked, delete from disk where untracked and stale.
 - Extend `.gitignore` so every removed pattern stays out (verify by re-running
   `git status --ignored` afterwards — nothing new should appear).
 - Confirm no secrets are tracked (`git ls-files` vs `*.key`, `*.pem`, `.env`,
@@ -27,28 +36,34 @@ release).
 - Delete dead/duplicate files ONLY after grepping that nothing references them.
 
 ## Phase 3 — Regenerate file_structure.txt
-- Rebuild `file_structure.txt` from `git ls-files` as an indented tree with
-  one-line comments on root folders. It must reflect the tree AFTER Phase 2.
+- If a `file_structure.txt` is tracked in the repo, rebuild it from
+  `git ls-files` as an indented tree with one-line comments on root folders.
+  It must reflect the tree AFTER Phase 2. Skip if the file is not present
+  or not version-controlled.
 
 ## Phase 4 — Vulnerability sweep
-- Python: `python -m pip_audit -r requirements.txt` (install `pip-audit` if
-  missing). Upgrade vulnerable pins to the minimum fixed versions; re-run Phase 5.
-- Node: `npm audit` inside `electron/` — resolve with `npm audit fix`,
-  dependency bumps, and `overrides` for transitive packages (e.g. `tar`);
-  never downgrade or ignore. Smoke `npx electron --version` after changes.
-- GitHub: `gh api --paginate repos/ProjectZeroDays/SpyTV/dependabot/alerts` —
-  the open count must drop; any alert that remains needs an explicit
-  "accepted" rationale in the report (e.g. dev-only package with no patched
-  release published).
+- **Python**: If `requirements.txt` exists, run
+  `python -m pip_audit -r requirements.txt` (install `pip-audit` if missing).
+  Upgrade vulnerable pins to the minimum fixed versions; re-run Phase 5.
+- **Node**: If `electron/` (or `package.json` at repo root) exists, run
+  `npm audit` and resolve with `npm audit fix`, dependency bumps, and
+  `overrides` for transitive packages (e.g. `tar`); never downgrade or ignore.
+  Smoke `npx electron --version` after changes.
+- **GitHub**: `gh api --paginate repos/<OWNER>/<REPO>/dependabot/alerts` (auto-
+  detected from `git remote`). The open count must drop; any alert that remains
+  needs an explicit "accepted" rationale in the report (e.g. dev-only package
+  with no patched release published).
 - Grep the tree for hardcoded credentials, embedded tokens, and dead URLs.
 - Record fixed-vs-accepted in the final phase report.
 
 ## Phase 5 — Test all code
-- `python -m pytest -q` — every test must pass.
+- If a `tests/` directory exists, run `python -m pytest -q` — every test must
+  pass. Skip if no test suite is present.
 - `python -m compileall -q` (or `py_compile` over all `.py` files).
-- Syntax-check dashboard/JS assets (`node --check` on extracted
-  `c2_dashboard.html` script block and `tvreaper.js`).
-- Parse all YAML configs; verify `.env.example`/`.gitignore` consistency.
+- Syntax-check JS assets: if `c2_dashboard.html` or `tvreaper.js` exists,
+  `node --check` on extracted script blocks.
+- Parse all YAML configs if present (`*.yaml`, `*.yml`); verify
+  `.env.example`/`.gitignore` consistency.
 
 ## Phase 6 — Debug
 - Any failure from Phases 1–5 must be fixed and re-run until green.
@@ -59,11 +74,12 @@ release).
   an interrupted run).
 
 ## Phase 7 — Generate release assets
-- `python create_apk.py` — builds the REAL Android APK from the Gradle
-  project (`android/`, `assembleDebug`) and verifies it before writing
-  `SpyTV.apk`: zip integrity, `apksigner verify`, `aapt dump badging`
-  (package + launchable activity), sane size (>1 MB). It must exit nonzero
-  and never emit a placeholder artifact on any failure.
+- If `create_apk.py` exists, run `python create_apk.py` — builds the REAL
+  Android APK from the Gradle project (`android/`, `assembleDebug`) and verifies
+  it before writing the APK: zip integrity, `apksigner verify`,
+  `aapt dump badging` (package + launchable activity), sane size (>1 MB).
+- If `build_standalone_exe.py` exists, run it to produce the standalone EXE.
+- If `electron/` exists, run `npm run build` or `npm run package`.
 - Generate `SHA256SUMS.txt` covering every asset to be attached.
 
 ## Phase 8 — Push everything
@@ -79,10 +95,11 @@ release).
 
 ## Phase 10 — Tag & release
 - Create the next tag (default: bump patch from the latest release) on `main`
-  and push it.
-- `gh release create <tag>` titled `SpyTV <tag> — TV Security Assessment
-  Platform`, with release notes summarizing the changes, and attach **all**
-  generated assets from Phase 7.
+  and push it. The tag name is auto-derived: if the latest GitHub release is
+  `vX.Y.Z`, the next tag is `vX.Y.(Z+1)`.
+- `gh release create <tag>` titled `<REPO_NAME> <tag> — release` (auto-
+  detected repo name from `git remote`), with release notes summarizing the
+  changes, and attach **all** generated assets from Phase 7.
 - Verify with `gh release view <tag>`.
 
 Finish with a concise phase-by-phase report (cleanup removed, vulnerabilities
