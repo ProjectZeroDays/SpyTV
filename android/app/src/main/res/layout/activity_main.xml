@@ -4,7 +4,7 @@
     android:layout_height="match_parent"
     android:background="#0B0E14">
 
-    <!-- WebView for Console mode (connecting to external C2) -->
+    <!-- WebView for C2 Dashboard -->
     <WebView
         android:id="@+id/webView"
         android:layout_width="match_parent"
@@ -72,7 +72,7 @@
         </LinearLayout>
     </LinearLayout>
 
-    <!-- Mode indicator (Console vs Standalone) -->
+    <!-- Mode indicator (top-left) -->
     <TextView
         android:id="@+id/modeIndicator"
         android:layout_width="wrap_content"
@@ -84,15 +84,15 @@
         android:paddingEnd="8dp"
         android:paddingTop="16dp"
         android:paddingBottom="16dp"
-        android:text="CONSOLE MODE"
-        android:textColor="#3B82F6"
+        android:text="SELF-HOSTED MODE"
+        android:textColor="#10B981"
         android:textSize="12sp"
         android:textStyle="bold" />
 
-    <!-- Server status for Standalone mode -->
+    <!-- Server status (top-right) -->
     <LinearLayout
         android:id="@+id/serverStatusContainer"
-        android:layout_width="match_parent"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="top|end"
         android:layout_margin="16dp"
@@ -108,10 +108,10 @@
             android:id="@+id/serverStatus"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_gravity="center_vertical"
             android:text="C2 Server starting..."
             android:textColor="#F3F4F6"
-            android:textSize="12sp"
-            android:layout_gravity="center_vertical" />
+            android:textSize="12sp" />
 
         <Switch
             android:id="@+id/serverToggle"
@@ -123,7 +123,7 @@
             android:textSize="12sp" />
     </LinearLayout>
 
-    <!-- Settings button -->
+    <!-- Settings button (top-right corner) -->
     <Button
         android:id="@+id/btnSettings"
         android:layout_width="wrap_content"
@@ -137,5 +137,57 @@
         android:text="⚙"
         android:textColor="#3B82F6"
         android:textSize="16sp" />
+
+    <!-- Mode Selection Buttons (bottom of screen) -->
+    <LinearLayout
+        android:id="@+id/modeSelectionContainer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:layout_marginBottom="24dp"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <!-- Countdown alert text -->
+        <TextView
+            android:id="@+id/countdownText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:paddingBottom="12dp"
+            android:text="Self-Hosted C2 will start in 3 seconds..."
+            android:textColor="#10B981"
+            android:textSize="14sp"
+            android:background="#151B27"
+            android:padding="8dp" />
+
+        <!-- Two buttons at the bottom -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btnSelfHosted"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginEnd="8dp"
+                android:backgroundTint="#10B981"
+                android:text="Self-Host C2"
+                android:textColor="#F3F4F6" />
+
+            <Button
+                android:id="@+id/btnConnectRemote"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:backgroundTint="#3B82F6"
+                android:text="Remote-Connect C2"
+                android:textColor="#F3F4F6" />
+        </LinearLayout>
+    </LinearLayout>
 
 </FrameLayout>
