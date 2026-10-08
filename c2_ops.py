@@ -12,6 +12,7 @@ import os
 import socket
 import shlex
 import subprocess
+import sys
 import threading
 import time
 
@@ -292,7 +293,12 @@ def _load_cve_exploit_registry():
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
             _REGISTRY_CACHE = dict(getattr(module, "CVE_EXPLOITS", {}))
-        except Exception:
+        except Exception as exc:
+            # Never fail silently: an empty registry makes EVERY family
+            # report "no exploit module registered". Surface the cause on
+            # stderr so a broken cve_exploits.py is diagnosable.
+            print(f"[c2_ops] WARNING: failed to load CVE exploit registry "
+                  f"from {path}: {exc}", file=sys.stderr)
             _REGISTRY_CACHE = {}
     return _REGISTRY_CACHE
 
