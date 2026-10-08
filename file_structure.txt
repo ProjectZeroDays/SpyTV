@@ -1,7 +1,4 @@
 spytv/
-├── README.md  # Project overview + install/launch guide
-├── TODO.md  # Feature roadmap
-├── file_structure.txt  # This file — generated from git ls-files
 ├── .env.example
 ├── .github/  # CI workflows, dependabot, release templates
 │   ├── RELEASE_TEMPLATE.md
@@ -9,14 +6,14 @@ spytv/
 │   └── workflows/
 │       └── build-release.yml
 ├── .gitignore
-├── .opencode/  # /Push pipeline command docs
+├── .opencode/  # /push pipeline command docs
 │   └── commands/
 │       └── push.md
 ├── CVE_UPDATES.log
-├── README.md
+├── README.md  # Project overview + install/launch guide
 ├── SHA256SUMS.txt
-├── TODO.md
-├── android/  # Gradle project — SpyTV Android APK (standalone C2 + console mode)
+├── TODO.md  # Feature roadmap
+├── android/  # Gradle project - SpyTV Android APK (standalone C2 + console mode)
 │   ├── app/
 │   │   ├── build.gradle.kts
 │   │   ├── proguard-rules.pro
@@ -157,8 +154,8 @@ spytv/
 │   ├── package-lock.json
 │   ├── package.json
 │   └── preload.js
-├── families/  # Family-specific exploit modules (tizen, webos, android, dlna)
-│   ├── android/  # Gradle project — SpyTV Android APK (standalone C2 + console mode)
+├── families/  # Family-specific install modules (tizen, webos, android, dlna)
+│   ├── android/
 │   │   └── install.py
 │   ├── dlna/
 │   │   └── install.py
@@ -166,7 +163,7 @@ spytv/
 │   │   └── install.py
 │   └── webos/
 │       └── install.py
-├── file_structure.txt
+├── file_structure.txt  # This file - generated from git ls-files
 ├── icon.png
 ├── install_and_launch.bat
 ├── install_and_launch.sh
@@ -189,7 +186,7 @@ spytv/
 ├── setup.py
 ├── setup.sh
 ├── spytv_tagger.py
-├── tests/  # pytest suite — audit flow, artifacts, dashboard UI, detectors
+├── tests/  # pytest suite - audit flow, artifacts, dashboard UI, detectors
 │   ├── __init__.py
 │   ├── generated/
 │   │   └── .gitignore
