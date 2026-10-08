@@ -1,193 +1,64 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#0B0E14">
+    android:background="#02040a"
+    android:padding="12dp">
 
-    <!-- WebView for C2 Dashboard -->
-    <WebView
-        android:id="@+id/webView"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent" />
-
-    <!-- Error view for Console mode -->
-    <LinearLayout
-        android:id="@+id/errorView"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="#0B0E14"
-        android:gravity="center"
-        android:orientation="vertical"
-        android:padding="24dp"
-        android:visibility="gone">
-
-        <TextView
-            android:id="@+id/errorTitle"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:textColor="#F3F4F6"
-            android:textSize="20sp"
-            android:textStyle="bold" />
-
-        <ScrollView
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_marginTop="12dp"
-            android:layout_weight="1"
-            android:fadeScrollbars="false">
-
-            <TextView
-                android:id="@+id/errorDetail"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="top|start"
-                android:textColor="#9CA3AF"
-                android:textIsSelectable="true"
-                android:textSize="13sp"
-                android:typeface="monospace" />
-        </ScrollView>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:gravity="center"
-            android:orientation="horizontal">
-
-            <Button
-                android:id="@+id/btnRetry"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Retry" />
-
-            <Button
-                android:id="@+id/btnAddress"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="12dp"
-                android:layout_weight="1"
-                android:text="C2 address" />
-        </LinearLayout>
-    </LinearLayout>
-
-    <!-- Mode indicator (top-left) -->
+    <!-- Header (OpenCode-style top bar) -->
     <TextView
-        android:id="@+id/modeIndicator"
-        android:layout_width="wrap_content"
+        android:id="@+id/headerTitle"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_gravity="top|start"
-        android:layout_margin="16dp"
-        android:background="#151B27"
-        android:paddingStart="8dp"
-        android:paddingEnd="8dp"
-        android:paddingTop="16dp"
-        android:paddingBottom="16dp"
-        android:text="SELF-HOSTED MODE"
-        android:textColor="#10B981"
+        android:text="SpyTV — Security Assessment Platform"
+        android:textColor="#e8edf2"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:fontFamily="sans-serif-medium"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <TextView
+        android:id="@+id/headerSub"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="OpenFable / OpenCode Desktop Model — Native Android"
+        android:textColor="#00e5ff"
         android:textSize="12sp"
-        android:textStyle="bold" />
+        android:layout_marginTop="2dp"
+        app:layout_constraintTop_toBottomOf="@id/headerTitle"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
 
-    <!-- Server status (top-right) -->
-    <LinearLayout
-        android:id="@+id/serverStatusContainer"
-        android:layout_width="wrap_content"
+    <!-- Dashboard Card Grid -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/dashboardGrid"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_marginTop="12dp"
+        android:clipToPadding="false"
+        app:layout_constraintTop_toBottomOf="@id/headerSub"
+        app:layout_constraintBottom_toTopOf="@id/bottomNav"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        tools:listitem="@layout/item_dashboard_card" />
+
+    <!-- Bottom Navigation (Native Android best practice) -->
+    <com.google.android.material.bottomnavigation.BottomNavigationView
+        android:id="@+id/bottomNav"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_gravity="top|end"
-        android:layout_margin="16dp"
-        android:orientation="horizontal"
-        android:paddingStart="8dp"
-        android:paddingEnd="8dp"
-        android:paddingTop="16dp"
-        android:paddingBottom="16dp"
-        android:background="#151B27"
-        android:visibility="gone">
+        android:background="#0a0c14"
+        app:labelVisibilityMode="labeled"
+        app:itemIconTint="@color/blue"
+        app:itemTextColor="@color/blue"
+        app:menu="@menu/bottom_nav_menu"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
 
-        <TextView
-            android:id="@+id/serverStatus"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center_vertical"
-            android:text="C2 Server starting..."
-            android:textColor="#F3F4F6"
-            android:textSize="12sp" />
-
-        <Switch
-            android:id="@+id/serverToggle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
-            android:text="Self-Hosted"
-            android:textColor="#F3F4F6"
-            android:textSize="12sp" />
-    </LinearLayout>
-
-    <!-- Settings button (top-right corner) -->
-    <Button
-        android:id="@+id/btnSettings"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="top|end"
-        android:layout_margin="8dp"
-        android:background="#151B27"
-        android:contentDescription="Settings"
-        android:minWidth="0dp"
-        android:padding="10dp"
-        android:text="⚙"
-        android:textColor="#3B82F6"
-        android:textSize="16sp" />
-
-    <!-- Mode Selection Buttons (bottom of screen) -->
-    <LinearLayout
-        android:id="@+id/modeSelectionContainer"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom"
-        android:layout_marginBottom="24dp"
-        android:orientation="vertical"
-        android:padding="16dp">
-
-        <!-- Countdown alert text -->
-        <TextView
-            android:id="@+id/countdownText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:gravity="center"
-            android:paddingBottom="12dp"
-            android:text="Self-Hosted C2 will start in 3 seconds..."
-            android:textColor="#10B981"
-            android:textSize="14sp"
-            android:background="#151B27"
-            android:padding="8dp" />
-
-        <!-- Two buttons at the bottom -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal">
-
-            <Button
-                android:id="@+id/btnSelfHosted"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginEnd="8dp"
-                android:backgroundTint="#10B981"
-                android:text="Self-Host C2"
-                android:textColor="#F3F4F6" />
-
-            <Button
-                android:id="@+id/btnConnectRemote"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginStart="8dp"
-                android:backgroundTint="#3B82F6"
-                android:text="Remote-Connect C2"
-                android:textColor="#F3F4F6" />
-        </LinearLayout>
-    </LinearLayout>
-
-</FrameLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>
