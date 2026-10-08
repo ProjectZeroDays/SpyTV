@@ -577,27 +577,108 @@ Output ONLY the patch script, no markdown fences, no commentary."""
         return None, str(exc)
 
 
+def _tv_database():
+    """Lazy import of the TV CVE database (avoids import cycles at load)."""
+    from core.cve_scanner import TV_CVE_DATABASE
+    return TV_CVE_DATABASE
+
+
+def _builtin_exploit_classes():
+    """Lazy {tv_type: exploit class} mapping from data/exploits."""
+    import importlib.util
+    path = REPO_ROOT / "data" / "exploits" / "cve_exploits.py"
+    spec = importlib.util.spec_from_file_location("spytv_cve_exploits", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return dict(getattr(module, "CVE_EXPLOITS", {}))
+
+
 def list_exploits():
-    """List all generated exploits with their success rate / status."""
-    import pathlib
+    """List EVERY exploit in the database: built-in family suites expanded
+    per-CVE plus all AI-generated per-CVE modules, with success stats."""
     state = load_state()
+    known = state.get("known_cves", {})
+    try:
+        tv_db = _tv_database()
+    except Exception:
+        tv_db = {}
+    try:
+        registry = _builtin_exploit_classes()
+    except Exception:
+        registry = {}
     results = []
+    for tv_type, info in tv_db.items():
+        cls = registry.get(tv_type)
+        for cve in info.get("cves", []):
+            cid = cve.get("id", "")
+            entry = known.get(cid, {})
+            results.append({
+                "cve_id": cid,
+                "tv_type": tv_type,
+                "device_name": info.get("name", "Unknown"),
+                "severity": cve.get("severity", "UNKNOWN"),
+                "component": cve.get("component", ""),
+                "fixed_in": cve.get("fixed_in", ""),
+                "file": "data/exploits/cve_exploits.py"
+                        + (f"#{cls.__name__}" if cls else ""),
+                "exploit_status": "built-in",
+                "source": "built-in",
+                "success_rate": entry.get("success_rate", 0),
+                "attempts": entry.get("attempts", 0),
+                "last_run": entry.get("last_run"),
+                "exploit_ready": cls is not None,
+            })
     if GENERATED_DIR.exists():
         for f in sorted(GENERATED_DIR.glob("CVE-*.py")):
             cid = f.stem
-            cve = state.get("known_cves", {}).get(cid, {})
+            cve = known.get(cid, {})
             results.append({
                 "cve_id": cid,
                 "tv_type": cve.get("tv_type", "smart-tv"),
                 "device_name": cve.get("device_name", "Unknown"),
                 "severity": cve.get("severity", "UNKNOWN"),
+                "component": cve.get("component", ""),
+                "fixed_in": cve.get("fixed_in", ""),
                 "file": str(f.relative_to(REPO_ROOT)),
                 "exploit_status": "generated",
+                "source": "generated",
                 "success_rate": cve.get("success_rate", 0),
                 "attempts": cve.get("attempts", 0),
                 "last_run": cve.get("last_run"),
                 "exploit_ready": True,
             })
+    results.sort(key=lambda e: (e["cve_id"], e["source"]))
+    return results
+
+
+def list_patches():
+    """List EVERY patch in the database: per-CVE remediation for each TV
+    family, with the exact commands the Patch button executes."""
+    try:
+        from core.cve_scanner import CVEScanner
+        tv_db = _tv_database()
+        scanner = CVEScanner()
+    except Exception:
+        return []
+    results = []
+    for tv_type, info in tv_db.items():
+        try:
+            commands = scanner.get_patch_commands(tv_type)
+        except Exception:
+            commands = []
+        for cve in info.get("cves", []):
+            results.append({
+                "cve_id": cve.get("id", ""),
+                "tv_type": tv_type,
+                "device_name": info.get("name", "Unknown"),
+                "severity": cve.get("severity", "UNKNOWN"),
+                "component": cve.get("component", ""),
+                "fixed_in": cve.get("fixed_in", ""),
+                "commands": commands,
+                "command_count": len(commands),
+                "patch_ready": bool(commands),
+            })
+    results.sort(key=lambda e: e["cve_id"])
     return results
 
 

@@ -24,14 +24,14 @@ from c2_cve_feed import (
     update_cve_database, get_feed, get_all_cves, load_ai_keys, save_ai_keys,
     generate_exploit_for_cve, ai_key_status, render_cve_whitepaper, AI_PROVIDERS,
     artifact_status, get_whitepaper_markdown, first_configured_provider,
-    generate_patch_for_cve,
+    generate_patch_for_cve, list_patches,
 )
 import c2_audit
 from c2_audit import (AuditEngagement, PatchEngagement, validate_client,
                       build_authorization_pdf, authorization_record_hash)
 from c2_ops import (utc_now_iso, scan_network, perform_scan, check_target,
                     execute_patches, kill_all_connections, run_exploit,
-                    exploit_availability)
+                    exploit_availability, run_autonomous)
 
 # Device family -> CVE database key
 FAMILY_TO_TV_TYPE = {
@@ -520,6 +520,8 @@ class C2Handler(BaseHTTPRequestHandler):
             self.serve_ai_providers()
         elif path == "/api/exploits":
             self.serve_exploits_list()
+        elif path == "/api/patches":
+            self.serve_patches_list()
         elif path.startswith("/docs/"):
             self.serve_doc(path)
         elif path == "/logo.png":
@@ -557,6 +559,8 @@ class C2Handler(BaseHTTPRequestHandler):
             self.handle_check()
         elif path == "/api/exploit":
             self.handle_exploit()
+        elif path == "/api/autonomous":
+            self.handle_autonomous()
         elif path == "/api/audit/authorize":
             self.handle_audit_authorize()
         elif path == "/api/audit/sign":
@@ -760,6 +764,13 @@ class C2Handler(BaseHTTPRequestHandler):
         try:
             from c2_cve_feed import list_exploits
             self.send_json(200, list_exploits())
+        except Exception as e:
+            self.send_json(500, {"error": str(e)})
+
+    def serve_patches_list(self):
+        """GET /api/patches — every patch in the database with its commands."""
+        try:
+            self.send_json(200, list_patches())
         except Exception as e:
             self.send_json(500, {"error": str(e)})
 
@@ -1210,6 +1221,55 @@ class C2Handler(BaseHTTPRequestHandler):
             self.send_json(400, {"error": str(e)})
         except Exception as e:
             self.send_json(500, {"error": str(e)})
+
+    def handle_autonomous(self):
+        """POST /api/autonomous — full autonomous engagement.
+
+        Scans the network, checks every finding, exploits the vulnerable
+        ones and registers successfully exploited TVs as devices with
+        their CVE inventory attached (drives the per-device Patch and
+        Whitepaper buttons). Body: {"cidr": "192.168.1.0/24"} (optional).
+        """
+        try:
+            data = self._read_json_body()
+            cidr = str(data.get("cidr") or "").strip() or None
+            summary = run_autonomous(
+                cidr, cve_scanner, self._register_autonomous_device)
+            record_scan_results(
+                [{"ip": v["ip"], "tv_type": v["tv_type"],
+                  "cves": [{"id": cid} for cid in v["cves"]],
+                  "source": "autonomous"}
+                 for v in summary["vulnerable"]])
+            self.send_json(200, {"status": "ok", **summary})
+        except json.JSONDecodeError as e:
+            self.send_json(400, {"error": str(e)})
+        except Exception as e:
+            self.send_json(500, {"error": str(e)})
+
+    def _register_autonomous_device(self, ip, tv_type, cves, exploit_result):
+        """Registry callback for run_autonomous (owns devices_lock)."""
+        device_id = get_device_id(ip)
+        family = TV_CVE_DATABASE.get(tv_type, {}).get("name", tv_type)
+        with devices_lock:
+            prev = devices.get(device_id, {})
+            devices[device_id] = {
+                "id": device_id,
+                "ip": ip,
+                "family": family,
+                "entry": "autonomous",
+                "status": "online",
+                "last_seen": utc_now_iso(),
+                "registered_at": prev.get("registered_at", utc_now_iso()),
+                "exploited_at": utc_now_iso(),
+                "exploit": {"tv_type": tv_type,
+                            "success": bool(exploit_result.get("success")),
+                            "duration_s": exploit_result.get("duration_s")},
+                "cves": [{"id": c.get("id", ""), "severity": c.get("severity", ""),
+                          "component": c.get("component", ""),
+                          "fixed_in": c.get("fixed_in", "")} for c in cves],
+            }
+        save_devices()  # never call while holding devices_lock (non-reentrant)
+        return device_id
 
     def handle_audit_authorize(self):
         """POST /api/audit/authorize — validate the client details and stage

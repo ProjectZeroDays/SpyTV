@@ -447,6 +447,60 @@ def execute_patches(ip, tv_type, scanner, timeout_per_cmd=45):
             "ok": ok, "total": len(patch_results), "cves_fixed": cves_fixed}
 
 
+def run_autonomous(cidr, scanner, register_device, progress_cb=None):
+    """Autonomous engagement: scan → check → exploit → register.
+
+    ``register_device(ip, tv_type, cves, exploit_result)`` is injected by
+    the server (it owns the device registry) and must return a device id.
+    Never raises — per-target failures are collected in ``errors``.
+    """
+    summary = {"scanned": 0, "vulnerable": [], "exploited": [],
+               "registered": [], "errors": []}
+    try:
+        results = perform_scan(cidr, scanner)
+    except Exception as e:  # noqa: BLE001
+        summary["errors"].append(f"scan failed: {e}")
+        return summary
+    summary["scanned"] = len(results)
+    for r in results:
+        ip = r.get("ip", "")
+        tv_type = r.get("tv_type", "")
+        cves = r.get("cves", [])
+        if not ip or not tv_type or not cves:
+            continue
+        cve_ids = [c.get("id", "") for c in cves]
+        try:
+            checked = check_target(ip, scanner)
+        except Exception as e:  # noqa: BLE001
+            summary["errors"].append(f"check {ip} failed: {e}")
+            continue
+        if not checked.get("vulnerable"):
+            continue
+        summary["vulnerable"].append({"ip": ip, "tv_type": tv_type,
+                                      "cves": cve_ids})
+        try:
+            run = run_exploit(tv_type, ip)
+        except Exception as e:  # noqa: BLE001
+            summary["errors"].append(f"exploit {ip} failed: {e}")
+            continue
+        if progress_cb:
+            try:
+                progress_cb(ip, tv_type, run)
+            except Exception:
+                pass
+        if run.get("success"):
+            summary["exploited"].append({"ip": ip, "tv_type": tv_type,
+                                         "cves": cve_ids})
+            try:
+                device_id = register_device(ip, tv_type, cves, run)
+                summary["registered"].append({"ip": ip, "device_id": device_id,
+                                              "tv_type": tv_type,
+                                              "cves": cve_ids})
+            except Exception as e:  # noqa: BLE001
+                summary["errors"].append(f"register {ip} failed: {e}")
+    return summary
+
+
 def kill_all_connections(target_ips=None):
     """Teardown: close tracked sockets, terminate exploit child tools, and
     verify no established connections to the engagement targets remain."""

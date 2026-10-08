@@ -50,15 +50,7 @@
     z-index: 50;
     flex-wrap: wrap;
   }
-  .header-logo { width: 40px; height: 40px; border-radius: var(--radius-sm); }
-  .header-app-icon {
-    width: 40px; height: 40px; flex-shrink: 0;
-    display: inline-flex; align-items: center; justify-content: center;
-    border-radius: 11px; color: #fff;
-    background: linear-gradient(135deg, var(--accent), #155E75);
-    box-shadow: 0 2px 10px rgba(15, 118, 110, 0.45);
-  }
-  .header-app-icon svg { width: 24px; height: 24px; }
+  .header-logo { width: 40px; height: 40px; border-radius: 11px; flex-shrink: 0; }
   .header-title h1 { font-size: 18px; font-weight: 700; letter-spacing: -0.025em; }
   .header-title p { font-size: 12px; color: var(--text-muted); }
   .header-nav {
@@ -743,13 +735,7 @@
 
 <!-- Header -->
 <header class="header">
-  <img src="/logo.png" alt="Authenticated, Inc." class="header-logo" onerror="this.style.display='none'">
-  <span class="header-app-icon" role="img" aria-label="SpyTV app icon">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
-      <polyline points="17 2 12 7 7 2"/>
-    </svg>
-  </span>
+  <img src="/logo.png" alt="SpyTV" class="header-logo" onerror="this.style.display='none'">
   <div class="header-title">
     <h1>TV Security Assessment Platform</h1>
     <p>Authenticated, Inc.</p>
@@ -782,6 +768,7 @@
   <div class="nav-item" role="tab" tabindex="0" aria-selected="false" onclick="switchTab('cve')">CVE Monitor</div>
   <div class="nav-item" role="tab" tabindex="0" aria-selected="false" onclick="switchTab('server')">Server Info</div>
   <div class="nav-item" role="tab" tabindex="0" aria-selected="false" onclick="switchTab('exploits')">Exploits</div>
+  <div class="nav-item" role="tab" tabindex="0" aria-selected="false" onclick="switchTab('patches')">Patches</div>
 </nav>
 
 <!-- Engagement status banner (Audit / Patch-all) -->
@@ -860,6 +847,9 @@
           </div>
           <div class="form-group" style="flex:0">
             <button class="btn btn-success" onclick="startPatchAll()" data-tooltip="Patch every device on the network first, then collect client details and generate a remediation report (PDF)">&#128736; Patch All</button>
+          </div>
+          <div class="form-group" style="flex:0">
+            <button class="btn btn-warning" id="autonomous-btn" onclick="startAutonomous()" data-tooltip="Autonomous mode: scans the network, verifies every finding, exploits each vulnerable TV and adds it to the Devices list with its controls, Patch button and CVE whitepapers">&#9889; Autonomous</button>
           </div>
         </div>
         <div id="check-result" class="check-result" hidden></div>
@@ -995,17 +985,38 @@
       <div class="card-header">
         <span class="card-title">Exploits Dashboard</span>
         <div class="help-icon">?
-          <div class="tooltip">Lists all generated exploit modules on this C2 with their CVE, TV type, severity, and historical success rate (based on past run results). Use "Generate Exploit" on a CVE in the feed to create one, then refresh here.</div>
+          <div class="tooltip">Every exploit in the database: the built-in per-CVE family suites (data/exploits/cve_exploits.py) plus any AI-generated modules (data/exploits/generated/), with severity, component and historical success rate. Enter a target IP on any row and press Run to execute that exploit module against the device — the row reports the module's real outcome (success, failure, timeout or error).</div>
         </div>
       </div>
       <div class="card-body">
         <div class="alert alert-info">
-          &#8505;&#65039; Generated exploits stored in <code>data/exploits/generated/</code>.
+          &#8505;&#65039; All database exploits — built-in family suites and AI-generated modules.
         </div>
         <div style="margin-bottom:16px">
           <button class="btn btn-primary" onclick="loadExploits()" data-tooltip="Refresh the exploits list">Refresh</button>
         </div>
         <div id="exploits-results"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Patches Dashboard Tab -->
+  <div id="tab-patches" class="tab-content">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Patches Dashboard</span>
+        <div class="help-icon">?
+          <div class="tooltip">Every patch in the database, all the same: per-CVE remediation for each TV family with the exact commands the Patch button executes. Enter a target IP on any row and press Patch to run that family's remediation commands against the device; per-command status is reported in the activity log.</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="alert alert-info">
+          &#8505;&#65039; All database patches — per-CVE remediation for every TV family.
+        </div>
+        <div style="margin-bottom:16px">
+          <button class="btn btn-primary" onclick="loadPatches()" data-tooltip="Refresh the patches list">Refresh</button>
+        </div>
+        <div id="patches-results"></div>
       </div>
     </div>
   </div>
@@ -1430,6 +1441,9 @@ function renderDevices() {
           <button class="btn" onclick="confirmPatch('${d.id}')" data-tooltip="Execute CVE remediation for this TV: runs the device family's patch commands, marks its CVEs fixed, and disables the implant capture path">
             &#128736; Patch
           </button>
+          <button class="btn" onclick="viewDeviceWhitepaper('${d.id}')" data-tooltip="Open the whitepaper for this device's most severe CVE in the Output panel">
+            &#128214; Whitepaper
+          </button>
         </div>
         <div class="duration-select">
           <span class="duration-label">Duration:</span>
@@ -1484,6 +1498,36 @@ function confirmPatch(deviceId) {
     addLog(`Patch complete for ${d.ip}`);
     loadDevices();
   });
+}
+
+// Most severe CVE for a device: its own inventory (autonomous-registered)
+// or, failing that, the worst CVE its TV family carries in the database.
+function deviceWorstCve(d) {
+  const order = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
+  const rank = s => { const i = order.indexOf(s); return i === -1 ? 99 : i; };
+  const mine = Array.isArray(d.cves) ? d.cves : [];
+  if (mine.length) {
+    return [...mine].sort((a, b) => rank(a.severity) - rank(b.severity))[0].id || null;
+  }
+  const tvType = familyToTvType(d.family || '');
+  const list = (tvType && Array.isArray(cveDb[tvType])) ? cveDb[tvType] : [];
+  if (list.length) {
+    return [...list].sort((a, b) => rank(a.severity) - rank(b.severity))[0].id || null;
+  }
+  return null;
+}
+
+// View the whitepaper for a device's CVE in the Output panel.
+function viewDeviceWhitepaper(deviceId) {
+  const d = devices.find(x => x.id === deviceId);
+  if (!d) return;
+  const cveId = deviceWorstCve(d);
+  if (!cveId) {
+    addLog(`No CVE on record for ${d.ip} (${d.family}) — run a scan or autonomous pass first`);
+    return;
+  }
+  addLog(`Opening whitepaper for ${d.ip}: ${cveId}`);
+  viewWhitepaper(cveId);
 }
 
 function showModal(title, message, callback) {
@@ -2455,7 +2499,7 @@ async function generatePatchForCVE(cveId) {
   }
 }
 
-// Load and render the exploits dashboard
+// Load and render the exploits dashboard (built-in + generated)
 async function loadExploits() {
   const el = document.getElementById('exploits-results');
   if (!el) return;
@@ -2463,7 +2507,7 @@ async function loadExploits() {
   try {
     const exploits = await api('/api/exploits');
     if (!Array.isArray(exploits) || exploits.length === 0) {
-      el.innerHTML = '<p style="color:var(--text-muted);font-size:13px;padding:16px 0">No generated exploits yet. Use "Generate Exploit" on a CVE in the feed to create one.</p>';
+      el.innerHTML = '<p style="color:var(--text-muted);font-size:13px;padding:16px 0">No exploits in the database yet. Use "Generate Exploit" on a CVE in the feed to create one.</p>';
       return;
     }
     el.innerHTML = `
@@ -2474,33 +2518,200 @@ async function loadExploits() {
             <th>CVE ID</th>
             <th>Device</th>
             <th>Severity</th>
+            <th>Component</th>
+            <th>Source</th>
             <th>Success Rate</th>
             <th>Attempts</th>
-            <th>File</th>
-            <th>Last Run</th>
+            <th>Target IP</th>
+            <th>Action</th>
           </tr>
         </thead>
         <tbody>
           ${exploits.map(e => {
             const rate = e.success_rate || 0;
             const color = rate >= 75 ? 'var(--success)' : rate >= 50 ? 'var(--accent)' : 'var(--warning)';
+            const safeId = String(e.cve_id).replace(/[^A-Za-z0-9-]/g, '');
             return `
-            <tr>
+            <tr id="exrow-${safeId}-${e.tv_type}">
               <td><a class="mono" href="https://nvd.nist.gov/vuln/detail/${e.cve_id}" target="_blank" style="color:var(--accent);text-decoration:none">${e.cve_id} &#8599;</a></td>
               <td>${e.device_name || 'Unknown'}</td>
               <td><span class="badge ${e.severity === 'CRITICAL' ? 'badge-danger' : e.severity === 'HIGH' ? 'badge-warning' : 'badge-success'}">${e.severity || 'UNKNOWN'}</span></td>
+              <td style="font-size:11px;color:var(--text-secondary)">${e.component || '—'}</td>
+              <td><span class="badge ${e.source === 'generated' ? 'badge-warning' : 'badge-success'}" data-tooltip="${e.source === 'generated' ? 'AI-generated module' : 'Built-in family suite'}">${e.source || 'built-in'}</span></td>
               <td style="color:${color};font-weight:600">${rate}%</td>
               <td>${e.attempts || 0}</td>
-              <td class="mono" style="font-size:11px">${e.file || '—'}</td>
-              <td style="color:var(--text-secondary);font-size:11px">${e.last_run || '—'}</td>
+              <td><input class="form-input mono" style="width:120px;padding:5px 8px;font-size:12px" id="run-ip-${safeId}-${e.tv_type}" placeholder="192.168.1.50" aria-label="Target IP for ${e.cve_id}"></td>
+              <td>
+                <button class="btn btn-sm btn-info" onclick="viewWhitepaper('${e.cve_id}')" data-tooltip="Open whitepaper for this CVE">&#128196; WP</button>
+                <button class="btn btn-sm btn-primary" id="run-btn-${safeId}-${e.tv_type}" onclick="runExploitRow('${safeId}', '${e.tv_type}', '${safeId}-${e.tv_type}')" data-tooltip="Execute this exploit module against the target IP">&#9889; Run</button>
+                <span id="run-status-${safeId}-${e.tv_type}" style="font-size:11px;margin-left:6px;color:var(--text-muted)"></span>
+              </td>
             </tr>`;
           }).join('')}
         </tbody>
       </table>
       </div>
+      <p style="font-size:11px;color:var(--text-muted);margin-top:10px">${exploits.length} exploit(s) — authorized testing only.</p>
     `;
   } catch (e) {
     el.innerHTML = '<div class="alert alert-warning">Failed to load exploits: ' + (e.message || e) + '</div>';
+  }
+}
+
+// Run one exploit row against its target IP and report the real outcome
+async function runExploitRow(cveId, tvType) {
+  const rowId = (rowKey || (cveId + '-' + tvType));
+  const input = document.getElementById('run-ip-' + rowId);
+  const status = document.getElementById('run-status-' + rowId);
+  const btn = document.getElementById('run-btn-' + rowId);
+  const ip = (input && input.value || '').trim();
+  if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) {
+    if (status) { status.style.color = 'var(--warning)'; status.textContent = 'enter a valid IP'; }
+    return;
+  }
+  if (btn) btn.disabled = true;
+  if (status) { status.style.color = 'var(--text-muted)'; status.textContent = 'running…'; }
+  addLog(`Exploit ${cveId} → ${ip} (${tvType}) — executing module...`);
+  try {
+    const res = await api('/api/exploit', 'POST', { ip, tv_type: tvType });
+    if (res.error && !res.attempted) throw new Error(res.error);
+    const ok = !!res.success;
+    if (status) {
+      status.style.color = ok ? 'var(--success)' : 'var(--danger, #ef4444)';
+      status.textContent = ok ? `success (${res.duration_s}s)` : (res.timed_out ? 'timeout' : (res.error ? 'failed' : 'no gain'));
+    }
+    const detail = res.detail ? (' — ' + res.detail) : '';
+    addLog(ok
+      ? (`Exploit ${cveId} succeeded on ${ip} in ${res.duration_s}s` + detail)
+      : (`Exploit ${cveId} failed on ${ip}: ${res.error || (res.timed_out ? 'timeout' : 'module reported no success')}` + detail));
+  } catch (e) {
+    if (status) { status.style.color = 'var(--danger, #ef4444)'; status.textContent = 'error'; }
+    addLog(`Exploit ${cveId} error: ${e.message || e}`);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+// Load and render the patches dashboard (every patch, all the same)
+async function loadPatches() {
+  const el = document.getElementById('patches-results');
+  if (!el) return;
+  el.innerHTML = '<p style="color:var(--text-muted);font-size:13px;padding:16px 0">Loading patches...</p>';
+  try {
+    const patches = await api('/api/patches');
+    if (!Array.isArray(patches) || patches.length === 0) {
+      el.innerHTML = '<p style="color:var(--text-muted);font-size:13px;padding:16px 0">No patches in the database.</p>';
+      return;
+    }
+    el.innerHTML = `
+      <div class="table-scroll">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>CVE ID</th>
+            <th>Device</th>
+            <th>Severity</th>
+            <th>Component</th>
+            <th>Fixed In</th>
+            <th>Commands</th>
+            <th>Target IP</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${patches.map(p => {
+            const safeId = String(p.cve_id).replace(/[^A-Za-z0-9-]/g, '');
+            const cmds = (p.commands || []).join('\n');
+            return `
+            <tr id="ptrow-${safeId}">
+              <td><a class="mono" href="https://nvd.nist.gov/vuln/detail/${p.cve_id}" target="_blank" style="color:var(--accent);text-decoration:none">${p.cve_id} &#8599;</a></td>
+              <td>${p.device_name || 'Unknown'}</td>
+              <td><span class="badge ${p.severity === 'CRITICAL' ? 'badge-danger' : p.severity === 'HIGH' ? 'badge-warning' : 'badge-success'}">${p.severity || 'UNKNOWN'}</span></td>
+              <td style="font-size:11px;color:var(--text-secondary)">${p.component || '—'}</td>
+              <td style="font-size:11px">${p.fixed_in || '—'}</td>
+              <td><span class="badge badge-success" title="${escapeHtml(cmds)}">${p.command_count || 0} command(s)</span></td>
+              <td><input class="form-input mono" style="width:120px;padding:5px 8px;font-size:12px" id="pt-ip-${safeId}" placeholder="192.168.1.50" aria-label="Target IP for ${p.cve_id}"></td>
+              <td>
+                <button class="btn btn-sm" id="pt-btn-${safeId}" onclick="patchTargetRow('${safeId}', '${p.tv_type}')" data-tooltip="Execute this family's remediation commands against the target IP">&#128736; Patch</button>
+                <span id="pt-status-${safeId}" style="font-size:11px;margin-left:6px;color:var(--text-muted)"></span>
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+      </div>
+      <p style="font-size:11px;color:var(--text-muted);margin-top:10px">${patches.length} patch(es) — authorized testing only.</p>
+    `;
+  } catch (e) {
+    el.innerHTML = '<div class="alert alert-warning">Failed to load patches: ' + (e.message || e) + '</div>';
+  }
+}
+
+// Run one patch row against its target IP and report per-command status
+async function patchTargetRow(cveId, tvType) {
+  const input = document.getElementById('pt-ip-' + cveId);
+  const status = document.getElementById('pt-status-' + cveId);
+  const btn = document.getElementById('pt-btn-' + cveId);
+  const ip = (input && input.value || '').trim();
+  if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) {
+    if (status) { status.style.color = 'var(--warning)'; status.textContent = 'enter a valid IP'; }
+    return;
+  }
+  if (btn) btn.disabled = true;
+  if (status) { status.style.color = 'var(--text-muted)'; status.textContent = 'patching…'; }
+  addLog(`Patch ${cveId} → ${ip} (${tvType}) — executing remediation commands...`);
+  try {
+    const res = await api('/api/cve/patch', 'POST', { ip, tv_type: tvType, family: tvType });
+    if (res.error) throw new Error(res.error);
+    const ok = (res.patches || []).filter(p => p.status === 'ok' || p.status === 'executed').length;
+    const total = res.total != null ? res.total : (res.patches || []).length;
+    if (status) {
+      status.style.color = ok === total ? 'var(--success)' : 'var(--warning)';
+      status.textContent = `${ok}/${total} ok`;
+    }
+    addLog(`Patch ${cveId} on ${ip}: ${ok}/${total} commands succeeded — fixed ${(res.cves_fixed || []).join(', ') || 'no CVEs'}`);
+    (res.patches || []).forEach(p => {
+      if (p.status === 'failed' || p.status === 'error') addLog(`  [${p.status}] ${p.command}: ${p.output}`);
+    });
+  } catch (e) {
+    if (status) { status.style.color = 'var(--danger, #ef4444)'; status.textContent = 'error'; }
+    addLog(`Patch ${cveId} error: ${e.message || e}`);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+// Autonomous mode: scan → verify → exploit → register with controls
+let autonomousRunning = false;
+async function startAutonomous() {
+  if (autonomousRunning) return;
+  const btn = document.getElementById('autonomous-btn');
+  const cidr = document.getElementById('scan-cidr').value.trim() || null;
+  autonomousRunning = true;
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Autonomous…'; }
+  addLog(`Autonomous mode engaged${cidr ? ` on ${cidr}` : ' (local range)'} — scanning, verifying, exploiting and registering every vulnerable TV...`);
+  try {
+    const res = await api('/api/autonomous', 'POST', { cidr });
+    if (res.error) throw new Error(res.error);
+    addLog(`Autonomous: ${res.scanned} host(s) scanned, ${res.vulnerable.length} vulnerable, ${res.exploited.length} exploited, ${res.registered.length} registered`);
+    (res.registered || []).forEach(r => {
+      addLog(`  + ${r.ip} (${r.tv_type}) added to Devices — CVEs: ${(r.cves || []).join(', ')}`);
+    });
+    (res.errors || []).forEach(err => addLog(`  [error] ${err}`));
+    await loadDevices();
+    // Show the findings on the Scan tab too (mapped to the card shape).
+    if (Array.isArray(res.vulnerable) && res.vulnerable.length) {
+      renderScanResults(res.vulnerable.map(v => ({
+        ip: v.ip, tv_type: v.tv_type, name: v.tv_type, vulnerable: true,
+        cves: (v.cves || []).map(id => ({ id })),
+      })));
+    }
+    switchTab('devices');
+  } catch (e) {
+    addLog(`Autonomous mode failed: ${e.message || e}`);
+  } finally {
+    autonomousRunning = false;
+    if (btn) { btn.disabled = false; btn.innerHTML = '&#9889; Autonomous'; }
   }
 }
 
@@ -2527,6 +2738,8 @@ const _origSwitchTab = switchTab;
 switchTab = function(tab) {
   if (tab === 'exploits') {
     loadExploits();
+  } else if (tab === 'patches') {
+    loadPatches();
   }
   return _origSwitchTab(tab);
 };

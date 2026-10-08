@@ -60,6 +60,10 @@ GitHub releases ship three assets — **each capable of running the full C2**:
 | `SpyTV-C2-standalone.exe` | Standalone Windows EXE with bundled Python — runs the full C2 server offline | Full C2 ✓ |
 | `SHA256SUMS.txt` | SHA-256 checksum manifest for the attached assets | — |
 
+## Screenshots
+
+Screenshots of the web dashboard (`docs/screenshots/dashboard-web.png`), standalone EXE (`docs/screenshots/exe-running.png`), and native APK (`docs/screenshots/apk-running.png`) are included in `docs/screenshots/`.
+
 ### APK Modes
 
 The SpyTV APK supports two modes:
