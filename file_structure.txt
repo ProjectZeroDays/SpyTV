@@ -1,0 +1,207 @@
+# SpyTV file structure (post Phase 2 cleanup)
+.env.example/  # root folder
+  .env.example
+.github/  # root folder
+  .github/RELEASE_TEMPLATE.md
+  .github/dependabot.yml
+  .github/workflows/build-release.yml
+.gitignore/  # root folder
+  .gitignore
+.opencode/  # root folder
+  .opencode/commands/push.md
+CVE_UPDATES.log/  # root folder
+  CVE_UPDATES.log
+README.md/  # root folder
+  README.md
+SHA256SUMS.txt/  # root folder
+  SHA256SUMS.txt
+SpyTV.apk/  # root folder
+  SpyTV.apk
+TODO.md/  # root folder
+  TODO.md
+android/  # root folder
+  android/app/proguard-rules.pro
+  android/app/src/main/AndroidManifest.xml
+  android/app/src/main/assets/c2_dashboard.html
+  android/app/src/main/java/com/authenticated/spytv/C2Server.kt
+  android/app/src/main/java/com/authenticated/spytv/MainActivity.kt
+  android/app/src/main/res/drawable-hdpi/ic_launcher_foreground.png
+  android/app/src/main/res/drawable-hdpi/ic_launcher_round_foreground.png
+  android/app/src/main/res/drawable-mdpi/ic_launcher_foreground.png
+  android/app/src/main/res/drawable-mdpi/ic_launcher_round_foreground.png
+  android/app/src/main/res/drawable-xhdpi/ic_launcher_foreground.png
+  android/app/src/main/res/drawable-xhdpi/ic_launcher_round_foreground.png
+  android/app/src/main/res/drawable-xxhdpi/ic_launcher_foreground.png
+  android/app/src/main/res/drawable-xxhdpi/ic_launcher_round_foreground.png
+  android/app/src/main/res/drawable-xxxhdpi/ic_launcher_foreground.png
+  android/app/src/main/res/drawable-xxxhdpi/ic_launcher_round_foreground.png
+  android/app/src/main/res/layout/activity_main.xml
+  android/app/src/main/res/layout/item_dashboard_card.xml
+  android/app/src/main/res/menu/bottom_nav_menu.xml
+  android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+  android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
+  ... (12 more)
+build_standalone_exe.py/  # root folder
+  build_standalone_exe.py
+build_widget.py/  # root folder
+  build_widget.py
+c2_audit.py/  # root folder
+  c2_audit.py
+c2_cve_feed.py/  # root folder
+  c2_cve_feed.py
+c2_dashboard.html/  # root folder
+  c2_dashboard.html
+c2_ops.py/  # root folder
+  c2_ops.py
+c2_server.py/  # root folder
+  c2_server.py
+config/  # root folder
+  config/devices.example.json
+  config/known_hosts.example.json
+  config/vlan_policy.example.json
+config.yaml/  # root folder
+  config.yaml
+core/  # root folder
+  core/__init__.py
+  core/builder.py
+  core/config.py
+  core/config.yaml
+  core/cve_scanner.py
+  core/discovery.py
+  core/exploit_dispatcher.py
+  core/exploit_engine.py
+  core/implant.py
+  core/receiver.py
+  core/scanner.py
+  core/session_manager.py
+  core/stealth.py
+  core/stream_manager.py
+  core/utils.py
+  core/withdrawal.py
+create_apk.py/  # root folder
+  create_apk.py
+data/  # root folder
+  data/exploits/adb_wireless_exploit.py
+  data/exploits/cve_exploits.py
+  data/exploits/generated/CVE-2026-87588.py
+  data/exploits/generated/CVE-2026-95372.py
+  data/exploits/ssh_brute.py
+  data/exploits/vendor_specific.py
+  data/patch_checks/CVE-2026-106382.md
+  data/signatures/CVE-2026-106382.md
+defense/  # root folder
+  defense/__init__.py
+  defense/common.py
+  defense/cve_monitor/__init__.py
+  defense/cve_monitor/keywords.json
+  defense/cve_monitor/monitor.py
+  defense/cve_monitor/whitepaper.py
+  defense/detection/__init__.py
+  defense/detection/adapters.py
+  defense/detection/adb_detector.py
+  defense/detection/drill.py
+  defense/detection/events.py
+  defense/detection/monitor.py
+  defense/detection/report.py
+  defense/detection/rules/lnx_sshd_bruteforce.yml
+  defense/detection/rules/net_adb_ports.yml
+  defense/detection/rules/net_ssdp_sweep.yml
+  defense/detection/rules/net_upnp_avtransport.yml
+  defense/detection/rules/win_adb_network_connect.yml
+  defense/detection/ssdp_detector.py
+  defense/detection/ssh_detector.py
+  ... (6 more)
+docs/  # root folder
+  docs/ARCHITECTURE.md
+  docs/C2_DASHBOARD.md
+  docs/CHANGES.md
+  docs/CODE_REVIEW.md
+  docs/CVE_MONITORING_GUIDE.md
+  docs/DETECTION_GUIDE.md
+  docs/GETTING_STARTED.md
+  docs/HARDENING_GUIDE.md
+  docs/PRESENTATION.pptx.md
+  docs/SEGMENTATION_GUIDE.md
+  docs/THREAT_MODEL.md
+  docs/TROUBLESHOOTING.md
+  docs/WIKI.md
+  docs/screenshots/apk-running.png
+  docs/screenshots/dashboard-web.png
+  docs/screenshots/exe-running.png
+  docs/whitepapers/CVE-2016-5195.md
+  docs/whitepapers/CVE-2017-0781.md
+  docs/whitepapers/CVE-2017-0785.md
+  docs/whitepapers/CVE-2017-13077.md
+  ... (8 more)
+electron/  # root folder
+  electron/icon.png
+  electron/index.html
+  electron/main.js
+  electron/offline.html
+  electron/package-lock.json
+  electron/package.json
+  electron/preload.js
+families/  # root folder
+  families/android/install.py
+  families/dlna/install.py
+  families/tizen/install.py
+  families/webos/install.py
+file_structure.txt/  # root folder
+  file_structure.txt
+icon.png/  # root folder
+  icon.png
+install_and_launch.bat/  # root folder
+  install_and_launch.bat
+install_and_launch.sh/  # root folder
+  install_and_launch.sh
+logo.png/  # root folder
+  logo.png
+main.py/  # root folder
+  main.py
+opencode-ruflo-setup.md/  # root folder
+  opencode-ruflo-setup.md
+registry.yaml/  # root folder
+  registry.yaml
+requirements.txt/  # root folder
+  requirements.txt
+resources/  # root folder
+  resources/config.yaml
+  resources/logo_source.jpg
+run_c2.bat/  # root folder
+  run_c2.bat
+setup.py/  # root folder
+  setup.py
+setup.sh/  # root folder
+  setup.sh
+spytv_tagger.py/  # root folder
+  spytv_tagger.py
+tests/  # root folder
+  tests/__init__.py
+  tests/generated/.gitignore
+  tests/generated/test_CVE-2026-106382.py
+  tests/generated/test_CVE-2026-87588.py
+  tests/generated/test_CVE-2026-95372.py
+  tests/test_audit_flow.py
+  tests/test_autonomous.py
+  tests/test_c2_server.py
+  tests/test_cve_artifacts.py
+  tests/test_cve_monitor.py
+  tests/test_dashboard_ui.py
+  tests/test_detectors.py
+  tests/test_drill_report.py
+  tests/test_hardening.py
+  tests/test_local_provider.py
+  tests/test_probe_pool.py
+tools/  # root folder
+  tools/banner.py
+  tools/make_icon.py
+tv_fingerprint.py/  # root folder
+  tv_fingerprint.py
+tv_flow_receiver.py/  # root folder
+  tv_flow_receiver.py
+tv_install.py/  # root folder
+  tv_install.py
+tv_withdraw.py/  # root folder
+  tv_withdraw.py
+tvreaper.js/  # root folder
+  tvreaper.js

@@ -47,6 +47,40 @@
         app:layout_constraintEnd_toEndOf="parent"
         tools:listitem="@layout/item_dashboard_card" />
 
+    <Button
+        android:id="@+id/btnConnectRemote"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Connect Remote"
+        android:textColor="#e8edf2"
+        android:background="#1456f7"
+        android:layout_margin="12dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginBottom="56dp"
+        app:layout_constraintBottom_toTopOf="@id/bottomNav"
+        app:layout_constraintStart_toStartOf="parent" />
+
+    <LinearLayout
+        android:id="@+id/modeSelectionContainer"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:layout_marginTop="8dp"
+        app:layout_constraintTop_toBottomOf="@id/dashboardGrid"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <TextView
+        android:id="@+id/countdownText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Ready"
+        android:textColor="#00e5ff"
+        android:textSize="14sp"
+        app:layout_constraintBottom_toBottomOf="@id/dashboardGrid"
+        app:layout_constraintStart_toStartOf="parent"
+        android:layout_margin="8dp" />
+
     <!-- Bottom Navigation (Native Android best practice) -->
     <com.google.android.material.bottomnavigation.BottomNavigationView
         android:id="@+id/bottomNav"
