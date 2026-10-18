@@ -3,7 +3,7 @@
 python-nmap>=0.6.1
 colorama>=0.4.6
 pyyaml>=6.0
-requests>=2.32.0
+requests>=2.34.2
 urllib3>=2.8.0
 # PDF generation for audit/patch reports + authorization instrument (T-03)
 reportlab>=5.0.0
