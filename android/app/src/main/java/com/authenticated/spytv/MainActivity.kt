@@ -8,8 +8,6 @@ import android.os.Bundle
 import android.os.CountDownTimer
 import android.text.InputType
 import android.view.View
-import android.webkit.WebView
-import android.webkit.WebViewClient
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
@@ -43,14 +41,6 @@ import java.util.*
  */
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var webView: WebView
-    private lateinit var errorView: View
-    private lateinit var errorTitle: TextView
-    private lateinit var errorDetail: TextView
-    private lateinit var btnRetry: Button
-    private lateinit var btnAddress: Button
-    private lateinit var btnSettings: Button
-    private lateinit var modeIndicator: TextView
     private lateinit var serverStatus: TextView
     private lateinit var serverToggle: Switch
     private lateinit var btnSelfHosted: Button
@@ -110,14 +100,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun initViews() {
-        webView = findViewById(R.id.webView)
-        errorView = findViewById(R.id.errorView)
-        errorTitle = findViewById(R.id.errorTitle)
-        errorDetail = findViewById(R.id.errorDetail)
-        btnRetry = findViewById(R.id.btnRetry)
-        btnAddress = findViewById(R.id.btnAddress)
-        btnSettings = findViewById(R.id.btnSettings)
-        modeIndicator = findViewById(R.id.modeIndicator)
         serverStatus = findViewById(R.id.serverStatus)
         serverToggle = findViewById(R.id.serverToggle)
         btnSelfHosted = findViewById(R.id.btnSelfHosted)
@@ -125,28 +107,6 @@ class MainActivity : AppCompatActivity() {
         modeSelectionContainer = findViewById(R.id.modeSelectionContainer)
         countdownText = findViewById(R.id.countdownText)
 
-        webView.webViewClient = WebViewClient()
-        webView.settings.apply {
-            javaScriptEnabled = true
-            domStorageEnabled = true
-            allowFileAccess = true
-            allowContentAccess = true
-            loadWithOverviewMode = true
-            useWideViewPort = true
-            setSupportZoom(true)
-            builtInZoomControls = true
-            displayZoomControls = false
-        }
-
-        btnRetry.setOnClickListener {
-            if (isStandaloneMode) {
-                restartC2Server()
-            } else {
-                open(c2Url)
-            }
-        }
-        btnAddress.setOnClickListener { promptForAddress() }
-        btnSettings.setOnClickListener { showModeSelectionDialog() }
         btnSelfHosted.setOnClickListener {
             hideModeSelection()
             isStandaloneMode = true
@@ -168,7 +128,7 @@ class MainActivity : AppCompatActivity() {
             if (saved.isNullOrBlank()) {
                 promptForAddress()
             } else {
-                open(c2Url)
+                openInBrowser(c2Url)
             }
         }
         serverToggle.setOnCheckedChangeListener { _, isChecked ->
@@ -191,19 +151,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateModeIndicator() {
-        modeIndicator.text = if (isStandaloneMode) {
-            "SELF-HOSTED MODE"
-        } else {
-            "CONNECT-REMOTE MODE"
-        }
-        modeIndicator.setTextColor(
-            if (isStandaloneMode) 0xFF10B981.toInt() else 0xFF3B82F6.toInt()
-        )
-
         serverToggle.isChecked = isStandaloneMode
         serverStatus.visibility = if (isStandaloneMode) View.VISIBLE else View.GONE
-        webView.visibility = if (isStandaloneMode) View.GONE else View.VISIBLE
-        errorView.visibility = if (isStandaloneMode) View.GONE else View.VISIBLE
     }
 
     private fun toggleStandaloneMode(enabled: Boolean) {
@@ -262,8 +211,6 @@ class MainActivity : AppCompatActivity() {
         try {
             serverStatus.visibility = View.VISIBLE
             serverStatus.text = "C2 Server starting..."
-            webView.visibility = View.GONE
-            errorView.visibility = View.GONE
 
             val defaultPort = 8443
             c2Server = C2Server(defaultPort)
@@ -330,7 +277,7 @@ class MainActivity : AppCompatActivity() {
             )
             else -> {
                 hideError()
-                webView.loadUrl(url)
+                openInBrowser(url)
             }
         }
     }
@@ -384,15 +331,12 @@ class MainActivity : AppCompatActivity() {
     // ------------------------------------------------------------------
 
     private fun showError(title: String, detail: String) {
-        errorTitle.text = title
-        errorDetail.text = detail
-        errorView.visibility = View.VISIBLE
-        webView.visibility = View.GONE
+        serverStatus.visibility = View.VISIBLE
+        serverStatus.text = "$title: $detail"
     }
 
     private fun hideError() {
-        errorView.visibility = View.GONE
-        webView.visibility = View.VISIBLE
+        // no-op: no dedicated error view in redesigned layout
     }
 
     private fun promptForAddress() {
@@ -489,11 +433,17 @@ class MainActivity : AppCompatActivity() {
                 }
                 .setNegativeButton("Cancel", null)
                 .show()
-        } else if (webView.visibility == View.VISIBLE && webView.canGoBack()) {
-            webView.goBack()
         } else {
             super.onBackPressed()
         }
+    }
+
+    /** Open a URL in the system browser (no WebView in redesigned layout). */
+    private fun openInBrowser(url: String) {
+        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+            data = android.net.Uri.parse(url)
+        }
+        startActivity(intent)
     }
 
     private data class Probe(

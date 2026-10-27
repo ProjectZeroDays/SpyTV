@@ -1,0 +1,1 @@
+# Real reference only\nSource: https://www.exploit-db.com/ (ExploitDB)\nSource: https://googleprojectzero.blogspot.com/ (Project Zero)\nSource: https://payloads.all.things/ (payload reference)\nNo simulated payloads; authorize before use.\n

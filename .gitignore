@@ -34,6 +34,7 @@ resources/tvreaper.ipk
 .video_agent/
 .zcode/
 .zcodeignore
+.opencode/
 *.mimosa*
 
 # Electron C2 wrapper (deps + build output are regenerated)

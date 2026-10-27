@@ -1,67 +1,49 @@
 # SpyTV file structure (post Phase 2 cleanup)
-.env.example/  # root folder
-  .env.example
-.github/  # root folder
+.github/  # GitHub CI/release workflows
   .github/RELEASE_TEMPLATE.md
   .github/dependabot.yml
   .github/workflows/build-release.yml
-.gitignore/  # root folder
-  .gitignore
-.opencode/  # root folder
+.opencode/  # OpenCode agent config
   .opencode/commands/push.md
-CVE_UPDATES.log/  # root folder
-  CVE_UPDATES.log
-README.md/  # root folder
-  README.md
-SHA256SUMS.txt/  # root folder
-  SHA256SUMS.txt
-SpyTV.apk/  # root folder
-  SpyTV.apk
-TODO.md/  # root folder
-  TODO.md
-android/  # root folder
+android/  # Native Android C2 console app
+  android/app/build.gradle.kts
   android/app/proguard-rules.pro
-  android/app/src/main/AndroidManifest.xml
-  android/app/src/main/assets/c2_dashboard.html
-  android/app/src/main/java/com/authenticated/spytv/C2Server.kt
-  android/app/src/main/java/com/authenticated/spytv/MainActivity.kt
-  android/app/src/main/res/drawable-hdpi/ic_launcher_foreground.png
-  android/app/src/main/res/drawable-hdpi/ic_launcher_round_foreground.png
-  android/app/src/main/res/drawable-mdpi/ic_launcher_foreground.png
-  android/app/src/main/res/drawable-mdpi/ic_launcher_round_foreground.png
-  android/app/src/main/res/drawable-xhdpi/ic_launcher_foreground.png
-  android/app/src/main/res/drawable-xhdpi/ic_launcher_round_foreground.png
-  android/app/src/main/res/drawable-xxhdpi/ic_launcher_foreground.png
-  android/app/src/main/res/drawable-xxhdpi/ic_launcher_round_foreground.png
-  android/app/src/main/res/drawable-xxxhdpi/ic_launcher_foreground.png
-  android/app/src/main/res/drawable-xxxhdpi/ic_launcher_round_foreground.png
-  android/app/src/main/res/layout/activity_main.xml
-  android/app/src/main/res/layout/item_dashboard_card.xml
-  android/app/src/main/res/menu/bottom_nav_menu.xml
-  android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
-  android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
-  ... (12 more)
-build_standalone_exe.py/  # root folder
-  build_standalone_exe.py
-build_widget.py/  # root folder
-  build_widget.py
-c2_audit.py/  # root folder
-  c2_audit.py
-c2_cve_feed.py/  # root folder
-  c2_cve_feed.py
-c2_dashboard.html/  # root folder
-  c2_dashboard.html
-c2_ops.py/  # root folder
-  c2_ops.py
-c2_server.py/  # root folder
-  c2_server.py
-config/  # root folder
+      android/app/src/main/AndroidManifest.xml
+        android/app/src/main/assets/c2_dashboard.html
+              android/app/src/main/java/com/authenticated/spytv/C2Server.kt
+              android/app/src/main/java/com/authenticated/spytv/MainActivity.kt
+          android/app/src/main/res/drawable-hdpi/ic_launcher_foreground.png
+          android/app/src/main/res/drawable-hdpi/ic_launcher_round_foreground.png
+          android/app/src/main/res/drawable-mdpi/ic_launcher_foreground.png
+          android/app/src/main/res/drawable-mdpi/ic_launcher_round_foreground.png
+          android/app/src/main/res/drawable-xhdpi/ic_launcher_foreground.png
+          android/app/src/main/res/drawable-xhdpi/ic_launcher_round_foreground.png
+          android/app/src/main/res/drawable-xxhdpi/ic_launcher_foreground.png
+          android/app/src/main/res/drawable-xxhdpi/ic_launcher_round_foreground.png
+          android/app/src/main/res/drawable-xxxhdpi/ic_launcher_foreground.png
+          android/app/src/main/res/drawable-xxxhdpi/ic_launcher_round_foreground.png
+          android/app/src/main/res/layout/activity_main.xml
+          android/app/src/main/res/layout/item_dashboard_card.xml
+          android/app/src/main/res/menu/bottom_nav_menu.xml
+          android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+          android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
+          android/app/src/main/res/mipmap-hdpi/ic_launcher.xml
+          android/app/src/main/res/mipmap-hdpi/ic_launcher_round.xml
+          android/app/src/main/res/values/colors.xml
+          android/app/src/main/res/values/strings.xml
+          android/app/src/main/res/values/themes.xml
+  android/build.gradle.kts
+  android/gradle.properties
+    android/gradle/wrapper/gradle-wrapper.jar
+    android/gradle/wrapper/gradle-wrapper.properties
+  android/gradlew
+  android/gradlew.bat
+  android/settings.gradle.kts
+config/  # device/host/VLAN config examples
   config/devices.example.json
   config/known_hosts.example.json
   config/vlan_policy.example.json
-config.yaml/  # root folder
-  config.yaml
-core/  # root folder
+core/  # core engine modules
   core/__init__.py
   core/builder.py
   core/config.py
@@ -78,18 +60,16 @@ core/  # root folder
   core/stream_manager.py
   core/utils.py
   core/withdrawal.py
-create_apk.py/  # root folder
-  create_apk.py
-data/  # root folder
+data/  # exploits, patches, signatures
   data/exploits/adb_wireless_exploit.py
   data/exploits/cve_exploits.py
-  data/exploits/generated/CVE-2026-87588.py
-  data/exploits/generated/CVE-2026-95372.py
+    data/exploits/generated/CVE-2026-87588.py
+    data/exploits/generated/CVE-2026-95372.py
   data/exploits/ssh_brute.py
   data/exploits/vendor_specific.py
   data/patch_checks/CVE-2026-106382.md
   data/signatures/CVE-2026-106382.md
-defense/  # root folder
+defense/  # defensive detection/hardening
   defense/__init__.py
   defense/common.py
   defense/cve_monitor/__init__.py
@@ -103,15 +83,20 @@ defense/  # root folder
   defense/detection/events.py
   defense/detection/monitor.py
   defense/detection/report.py
-  defense/detection/rules/lnx_sshd_bruteforce.yml
-  defense/detection/rules/net_adb_ports.yml
-  defense/detection/rules/net_ssdp_sweep.yml
-  defense/detection/rules/net_upnp_avtransport.yml
-  defense/detection/rules/win_adb_network_connect.yml
+    defense/detection/rules/lnx_sshd_bruteforce.yml
+    defense/detection/rules/net_adb_ports.yml
+    defense/detection/rules/net_ssdp_sweep.yml
+    defense/detection/rules/net_upnp_avtransport.yml
+    defense/detection/rules/win_adb_network_connect.yml
   defense/detection/ssdp_detector.py
   defense/detection/ssh_detector.py
-  ... (6 more)
-docs/  # root folder
+  defense/hardening/__init__.py
+  defense/hardening/adb_disable.py
+  defense/hardening/attack_surface.py
+  defense/hardening/firmware_audit.py
+  defense/hardening/upnp_close.py
+  defense/hardening/vlan_segmentation.py
+docs/  # documentation + screenshots + whitepapers
   docs/ARCHITECTURE.md
   docs/C2_DASHBOARD.md
   docs/CHANGES.md
@@ -132,8 +117,15 @@ docs/  # root folder
   docs/whitepapers/CVE-2017-0781.md
   docs/whitepapers/CVE-2017-0785.md
   docs/whitepapers/CVE-2017-13077.md
-  ... (8 more)
-electron/  # root folder
+  docs/whitepapers/CVE-2017-7494.md
+  docs/whitepapers/CVE-2018-5383.md
+  docs/whitepapers/CVE-2020-0022.md
+  docs/whitepapers/CVE-2022-0847.md
+  docs/whitepapers/CVE-2023-45866.md
+  docs/whitepapers/CVE-2024-6387.md
+  docs/whitepapers/CVE-2026-0073.md
+  docs/whitepapers/CVE-2026-106382.md
+electron/  # Electron C2 wrapper
   electron/icon.png
   electron/index.html
   electron/main.js
@@ -141,41 +133,19 @@ electron/  # root folder
   electron/package-lock.json
   electron/package.json
   electron/preload.js
-families/  # root folder
+families/  # TV family installers (Android, DLNA, Tizen, webOS)
   families/android/install.py
   families/dlna/install.py
   families/tizen/install.py
   families/webos/install.py
-file_structure.txt/  # root folder
-  file_structure.txt
-icon.png/  # root folder
-  icon.png
-install_and_launch.bat/  # root folder
-  install_and_launch.bat
-install_and_launch.sh/  # root folder
-  install_and_launch.sh
-logo.png/  # root folder
-  logo.png
-main.py/  # root folder
-  main.py
-opencode-ruflo-setup.md/  # root folder
-  opencode-ruflo-setup.md
-registry.yaml/  # root folder
-  registry.yaml
-requirements.txt/  # root folder
-  requirements.txt
-resources/  # root folder
+postexploit/  # post-exploitation modules
+  postexploit/god_mode.py
+resources/  # packaging resources
   resources/config.yaml
   resources/logo_source.jpg
-run_c2.bat/  # root folder
-  run_c2.bat
-setup.py/  # root folder
-  setup.py
-setup.sh/  # root folder
-  setup.sh
-spytv_tagger.py/  # root folder
-  spytv_tagger.py
-tests/  # root folder
+skills/  # skill references
+  skills/openrouter_skills_ref.txt
+tests/  # test suite
   tests/__init__.py
   tests/generated/.gitignore
   tests/generated/test_CVE-2026-106382.py
@@ -192,16 +162,76 @@ tests/  # root folder
   tests/test_hardening.py
   tests/test_local_provider.py
   tests/test_probe_pool.py
-tools/  # root folder
+tools/  # helper scripts
   tools/banner.py
   tools/make_icon.py
-tv_fingerprint.py/  # root folder
+.env.example/  # root config template
+  .env.example
+.gitignore/  # ignore rules
+  .gitignore
+CVE_UPDATES.log/  # CVE update changelog (tracked)
+  CVE_UPDATES.log
+README.md/  # project readme
+  README.md
+SHA256SUMS.txt/  # release asset checksums
+  SHA256SUMS.txt
+SpyTV.apk/  # built Android APK (release asset)
+  SpyTV.apk
+TASKS_CHECKLIST.md/  # task checklist
+  TASKS_CHECKLIST.md
+TODO.md/  # roadmap
+  TODO.md
+build_standalone_exe.py/  # standalone EXE builder
+  build_standalone_exe.py
+build_widget.py/  # widget builder
+  build_widget.py
+c2_audit.py/  # C2 audit logging
+  c2_audit.py
+c2_cve_feed.py/  # CVE feed updater
+  c2_cve_feed.py
+c2_dashboard.html/  # C2 web dashboard
+  c2_dashboard.html
+c2_ops.py/  # C2 operations
+  c2_ops.py
+c2_server.py/  # C2 server core
+  c2_server.py
+config.yaml/  # root config
+  config.yaml
+create_apk.py/  # APK builder + verifier
+  create_apk.py
+file_structure.txt/  # this file
+  file_structure.txt
+icon.png/  # app icon
+  icon.png
+install_and_launch.bat/  # Windows installer
+  install_and_launch.bat
+install_and_launch.sh/  # POSIX installer
+  install_and_launch.sh
+logo.png/  # brand logo
+  logo.png
+main.py/  # entry point
+  main.py
+opencode-ruflo-setup.md/  # setup notes
+  opencode-ruflo-setup.md
+registry.yaml/  # module registry
+  registry.yaml
+requirements.txt/  # Python dependencies
+  requirements.txt
+run_c2.bat/  # C2 launcher batch
+  run_c2.bat
+setup.py/  # Python setup
+  setup.py
+setup.sh/  # POSIX setup
+  setup.sh
+spytv_tagger.py/  # tag/release tool
+  spytv_tagger.py
+tv_fingerprint.py/  # TV fingerprinting
   tv_fingerprint.py
-tv_flow_receiver.py/  # root folder
+tv_flow_receiver.py/  # TV flow receiver
   tv_flow_receiver.py
-tv_install.py/  # root folder
+tv_install.py/  # TV installer
   tv_install.py
-tv_withdraw.py/  # root folder
+tv_withdraw.py/  # TV withdrawal tool
   tv_withdraw.py
-tvreaper.js/  # root folder
+tvreaper.js/  # TV reaper dashboard JS
   tvreaper.js
