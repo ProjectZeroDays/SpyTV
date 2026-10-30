@@ -27,39 +27,10 @@
     },
     "compression": "normal",
     "npmRebuild": false,
-    "extraResources": [
-      {
-        "from": "..",
-        "to": "../..",
-        "filter": [
-          "c2_server.py",
-          "c2_cve_feed.py",
-          "c2_audit.py",
-          "c2_ops.py",
-          "logo.png",
-          "c2_data/**/*",
-          "core/**/*",
-          "docs/**/*"
-        ]
-      }
-    ],
+    "asar": false,
     "win": {
-      "target": [
-        "portable"
-      ],
-      "icon": "icon.png",
-      "artifactName": "SpyTV-C2-${version}-portable",
-      "publisherName": "Authenticated, Inc."
-    },
-    "darwin": {
-      "target": "dmg",
-      "icon": "icon.png",
-      "category": "public.app-category.utilities"
-    },
-    "asar": false
-  },
-  "allowScripts": {
-    "electron@44.5.1": true,
-    "electron-winstaller@5.4.0": true
+      "target": "portable",
+      "icon": "icon.png"
+    }
   }
 }

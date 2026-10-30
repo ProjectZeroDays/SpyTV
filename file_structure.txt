@@ -1,237 +1,203 @@
-# SpyTV file structure (post Phase 2 cleanup)
-.github/  # GitHub CI/release workflows
-  .github/RELEASE_TEMPLATE.md
-  .github/dependabot.yml
-  .github/workflows/build-release.yml
-.opencode/  # OpenCode agent config
-  .opencode/commands/push.md
-android/  # Native Android C2 console app
-  android/app/build.gradle.kts
-  android/app/proguard-rules.pro
-      android/app/src/main/AndroidManifest.xml
-        android/app/src/main/assets/c2_dashboard.html
-              android/app/src/main/java/com/authenticated/spytv/C2Server.kt
-              android/app/src/main/java/com/authenticated/spytv/MainActivity.kt
-          android/app/src/main/res/drawable-hdpi/ic_launcher_foreground.png
-          android/app/src/main/res/drawable-hdpi/ic_launcher_round_foreground.png
-          android/app/src/main/res/drawable-mdpi/ic_launcher_foreground.png
-          android/app/src/main/res/drawable-mdpi/ic_launcher_round_foreground.png
-          android/app/src/main/res/drawable-xhdpi/ic_launcher_foreground.png
-          android/app/src/main/res/drawable-xhdpi/ic_launcher_round_foreground.png
-          android/app/src/main/res/drawable-xxhdpi/ic_launcher_foreground.png
-          android/app/src/main/res/drawable-xxhdpi/ic_launcher_round_foreground.png
-          android/app/src/main/res/drawable-xxxhdpi/ic_launcher_foreground.png
-          android/app/src/main/res/drawable-xxxhdpi/ic_launcher_round_foreground.png
-          android/app/src/main/res/layout/activity_main.xml
-          android/app/src/main/res/layout/item_dashboard_card.xml
-          android/app/src/main/res/menu/bottom_nav_menu.xml
-          android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
-          android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
-          android/app/src/main/res/mipmap-hdpi/ic_launcher.xml
-          android/app/src/main/res/mipmap-hdpi/ic_launcher_round.xml
-          android/app/src/main/res/values/colors.xml
-          android/app/src/main/res/values/strings.xml
-          android/app/src/main/res/values/themes.xml
-  android/build.gradle.kts
-  android/gradle.properties
-    android/gradle/wrapper/gradle-wrapper.jar
-    android/gradle/wrapper/gradle-wrapper.properties
-  android/gradlew
-  android/gradlew.bat
-  android/settings.gradle.kts
-config/  # device/host/VLAN config examples
-  config/devices.example.json
-  config/known_hosts.example.json
-  config/vlan_policy.example.json
-core/  # core engine modules
-  core/__init__.py
-  core/builder.py
-  core/config.py
-  core/config.yaml
-  core/cve_scanner.py
-  core/discovery.py
-  core/exploit_dispatcher.py
-  core/exploit_engine.py
-  core/implant.py
-  core/receiver.py
-  core/scanner.py
-  core/session_manager.py
-  core/stealth.py
-  core/stream_manager.py
-  core/utils.py
-  core/withdrawal.py
-data/  # exploits, patches, signatures
-  data/exploits/adb_wireless_exploit.py
-  data/exploits/cve_exploits.py
-    data/exploits/generated/CVE-2026-87588.py
-    data/exploits/generated/CVE-2026-95372.py
-  data/exploits/ssh_brute.py
-  data/exploits/vendor_specific.py
-  data/patch_checks/CVE-2026-106382.md
-  data/signatures/CVE-2026-106382.md
-defense/  # defensive detection/hardening
-  defense/__init__.py
-  defense/common.py
-  defense/cve_monitor/__init__.py
-  defense/cve_monitor/keywords.json
-  defense/cve_monitor/monitor.py
-  defense/cve_monitor/whitepaper.py
-  defense/detection/__init__.py
-  defense/detection/adapters.py
-  defense/detection/adb_detector.py
-  defense/detection/drill.py
-  defense/detection/events.py
-  defense/detection/monitor.py
-  defense/detection/report.py
-    defense/detection/rules/lnx_sshd_bruteforce.yml
-    defense/detection/rules/net_adb_ports.yml
-    defense/detection/rules/net_ssdp_sweep.yml
-    defense/detection/rules/net_upnp_avtransport.yml
-    defense/detection/rules/win_adb_network_connect.yml
-  defense/detection/ssdp_detector.py
-  defense/detection/ssh_detector.py
-  defense/hardening/__init__.py
-  defense/hardening/adb_disable.py
-  defense/hardening/attack_surface.py
-  defense/hardening/firmware_audit.py
-  defense/hardening/upnp_close.py
-  defense/hardening/vlan_segmentation.py
-docs/  # documentation + screenshots + whitepapers
-  docs/ARCHITECTURE.md
-  docs/C2_DASHBOARD.md
-  docs/CHANGES.md
-  docs/CODE_REVIEW.md
-  docs/CVE_MONITORING_GUIDE.md
-  docs/DETECTION_GUIDE.md
-  docs/GETTING_STARTED.md
-  docs/HARDENING_GUIDE.md
-  docs/PRESENTATION.pptx.md
-  docs/SEGMENTATION_GUIDE.md
-  docs/THREAT_MODEL.md
-  docs/TROUBLESHOOTING.md
-  docs/WIKI.md
-  docs/screenshots/apk-running.png
-  docs/screenshots/dashboard-web.png
-  docs/screenshots/exe-running.png
-  docs/whitepapers/CVE-2016-5195.md
-  docs/whitepapers/CVE-2017-0781.md
-  docs/whitepapers/CVE-2017-0785.md
-  docs/whitepapers/CVE-2017-13077.md
-  docs/whitepapers/CVE-2017-7494.md
-  docs/whitepapers/CVE-2018-5383.md
-  docs/whitepapers/CVE-2020-0022.md
-  docs/whitepapers/CVE-2022-0847.md
-  docs/whitepapers/CVE-2023-45866.md
-  docs/whitepapers/CVE-2024-6387.md
-  docs/whitepapers/CVE-2026-0073.md
-  docs/whitepapers/CVE-2026-106382.md
-electron/  # Electron C2 wrapper
-  electron/icon.png
-  electron/index.html
-  electron/main.js
-  electron/offline.html
-  electron/package-lock.json
-  electron/package.json
-  electron/preload.js
-families/  # TV family installers (Android, DLNA, Tizen, webOS)
-  families/android/install.py
-  families/dlna/install.py
-  families/tizen/install.py
-  families/webos/install.py
-postexploit/  # post-exploitation modules
-  postexploit/god_mode.py
-resources/  # packaging resources
-  resources/config.yaml
-  resources/logo_source.jpg
-skills/  # skill references
-  skills/openrouter_skills_ref.txt
-tests/  # test suite
-  tests/__init__.py
-  tests/generated/.gitignore
-  tests/generated/test_CVE-2026-106382.py
-  tests/generated/test_CVE-2026-87588.py
-  tests/generated/test_CVE-2026-95372.py
-  tests/test_audit_flow.py
-  tests/test_autonomous.py
-  tests/test_c2_server.py
-  tests/test_cve_artifacts.py
-  tests/test_cve_monitor.py
-  tests/test_dashboard_ui.py
-  tests/test_detectors.py
-  tests/test_drill_report.py
-  tests/test_hardening.py
-  tests/test_local_provider.py
-  tests/test_probe_pool.py
-tools/  # helper scripts
-  tools/banner.py
-  tools/make_icon.py
-.env.example/  # root config template
-  .env.example
-.gitignore/  # ignore rules
-  .gitignore
-CVE_UPDATES.log/  # CVE update changelog (tracked)
-  CVE_UPDATES.log
-README.md/  # project readme
-  README.md
-SHA256SUMS.txt/  # release asset checksums
-  SHA256SUMS.txt
-SpyTV.apk/  # built Android APK (release asset)
-  SpyTV.apk
-TASKS_CHECKLIST.md/  # task checklist
-  TASKS_CHECKLIST.md
-TODO.md/  # roadmap
-  TODO.md
-build_standalone_exe.py/  # standalone EXE builder
-  build_standalone_exe.py
-build_widget.py/  # widget builder
-  build_widget.py
-c2_audit.py/  # C2 audit logging
-  c2_audit.py
-c2_cve_feed.py/  # CVE feed updater
-  c2_cve_feed.py
-c2_dashboard.html/  # C2 web dashboard
-  c2_dashboard.html
-c2_ops.py/  # C2 operations
-  c2_ops.py
-c2_server.py/  # C2 server core
-  c2_server.py
-config.yaml/  # root config
-  config.yaml
-create_apk.py/  # APK builder + verifier
-  create_apk.py
-file_structure.txt/  # this file
-  file_structure.txt
-icon.png/  # app icon
-  icon.png
-install_and_launch.bat/  # Windows installer
-  install_and_launch.bat
-install_and_launch.sh/  # POSIX installer
-  install_and_launch.sh
-logo.png/  # brand logo
-  logo.png
-main.py/  # entry point
-  main.py
-opencode-ruflo-setup.md/  # setup notes
-  opencode-ruflo-setup.md
-registry.yaml/  # module registry
-  registry.yaml
-requirements.txt/  # Python dependencies
-  requirements.txt
-run_c2.bat/  # C2 launcher batch
-  run_c2.bat
-setup.py/  # Python setup
-  setup.py
-setup.sh/  # POSIX setup
-  setup.sh
-spytv_tagger.py/  # tag/release tool
-  spytv_tagger.py
-tv_fingerprint.py/  # TV fingerprinting
-  tv_fingerprint.py
-tv_flow_receiver.py/  # TV flow receiver
-  tv_flow_receiver.py
-tv_install.py/  # TV installer
-  tv_install.py
-tv_withdraw.py/  # TV withdrawal tool
-  tv_withdraw.py
-tvreaper.js/  # TV reaper dashboard JS
-  tvreaper.js
+﻿.env.example
+.github/RELEASE_TEMPLATE.md
+.github/dependabot.yml
+.github/workflows/build-release.yml
+.gitignore
+.opencode/commands/push.md
+CODE-REVIEW.md
+CVE_UPDATES.log
+Integrate into SpyTV.txt
+README.md
+SHA256SUMS.txt
+SpyTV.apk
+TASKS_CHECKLIST.md
+TODO.md
+android/app/build.gradle.kts
+android/app/proguard-rules.pro
+android/app/src/main/AndroidManifest.xml
+android/app/src/main/assets/c2_dashboard.html
+android/app/src/main/java/com/authenticated/spytv/C2Server.kt
+android/app/src/main/java/com/authenticated/spytv/MainActivity.kt
+android/app/src/main/res/drawable-hdpi/ic_launcher_foreground.png
+android/app/src/main/res/drawable-hdpi/ic_launcher_round_foreground.png
+android/app/src/main/res/drawable-mdpi/ic_launcher_foreground.png
+android/app/src/main/res/drawable-mdpi/ic_launcher_round_foreground.png
+android/app/src/main/res/drawable-xhdpi/ic_launcher_foreground.png
+android/app/src/main/res/drawable-xhdpi/ic_launcher_round_foreground.png
+android/app/src/main/res/drawable-xxhdpi/ic_launcher_foreground.png
+android/app/src/main/res/drawable-xxhdpi/ic_launcher_round_foreground.png
+android/app/src/main/res/drawable-xxxhdpi/ic_launcher_foreground.png
+android/app/src/main/res/drawable-xxxhdpi/ic_launcher_round_foreground.png
+android/app/src/main/res/layout/activity_main.xml
+android/app/src/main/res/layout/item_dashboard_card.xml
+android/app/src/main/res/menu/bottom_nav_menu.xml
+android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
+android/app/src/main/res/mipmap-hdpi/ic_launcher.xml
+android/app/src/main/res/mipmap-hdpi/ic_launcher_round.xml
+android/app/src/main/res/values/colors.xml
+android/app/src/main/res/values/strings.xml
+android/app/src/main/res/values/themes.xml
+android/build.gradle.kts
+android/gradle.properties
+android/gradle/wrapper/gradle-wrapper.jar
+android/gradle/wrapper/gradle-wrapper.properties
+android/gradlew
+android/gradlew.bat
+android/settings.gradle.kts
+build_standalone_exe.py
+build_widget.py
+c2_audit.py
+c2_cve_feed.py
+c2_dashboard.html
+c2_ops.py
+c2_server.py
+config.yaml
+config/devices.example.json
+config/known_hosts.example.json
+config/vlan_policy.example.json
+core/__init__.py
+core/builder.py
+core/config.py
+core/config.yaml
+core/cve_scanner.py
+core/discovery.py
+core/exploit_dispatcher.py
+core/exploit_engine.py
+core/implant.py
+core/receiver.py
+core/scanner.py
+core/session_manager.py
+core/stealth.py
+core/stream_manager.py
+core/utils.py
+core/withdrawal.py
+create_apk.py
+data/exploits/adb_wireless_exploit.py
+data/exploits/cve_exploits.py
+data/exploits/generated/CVE-2026-87588.py
+data/exploits/generated/CVE-2026-95372.py
+data/exploits/ssh_brute.py
+data/exploits/vendor_specific.py
+data/patch_checks/CVE-2026-106382.md
+data/signatures/CVE-2026-106382.md
+defense/__init__.py
+defense/common.py
+defense/cve_monitor/__init__.py
+defense/cve_monitor/keywords.json
+defense/cve_monitor/monitor.py
+defense/cve_monitor/whitepaper.py
+defense/detection/__init__.py
+defense/detection/adapters.py
+defense/detection/adb_detector.py
+defense/detection/drill.py
+defense/detection/events.py
+defense/detection/monitor.py
+defense/detection/report.py
+defense/detection/rules/lnx_sshd_bruteforce.yml
+defense/detection/rules/net_adb_ports.yml
+defense/detection/rules/net_ssdp_sweep.yml
+defense/detection/rules/net_upnp_avtransport.yml
+defense/detection/rules/win_adb_network_connect.yml
+defense/detection/ssdp_detector.py
+defense/detection/ssh_detector.py
+defense/hardening/__init__.py
+defense/hardening/adb_disable.py
+defense/hardening/attack_surface.py
+defense/hardening/firmware_audit.py
+defense/hardening/upnp_close.py
+defense/hardening/vlan_segmentation.py
+docs/ARCHITECTURE.md
+docs/C2_DASHBOARD.md
+docs/CHANGES.md
+docs/CODE_REVIEW.md
+docs/CVE_MONITORING_GUIDE.md
+docs/DETECTION_GUIDE.md
+docs/GETTING_STARTED.md
+docs/HARDENING_GUIDE.md
+docs/PRESENTATION.pptx.md
+docs/SEGMENTATION_GUIDE.md
+docs/THREAT_MODEL.md
+docs/TROUBLESHOOTING.md
+docs/WIKI.md
+docs/screenshots/apk-running.png
+docs/screenshots/dashboard-web.png
+docs/screenshots/exe-running.png
+docs/whitepapers/CVE-2016-5195.md
+docs/whitepapers/CVE-2017-0781.md
+docs/whitepapers/CVE-2017-0785.md
+docs/whitepapers/CVE-2017-13077.md
+docs/whitepapers/CVE-2017-7494.md
+docs/whitepapers/CVE-2018-5383.md
+docs/whitepapers/CVE-2020-0022.md
+docs/whitepapers/CVE-2022-0847.md
+docs/whitepapers/CVE-2023-45866.md
+docs/whitepapers/CVE-2024-6387.md
+docs/whitepapers/CVE-2026-0073.md
+docs/whitepapers/CVE-2026-106382.md
+electron/icon.png
+electron/index.html
+electron/main.js
+electron/offline.html
+electron/package-lock.json
+electron/package.json
+electron/preload.js
+exploit_payloads/zero-day_exploits/CVE_5YEAR_REFERENCE.md
+exploitdb_ref/README.md
+families/android/install.py
+families/dlna/install.py
+families/tizen/install.py
+families/webos/install.py
+file_structure.txt
+googles_project_zero_ref/README.md
+icon.png
+install_and_launch.bat
+install_and_launch.sh
+logo.png
+main.py
+opencode-ruflo-setup.md
+payloads_ref/README.md
+postexploit/advanced_config_aggregator.py
+postexploit/cookie_manager.py
+postexploit/cve_update.py
+postexploit/dark_web_browser.py
+postexploit/god_mode.py
+postexploit/mitm_dashboard.py
+postexploit/mobile_verification.py
+postexploit/nso_pegasus_ios.py
+postexploit/persistence_checker.py
+postexploit/rat_mobile.py
+postexploit/traffic_analysis.py
+postexploit/vault_share.py
+registry.yaml
+requirements.txt
+resources/config.yaml
+resources/logo_source.jpg
+run_c2.bat
+setup.py
+setup.sh
+skills/openrouter_skills_ref.txt
+spytv_tagger.py
+tests/__init__.py
+tests/generated/.gitignore
+tests/generated/test_CVE-2026-106382.py
+tests/generated/test_CVE-2026-87588.py
+tests/generated/test_CVE-2026-95372.py
+tests/test_audit_flow.py
+tests/test_autonomous.py
+tests/test_c2_server.py
+tests/test_cve_artifacts.py
+tests/test_cve_monitor.py
+tests/test_dashboard_ui.py
+tests/test_detectors.py
+tests/test_drill_report.py
+tests/test_hardening.py
+tests/test_local_provider.py
+tests/test_probe_pool.py
+tools/banner.py
+tools/make_icon.py
+tv_fingerprint.py
+tv_flow_receiver.py
+tv_install.py
+tv_withdraw.py
+tvreaper.js
