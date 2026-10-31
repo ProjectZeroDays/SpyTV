@@ -1,36 +1,36 @@
 {
-  "name": "spytv-c2",
-  "version": "1.1.0",
-  "description": "SpyTV C2 desktop client — Authenticated, Inc.",
-  "main": "main.js",
-  "author": "Authenticated, Inc.",
-  "scripts": {
-    "start": "electron .",
-    "build": "electron-builder --win portable"
-  },
-  "devDependencies": {
-    "electron": "^44.5.1",
-    "electron-builder": "^26.15.3"
-  },
-  "build": {
-    "appId": "com.authenticated.spytv",
-    "productName": "SpyTV C2",
-    "files": [
-      "main.js",
-      "preload.js",
-      "index.html",
-      "offline.html",
-      "icon.png"
-    ],
-    "directories": {
-      "output": "dist"
+    "name": "spytv-c2",
+    "version": "4.5.2",
+    "description": "SpyTV C2 desktop client â€” Authenticated, Inc.",
+    "main": "main.js",
+    "author": "Authenticated, Inc.",
+    "scripts": {
+        "start": "electron .",
+        "build": "electron-builder --win portable"
     },
-    "compression": "normal",
-    "npmRebuild": false,
-    "asar": false,
-    "win": {
-      "target": "portable",
-      "icon": "icon.png"
+    "devDependencies": {
+        "electron": "^44.5.1",
+        "electron-builder": "^26.15.3"
+    },
+    "build": {
+        "appId": "com.authenticated.spytv",
+        "productName": "SpyTV C2",
+        "files": [
+            "main.js",
+            "preload.js",
+            "index.html",
+            "offline.html",
+            "icon.png"
+        ],
+        "directories": {
+            "output": "dist"
+        },
+        "compression": "normal",
+        "npmRebuild": false,
+        "asar": false,
+        "win": {
+            "target": "portable",
+            "icon": "icon.png"
+        }
     }
-  }
 }
