@@ -741,6 +741,8 @@
     <p>Authenticated, Inc.</p>
   </div>
   <nav class="header-nav">
+    <a href="https://github.com/ProjectZeroDays/SpyTV/issues/new" target="_blank" data-tooltip="Report a bug or request a feature">Report Bug</a>
+    <a href="#" onclick="viewLogs(); return false;" data-tooltip="View the C2 activity log">View Logs</a>
     <a href="/docs/WIKI.md" target="_blank" data-tooltip="Documentation and guides (viewed from the C2)">Wiki</a>
     <a href="/docs/TROUBLESHOOTING.md" target="_blank" data-tooltip="Troubleshooting guide (viewed from the C2)">Troubleshooting</a>
   </nav>
@@ -1578,6 +1580,12 @@ async function clearLogs() {
   addLog('Logs cleared');
 }
 
+function viewLogs() {
+  const log = document.getElementById('log-container');
+  const text = log ? (log.innerText || log.textContent || '') : '';
+  alert('C2 Activity Log:\n\n' + (text.trim() || '(empty)'));
+}
+
 // Network Scan
 function setScanStatus(html) {
   const el = document.getElementById('scan-results');
@@ -1934,6 +1942,7 @@ function setPayloadStatus(html) {
 }
 
 async function generatePayload() {
+  alert('Payload generation started...');
   const btn = document.getElementById('payload-generate');
   const ipEl = document.getElementById('payload-ip');
   const targetIp = (ipEl.value || '').trim();
@@ -1976,12 +1985,14 @@ async function generatePayload() {
       '<div class="alert alert-success">Payload ready for ' + escapeHtml(targetIp)
       + ' — opened in the preview below.</div>');
     addLog(`Payload generated for ${targetIp} (${family})`);
+    alert('Payload generated successfully for ' + targetIp);
   } catch (e) {
     const msg = (e && e.message) || String(e);
     addLog(`Payload generation failed: ${msg}`);
     setPayloadStatus(
       '<div class="alert alert-warning">Payload generation failed: '
       + escapeHtml(msg) + '</div>');
+    alert('Payload generation failed: ' + msg);
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = label; }
   }
@@ -2122,6 +2133,7 @@ function renderCVEs(cves) {
 }
 
 async function updateCVEs() {
+  alert('Updating CVE feed from NVD...');
   addLog('Updating CVE feed from NVD (runs in background)...');
   const result = await api('/api/cve/update', 'POST', {});
   const status = document.getElementById('cve-update-status');
