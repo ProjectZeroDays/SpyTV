@@ -1481,8 +1481,16 @@ function setDuration(m) {
 
 async function sendCommand(deviceId, command, params = {}) {
   addLog(`Sending "${command}" command to ${deviceId}`);
-  await api('/api/command', 'POST', { device_id: deviceId, command, params });
-  addLog(`Command "${command}" delivered to ${deviceId}`);
+  alert(`Sending "${command}" command to ${deviceId}...`);
+  try {
+    const res = await api('/api/command', 'POST', { device_id: deviceId, command, params });
+    if (res && res.error) throw new Error(res.error);
+    addLog(`Command "${command}" delivered to ${deviceId}`);
+    alert(`Command "${command}" delivered to ${deviceId}.`);
+  } catch (e) {
+    addLog(`Command "${command}" failed for ${deviceId}: ${e}`);
+    alert(`Command "${command}" failed: ${e.message || e}`);
+  }
 }
 
 function confirmRemove(deviceId) {
