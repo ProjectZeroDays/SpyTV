@@ -1943,7 +1943,6 @@ function setPayloadStatus(html) {
 }
 
 async function generatePayload() {
-  alert('Payload generation started...');
   const btn = document.getElementById('payload-generate');
   const ipEl = document.getElementById('payload-ip');
   const targetIp = (ipEl.value || '').trim();
@@ -1959,6 +1958,7 @@ async function generatePayload() {
     return;
   }
 
+  alert('Payload generation started...');
   if (btn) { btn.disabled = true; btn.textContent = 'Generating...'; }
   setPayloadStatus(
     '<p style="color:var(--text-muted);font-size:13px;padding:8px 0">Building '
