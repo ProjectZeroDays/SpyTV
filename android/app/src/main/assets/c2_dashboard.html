@@ -924,6 +924,8 @@
           <button class="btn btn-primary" onclick="updateCVEs()" data-tooltip="Fetch new CVEs from NVD + auto-generate exploits (AI)">&#128260; Update CVEs</button>
           <button class="btn" onclick="loadCVEs()" data-tooltip="Refresh the known-CVE table">&#128260; Refresh</button>
           <button class="btn" onclick="loadFeed(true)" data-tooltip="Refresh the CVE feed sidebar">&#128228; Refresh Feed</button>
+          <button class="btn btn-success" onclick="generateAllExploits()" data-tooltip="Generate exploit modules for every CVE in the feed">&#9889; Generate All Exploits</button>
+          <button class="btn btn-warning" onclick="generateAllPatches()" data-tooltip="Generate patches for every CVE in the feed">&#128736; Patch All CVEs</button>
         </div>
         <div id="cve-update-status" class="alert alert-success" style="display:none"></div>
         <div id="cve-results"></div>
@@ -1216,7 +1218,13 @@
 </div>
 
 <script>
-const API = '';
+// When the dashboard is opened as a local file (e.g. double-clicking
+// c2_dashboard.html) there is no C2 origin to be relative to, so every
+// api() call would resolve against file:// and fail — which is what made
+// every button look dead. Fall back to the local C2 server in that case.
+const API = (location.protocol === 'file:')
+  ? 'http://127.0.0.1:' + (new URLSearchParams(location.search).get('port') || 9443)
+  : '';
 let devices = [];
 let clips = [];
 let selectedDuration = 5;
@@ -1347,6 +1355,16 @@ async function loadLocalIp() {
   const data = await api('/api/local_ip');
   if (data && data.ip) localIp = data.ip;
   document.getElementById('stat-ip').textContent = localIp;
+  // Auto-fill the scan CIDR from the detected local IP (e.g. 10.1.10.0/24)
+  try {
+    const cidrInput = document.getElementById('scan-cidr');
+    if (cidrInput && localIp && !cidrInput.value.trim()) {
+      const parts = localIp.split('.');
+      if (parts.length === 4) {
+        cidrInput.value = parts.slice(0, 3).join('.') + '.0/24';
+      }
+    }
+  } catch (e) { /* ignore */ }
 }
 
 function switchTab(tab) {
@@ -1561,6 +1579,7 @@ function setScanStatus(html) {
 async function startScan() {
   const btn = document.getElementById('scan-btn');
   const cidr = document.getElementById('scan-cidr').value.trim() || null;
+  alert('Network scan is now running' + (cidr ? ' on ' + cidr : '') + '...');
   const label = btn ? btn.textContent : 'Scan';
 
   addLog(`Starting network scan${cidr ? ' of ' + cidr : ' of the local subnet'}...`);
@@ -1826,6 +1845,33 @@ function updatePayloadTargets() {
     opt.textContent = ip;
     sel.appendChild(opt);
   });
+  // When a vulnerable TV is selected, auto-select its device family.
+  sel.onchange = function() {
+    const ip = sel.value;
+    if (!ip) return;
+    let tvType = '';
+    if (Array.isArray(lastScanResults)) {
+      const r = lastScanResults.find(x => x && x.ip === ip);
+      if (r) tvType = r.tv_type || r.device_type || '';
+    }
+    if (!tvType && Array.isArray(devices)) {
+      const d = devices.find(x => x && x.ip === ip);
+      if (d) tvType = d.tv_type || d.family || '';
+    }
+    const famSel = document.getElementById('payload-family');
+    if (famSel && tvType) {
+      // map tv types to select option values
+      const map = {
+        'samsung-tizen':'tizen-dev','lg-webos':'webos-dev','android-tv':'adb-net',
+        'roku':'roku-ecp','vizio':'vizio-dial','chromecast':'chromecast-cast',
+        'hisense':'hisense','tcl':'tcl','unknown':'dlna','':'dlna'
+      };
+      const val = map[tvType.toLowerCase()] || tvType;
+      for (const o of Array.from(famSel.options)) {
+        if (o.value === val) { famSel.value = val; break; }
+      }
+    }
+  };
 }
 
 // Set the selected target IP in the dropdown (fallback to adding a custom option)
@@ -2496,6 +2542,42 @@ async function generatePatchForCVE(cveId) {
   } catch (e) {
     addLog(`Patch generation error for ${cveId}: ${e}`);
     alert('Generation error: ' + (e.message || e));
+  }
+}
+
+// Bulk-generate exploit modules for every CVE currently in the feed.
+async function generateAllExploits() {
+  alert('Generating exploits for all CVEs in the feed...');
+  addLog('Generating exploits for all CVEs...');
+  try {
+    if (!feedData || !Array.isArray(feedData.cves)) await loadFeed(true);
+    const cves = (feedData && Array.isArray(feedData.cves)) ? feedData.cves : [];
+    for (const c of cves) {
+      try { await generateExploitForCVE(c.id); } catch (e) { addLog('Failed for ' + c.id + ': ' + e); }
+    }
+    alert('Finished generating exploits for all CVEs.');
+    addLog('Finished generating all exploits.');
+    await loadFeed(true);
+  } catch (e) {
+    alert('Bulk exploit generation error: ' + (e.message || e));
+  }
+}
+
+// Bulk-generate patches for every CVE currently in the feed.
+async function generateAllPatches() {
+  alert('Generating patches for all CVEs in the feed...');
+  addLog('Generating patches for all CVEs...');
+  try {
+    if (!feedData || !Array.isArray(feedData.cves)) await loadFeed(true);
+    const cves = (feedData && Array.isArray(feedData.cves)) ? feedData.cves : [];
+    for (const c of cves) {
+      try { await generatePatchForCVE(c.id); } catch (e) { addLog('Failed for ' + c.id + ': ' + e); }
+    }
+    alert('Finished generating patches for all CVEs.');
+    addLog('Finished generating all patches.');
+    await loadFeed(true);
+  } catch (e) {
+    alert('Bulk patch generation error: ' + (e.message || e));
   }
 }
 
