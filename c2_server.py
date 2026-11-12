@@ -64,7 +64,7 @@ C2_HOST = "0.0.0.0"
 # generated implant payload are built from this value, so an operator whose 8443
 # is already taken can move the whole platform with SPYTV_C2_PORT=9443 instead
 # of editing code (the Android console takes the same URL from its settings).
-C2_PORT = int(os.environ.get("SPYTV_C2_PORT") or 8443)
+C2_PORT = int(os.environ.get("SPYTV_C2_PORT") or 9443)
 STORE_DIR = os.path.join("c2_data", "clips")
 DEVICE_FILE = os.path.join("c2_data", "devices.json")
 COMMAND_FILE = os.path.join("c2_data", "commands.json")

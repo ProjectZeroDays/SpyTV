@@ -1,65 +1,36 @@
 {
-  "name": "spytv-c2",
-  "version": "1.1.0",
-  "description": "SpyTV C2 desktop client — Authenticated, Inc.",
-  "main": "main.js",
-  "author": "Authenticated, Inc.",
-  "scripts": {
-    "start": "electron .",
-    "build": "electron-builder --win portable"
-  },
-  "devDependencies": {
-    "electron": "^44.5.1",
-    "electron-builder": "^26.15.3"
-  },
-  "build": {
-    "appId": "com.authenticated.spytv",
-    "productName": "SpyTV C2",
-    "files": [
-      "main.js",
-      "preload.js",
-      "index.html",
-      "offline.html",
-      "icon.png"
-    ],
-    "directories": {
-      "output": "dist"
+    "name": "spytv-c2",
+    "version": "4.5.2",
+    "description": "SpyTV C2 desktop client â€” Authenticated, Inc.",
+    "main": "main.js",
+    "author": "Authenticated, Inc.",
+    "scripts": {
+        "start": "electron .",
+        "build": "electron-builder --win portable"
     },
-    "compression": "normal",
-    "npmRebuild": false,
-    "extraResources": [
-      {
-        "from": "..",
-        "to": "../..",
-        "filter": [
-          "c2_server.py",
-          "c2_cve_feed.py",
-          "c2_audit.py",
-          "c2_ops.py",
-          "logo.png",
-          "c2_data/**/*",
-          "core/**/*",
-          "docs/**/*"
-        ]
-      }
-    ],
-    "win": {
-      "target": [
-        "portable"
-      ],
-      "icon": "icon.png",
-      "artifactName": "SpyTV-C2-${version}-portable",
-      "publisherName": "Authenticated, Inc."
+    "devDependencies": {
+        "electron": "^44.5.1",
+        "electron-builder": "^26.15.3"
     },
-    "darwin": {
-      "target": "dmg",
-      "icon": "icon.png",
-      "category": "public.app-category.utilities"
-    },
-    "asar": false
-  },
-  "allowScripts": {
-    "electron@44.5.1": true,
-    "electron-winstaller@5.4.0": true
-  }
+    "build": {
+        "appId": "com.authenticated.spytv",
+        "productName": "SpyTV C2",
+        "files": [
+            "main.js",
+            "preload.js",
+            "index.html",
+            "offline.html",
+            "icon.png"
+        ],
+        "directories": {
+            "output": "dist"
+        },
+        "compression": "normal",
+        "npmRebuild": false,
+        "asar": false,
+        "win": {
+            "target": "portable",
+            "icon": "icon.png"
+        }
+    }
 }

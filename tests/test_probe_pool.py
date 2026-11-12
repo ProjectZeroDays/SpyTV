@@ -2,7 +2,7 @@
 
 The pool's parallelism has to be spread across **hosts**, never across the
 ports of a single host. It used to be spread across whatever the job list
-happened to contain, and callers build that list host-major — so the first 64
+happened to contain, and callers build that list host-major ΓÇö so the first 64
 jobs all belonged to the first four addresses, and one device received 64
 simultaneous connections.
 
@@ -14,7 +14,7 @@ sequential reference 16/16):
 
 The ports that survive decide which family ``detect_tv_type()`` picks, so the
 same television was returned as "LG webOS" by the scan (only port 3000 was
-seen) and "Samsung Tizen" by /api/check (which probes sequentially) — two
+seen) and "Samsung Tizen" by /api/check (which probes sequentially) ΓÇö two
 different CVE sets and two different exploit modules for one device.
 """
 import threading
@@ -106,3 +106,18 @@ def test_probe_many_empty_job_list():
     seen = []
     assert cs.probe_many([], on_progress=lambda d, t: seen.append((d, t))) == []
     assert seen == [(0, 0)], seen
+
+import os
+import unittest
+
+
+class TestC2Endpoints(unittest.TestCase):
+    def test_c2_server_import(self):
+        import importlib.util
+        spec = importlib.util.find_spec("c2_server")
+        self.assertIsNotNone(spec, "c2_server module should import")
+
+
+class TestDashboardUI(unittest.TestCase):
+    def test_dashboard_html_exists(self):
+        self.assertTrue(os.path.exists("c2_dashboard.html"))

@@ -123,7 +123,7 @@ if not exist "data\exploits\generated" mkdir data\exploits\generated
 
 echo ==========================================
 echo  Starting C2 Server (Self-Hosted)
-echo  Dashboard: http://localhost:8443/
+echo  Dashboard: http://localhost:9443/
 echo.
 echo  CVE feed auto-updates on start and logs
 echo  new entries to CVE_UPDATES.log

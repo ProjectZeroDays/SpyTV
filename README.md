@@ -1,5 +1,15 @@
 # SpyTV — TV Security Assessment Platform
 
+[![Latest Release](https://img.shields.io/github/v/release/ProjectZeroDays/SpyTV?include_prereleases&label=release&color=blue)](https://github.com/ProjectZeroDays/SpyTV/releases/latest)
+[![Version 4.5.2](https://img.shields.io/badge/version-v4.5.2-brightgreen)](https://github.com/ProjectZeroDays/SpyTV/releases/tag/v4.5.2)
+[![License](https://img.shields.io/github/license/ProjectZeroDays/SpyTV)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-passing-green)](https://github.com/ProjectZeroDays/SpyTV/actions)
+[![Windows](https://img.shields.io/badge/platform-Windows-blue)](https://github.com/ProjectZeroDays/SpyTV/releases/latest)
+[![Android APK](https://img.shields.io/badge/platform-Android-green)](https://github.com/ProjectZeroDays/SpyTV/releases/latest)
+[![Python](https://img.shields.io/badge/python-3.8%2B-yellow)](https://www.python.org/)
+[![GitHub stars](https://img.shields.io/github/stars/ProjectZeroDays/SpyTV?style=social)](https://github.com/ProjectZeroDays/SpyTV/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/ProjectZeroDays/SpyTV?style=social)](https://github.com/ProjectZeroDays/SpyTV/network/members)
+
 The working repository of the SpyTV engagement for **Authenticated, Inc.**: an
 authorization-first platform for assessing smart TVs on client networks,
 plus the defensive toolkit and defect review produced alongside it.

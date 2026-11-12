@@ -111,7 +111,7 @@ def test_c2_port_env_override_moves_the_whole_platform():
         cwd=str(pathlib.Path(__file__).resolve().parents[1]),
     )
     assert out.returncode == 0, out.stderr
-    assert out.stdout.strip() == "8443"
+    assert out.stdout.strip() == "9443"
 
 
 def test_server_boots_when_stdout_is_not_utf8():

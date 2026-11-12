@@ -6,7 +6,8 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { URL } = require('url');
 
-const CHECK_URL = 'http://127.0.0.1:8443/api/local_ip';
+const SPYTV_C2_PORT_DEFAULT = '9443';
+const CHECK_URL = 'http://127.0.0.1:' + (process.env.SPYTV_C2_PORT || SPYTV_C2_PORT_DEFAULT) + '/api/local_ip';
 const CHECK_TIMEOUT_MS = 2000;
 const OFFLINE_RECHECK_MS = 15000;
 const SERVER_STARTUP_MS = 3000;  // grace period before first health check
@@ -140,7 +141,7 @@ function spawnC2Server() {
     const proc = spawn(pythonBin, args, {
       cwd: repoRoot,
       windowsHide: false,
-      env: { ...process.env, SPYTV_C2_PORT: '8443' },
+      env: { ...process.env, SPYTV_C2_PORT: process.env.SPYTV_C2_PORT || '9443' },
     });
 
     proc.stdout.on('data', (data) => {

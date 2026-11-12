@@ -404,7 +404,7 @@ def test_host_info_returns_real_values(httpd):
     assert code == 200
     assert res["hostname"] and res["local_ip"]
     assert res["mac"].count(":") == 5
-    assert res["c2_port"] == 8443
+    assert res["c2_port"] == 9443
     assert "uptime_s" in res
     # simulated placeholders must never come back
     assert res["mac"] != "AA:BB:CC:DD:EE:FF"
