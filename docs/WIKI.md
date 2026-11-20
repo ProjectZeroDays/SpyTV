@@ -32,7 +32,7 @@ C2 platform (authorization-first)
 │                      (industry-standard authorization instrument with e-sign + SHA-256 record)
 ├── c2_cve_feed.py     NVD fetch + AI exploit and artifact pipeline
 │                      (whitepapers, pytest tests, signature + patch-check proposals, enrichment)
-├── c2_dashboard.html  Single-page dashboard (responsive, equal-width viewer panel)
+├── c2_dashboard.html  Single-page dashboard: C2 control console (TV power/volume/navigation/app/Screenshot per device), CVE Monitor (generate/exploit/patch per CVE + Export all CVEs & whitepapers), Alerts page, Exploits/Patches tabs (Generate/Patch All), Audit tab, Alerts page, Settings tab, walkthrough, Report Bug / Contact Developer modals
 ├── electron/          Desktop wrapper → SpyTV-C2-<ver>-portable.exe
 └── tvreaper.js        Implant payload (C2 polling)
 

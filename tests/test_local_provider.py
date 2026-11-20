@@ -147,6 +147,7 @@ def test_ai_complete_without_key(monkeypatch, local_server):
 
 def test_ai_complete_keyed_provider_still_requires_key(monkeypatch, local_server):
     # A cloud provider with no key must fail exactly as before.
+    monkeypatch.setattr(f, "load_ai_keys", lambda: {})
     text, err = f._ai_complete("hi", "openrouter")
     assert text is None
     assert err == "No AI provider API key configured"
@@ -165,6 +166,7 @@ def test_generate_exploit_without_key(monkeypatch, local_server, tmp_path):
 
 
 def test_status_reports_local_endpoint(monkeypatch, local_server):
+    monkeypatch.setattr(f, "load_ai_keys", lambda: {})
     monkeypatch.setitem(f.AI_PROVIDERS["local"], "endpoint", local_server)
     status = f.ai_key_status()
     assert status["local"]["configured"] is True

@@ -10,3 +10,18 @@ electron/node_modules/
 *.pyc
 *.pyo
 .env
+# SpyTV runtime state
+c2_data/*.json
+!c2_data/ai_keys.example.json
+c2_data/cve_state.json
+c2_data/commands.json
+c2_data/devices.json
+c2_data/settings.json
+*.log
+build/
+dist/
+android/local.properties
+CVE_UPDATES.log
+.pytest_tmp/
+*.egg-info/
+*.pyc
