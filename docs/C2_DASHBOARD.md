@@ -73,6 +73,15 @@ scan/exploit capability requires the Python server or Windows EXE.
 ### Device Management
 - `POST /api/register` — Implant registers with C2
 - `GET /api/devices` — List all connected devices
+- `GET /api/tv/info?ip=<ip>&family=<family>` — Best-effort model/OS/firmware probe per family: Roku over ECP, Android/Tizen over adb/sdb `getprop`. Returns `ip`, `family`, `model`, `os_version`, `firmware`, `serial`, `source`
+
+### TV Control Console (native-protocol — no implant required)
+- `POST /api/tv/control` — Execute a control action on a device using its family's native protocol: body `{ip, action, app?}`
+  - **Actions**: `power`, `volume_up`, `volume_down`, `mute`, `up`, `down`, `left`, `right`, `select`, `back`, `home`, `menu`, `channel_up`, `channel_down`, `play`, `wake`
+  - **Families**: Roku over ECP (`/keypress/`), Android/Tizen/webOS over `adb`/`sdb` `input keyevent`, generic Wake-on-LAN magic packet (ports 7/9) for `wake` using ARP-resolved MAC
+  - Returns `status` (`ok`, `skipped`, `failed`), `detail`, `via` (protocol), `ip`, `action`, `family`
+- `POST /api/cve/patch` — Execute a device family's remediation commands against `{ip, tv_type, family}`; returns per-command output + `cves_fixed`
+- `POST /api/cve/generate` — Generate + save an exploit for `{cve_id}` via the configured provider
 
 ### Clip Exfiltration
 - `POST /api/exfil` — Upload audio/video clip (headers: `X-Device-ID`, `X-Clip-Kind`)
@@ -92,6 +101,16 @@ scan/exploit capability requires the Python server or Windows EXE.
 - `GET /api/cve/whitepaper/<id>` — Per-CVE whitepaper (HTML full page; prefers the generated markdown document in `docs/whitepapers/`)
 - `GET /api/cve/whitepaper_doc/<id>` — Per-CVE whitepaper as `{markdown, source, generated}` for the dashboard Output panel (falls back to the template so the viewer always renders)
 - `GET /api/cve/artifacts/<id>` — Per-CVE artifact inventory: the four T-02 flags (`whitepaper_generated`, `tests_generated`, `signature_generated`, `patch_check_generated`), file paths + existence, exploit status, and enrichment fields (CWE / affected / fixed-in / attack vector)
+- `GET /api/cve/export/all` — Download **all** CVEs (static database + feed) as a single JSON file: `{"exported_at": ..., "count": N, "cves": [...]}` (filename: `spytv-cves-YYYY-MM-DD.json`)
+- `GET /api/cve/export/whitepapers` — Download **all** whitepapers as a ZIP: one `.md` per CVE (generated markdown from `docs/whitepapers/` where available, deterministic template fallback otherwise) (filename: `spytv-cve-whitepapers-YYYY-MM-DD.zip`)
+
+### Control & Settings
+- `POST /api/tv/control` — TV control: power, volume, mute, D-pad, channel, app launch, screenshot, WoL — routed per family (Roku ECP / ADB / SDB / WoL); returns per-action status and protocol used
+- `GET /api/tv/info?ip=` — Best-effort model/OS/firmware probe per family
+- `GET /api/settings` — Current C2 configuration (host, port, local IP, mode, auto-update CVEs, P2P peers, max scan hosts, exploit/patch timeouts)
+- `POST /api/settings` — Save C2 configuration to `c2_data/settings.json`
+
+### AI Keys
 - `GET /api/ai-keys` — Masked AI provider key status
 - `POST /api/ai-keys` — Save keys to `c2_data/ai_keys.json`
 - `GET /docs/<name>.md` — Any repo doc rendered as HTML (e.g. `/docs/TROUBLESHOOTING.md`)
@@ -205,7 +224,41 @@ Choose recording duration: 1, 2, 5, 10, 15, or 20 minutes.
 ### Activity Log
 Shows timestamped command history with "Clear Logs" button.
 
-## File Structure
+### TV Control Console (native-protocol — no implant required)
+Each connected device row now carries a **TV control console** with the device's native controls — independent of whether an implant is installed:
+
+| Group | Controls | Protocol used |
+|-------|----------|---------------|
+| Power | **Wake** (WoL magic packet via ARP-resolved MAC), **Power** | WOL / ECP / adb / sdb |
+| Volume | **Vol+**, **Vol−**, **Mute** | ECP / adb / sdb |
+| Navigation | **Up**, **Down**, **Left**, **Right**, **Select**, **Back**, **Home**, **Menu** | ECP / adb / sdb |
+| Channel | **Ch+**, **Ch−**, **Play/Pause** | ECP / adb / sdb |
+| Launch App | Netflix / YouTube / Spotify selector + **Launch** | Roku ECP app id / Android package launch via adb |
+| Screenshot | **Screenshot** | `screencap -p` + `adb pull` / `sdb pull`, saved under `c2_data/screenshots/` |
+
+All actions are honest: each reports whether it ran, was skipped (family/tool not supported), or failed — nothing is faked. Model/OS/firmware are probed per device (`GET /api/tv/info`) and shown inline as `model · OS · firmware`; the probe is best-effort and unsupported families show "model/OS probe unavailable".
+
+### User Controls: Report Bug & Contact Developer
+Header buttons next to **Report Bug** / **Contact Developer**:
+- **Report Bug** — opens a modal pre-filled with severity/area/description/steps-to-reproduce; copies debug info to clipboard and opens a pre-filled GitHub issue on `ProjectZeroDays/SpyTV`
+- **Contact Developer** — opens a modal to compose a message; opens your mail client to `projectzerodays@gmail.com` with subject/body pre-filled (recipient address is XOR-obfuscated in the app and decoded only at send-time)
+
+### First-Run Walkthrough
+New users see a **Welcome to SpyTV** walkthrough on first load ("Tour" button re-plays it): five steps covering the C2 console, Network Discovery (CIDR auto-fill, `+N` expandable chips), Payload Generator (Auto-Generate/Exploit/Patch), CVE Monitor (generate/exploit/patch per CVE, export buttons), and Audit/reporting (Authorization e-sign → report). Remembers completion in `localStorage` (`spytv_walkthrough_done`).
+
+### P2P Mode
+The dashboard runs in peer-to-peer mesh mode: 3 peer nodes (`node_001`–`node_003` on port 9443). Exploit generation is routed through the distributed mesh; CVE feeds sync peer-to-peer; there is no central server. Configured in `p2p_config.py`.
+
+### CVE Export (toolbar)
+- **Export CVEs** — downloads all CVEs (static database + feed) as one JSON file (`spytv-cves-YYYY-MM-DD.json`)
+- **Export Whitepapers** — downloads all whitepapers as one ZIP (one `.md` per CVE, generated markdown where available, deterministic template fallback) (`spytv-cve-whitepapers-YYYY-MM-DD.zip`)
+
+### Exploits Tab
+All database exploits — built-in family suites plus AI-generated modules — with severity, component, historical success rate; enter a target IP on any row and press **Run** to execute that module against the device. **Exploit All** button runs every available exploit against their target IPs.
+
+### Patches Tab
+All database patches — per-CVE remediation for every TV family, with exact commands; enter a target IP on any row and press **Patch**. **Patch All** button applies every available patch to registered devices.
+
 
 ```
 c2_server.py          — C2 HTTP server

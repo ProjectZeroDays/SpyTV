@@ -1,4 +1,23 @@
-﻿## [2026-11-03] â€” Portable C2 Hotfix: Invisible Window Fixed + Port Override (v4.5.2)
+﻿## [2026-11-18] — SpyTV v4.6.0: C2 Control Console + Deterministic Exploit Fallback
+
+### Dashboard
+- **Native-protocol TV controls** per device row (power, volume, mute, D-pad, channel, app launch, screenshot) via `/api/tv/control` — Roku ECP / ADB / SDB / WoL; model/OS/firmware probe via `/api/tv/info`
+- **Report Bug modal** → opens pre-filled GitHub issue on `ProjectZeroDays/SpyTV`; copies debug info to clipboard
+- **Contact Developer modal** → opens mail client to `projectzerodays@gmail.com` (recipient XOR-obfuscated in app)
+- **First-run walkthrough** (Skip/Back/Next/Finish) with "Tour" button to re-play
+- **P2P mesh mode** — 3 peer nodes on port 9443, exploit generation routed through distributed mesh, CVE feeds sync peer-to-peer; no central server
+- **CVE Export toolbar**: Export CVEs (JSON) + Export Whitepapers (ZIP)
+- **Exploit All / Patch All** buttons on Exploits / Patches tabs; `(+N)` CVE chips expandable; CIDR auto-filled from detected subnet mask
+- **Exploit/patch generation always works** — deterministic template when AI keys unavailable (no more HTTP 400)
+- **Responsive design**: columns stack and panels scroll internally at any width
+
+### Testing & Artifacts
+- **163 pytest pass, 0 fail**; 43 Node dashboard assertions pass
+- Exploit generators created for all 13 feed CVEs (including 8 newly discovered)
+
+### Assets
+- `SpyTV.apk` — Android (rebuilt with latest dashboard)
+- `SpyTV-C2-standalone.exe` — Windows portable C2 (rebuilt)
 
 ### Electron C2 Desktop Client
 - **Fixed invisible window bug** â€” `checkServer()` used `req.setTimeout()` which doesn't exist on Electron's `net.ClientRequest`; replaced with manual `setTimeout` + `req.abort()`. This caused the portable exe to spawn all processes but never show a window (the `ready-to-show` event never fired).
