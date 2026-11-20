@@ -37,6 +37,11 @@ from c2_audit import (AuditEngagement, PatchEngagement, validate_client,
 from c2_ops import (utc_now_iso, scan_network, perform_scan, check_target,
                     execute_patches, kill_all_connections, run_exploit,
                     exploit_availability, run_autonomous)
+try:
+    from core.auto_update import check_async as _au_check_async, status as _au_status
+except Exception:
+    _au_check_async = None
+    _au_status = None
 
 # Device family -> CVE database key
 FAMILY_TO_TV_TYPE = {
@@ -858,6 +863,8 @@ class C2Handler(BaseHTTPRequestHandler):
             self.serve_audit_export()
         elif path == "/api/tv/info":
             self.serve_tv_info()
+        elif path == "/api/update/check":
+            self.serve_update_check()
         else:
             self.send_error(404)
 
@@ -2107,6 +2114,17 @@ class C2Handler(BaseHTTPRequestHandler):
         except Exception as e:
             self.send_json(500, {"error": str(e)})
 
+    def serve_update_check(self):
+        """GET /api/update/check - check for available updates."""
+        try:
+            from core.auto_update import status as _au_status
+            if _au_status is None:
+                self.send_json(500, {"error": "auto_update module unavailable"})
+                return
+            self.send_json(200, _au_status())
+        except Exception as e:
+            self.send_json(500, {"error": str(e)})
+
     # ===== Settings endpoints ===============================================
     def serve_settings(self):
         """GET /api/settings — current C2 settings/configuration."""
@@ -2119,7 +2137,7 @@ class C2Handler(BaseHTTPRequestHandler):
                 "device_file": DEVICE_FILE,
                 "command_file": COMMAND_FILE,
                 "scan_file": SCAN_FILE,
-                "version": "4.5.2",
+                "version": "4.6.0",
                 "mode": "p2p",
                 "p2p_peers": [
                     {"node_id": "node_001", "address": "192.168.1.10", "port": 9443},
@@ -2352,6 +2370,14 @@ def main():
     load_devices()
     load_commands()
     load_scans()
+
+    # Kick off background auto-update check (non-blocking)
+    try:
+        from core.auto_update import check_async as _au_check_async
+        if _au_check_async:
+            _au_check_async()
+    except Exception:
+        pass
 
     # Auto-update the CVE feed on every C2 start (background — NVD is
     # rate-limited, so the server comes up immediately). New entries are
