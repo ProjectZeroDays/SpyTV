@@ -824,6 +824,13 @@
   </div>
 </header>
 
+<!-- Update Banner (hidden until an update is detected) -->
+<div id="update-banner" style="display:none; background:linear-gradient(90deg,#1E3A5F,#1E40AF); color:#F3F4F6; padding:10px 20px; text-align:center; font-size:13px; border-bottom:1px solid #3B82F6;">
+  <span id="update-banner-text">A new version of SpyTV is available.</span>
+  <a id="update-banner-link" href="#" target="_blank" style="color:#93C5FD; margin-left:12px; text-decoration:underline;">Download</a>
+  <button onclick="document.getElementById('update-banner').style.display='none'" style="background:none;border:none;color:#9CA3AF;margin-left:16px;cursor:pointer;">X</button>
+</div>
+
 <!-- Navigation -->
 <nav class="nav" role="tablist" aria-label="Dashboard sections">
   <div class="nav-item active" role="tab" tabindex="0" aria-selected="true" onclick="switchTab('devices')">C2</div>
