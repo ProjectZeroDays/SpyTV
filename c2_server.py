@@ -2137,7 +2137,7 @@ class C2Handler(BaseHTTPRequestHandler):
                 "device_file": DEVICE_FILE,
                 "command_file": COMMAND_FILE,
                 "scan_file": SCAN_FILE,
-                "version": "4.6.0",
+                "version": "4.6.1",
                 "mode": "p2p",
                 "p2p_peers": [
                     {"node_id": "node_001", "address": "192.168.1.10", "port": 9443},

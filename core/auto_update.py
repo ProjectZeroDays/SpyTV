@@ -24,7 +24,7 @@ from pathlib import Path
 
 # Single source of truth for the running version. Update this string (and the
 # matching tag) when cutting a release.
-APP_VERSION = "4.6.0"
+APP_VERSION = "4.6.1"
 REPO = "ProjectZeroDays/SpyTV"
 RELEASES_API = f"https://api.github.com/repos/{REPO}/releases/latest"
 CHECK_INTERVAL_SECONDS = 6 * 60 * 60  # 6 hours between background re-checks
