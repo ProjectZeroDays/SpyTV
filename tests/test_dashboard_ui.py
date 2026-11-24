@@ -540,3 +540,130 @@ def test_dashboard_scan_and_client_details_flows():
     assert "all checks passed" in output, output
     assert "[unhandledRejection]" not in output, output
     assert "FAIL" not in proc.stdout, proc.stdout
+
+
+SCAN_DIFF_POSTLUDE = r"""
+let failures = 0;
+function ok(cond, label, extra) {
+  if (cond) console.log('  PASS  ' + label);
+  else { failures++; console.log('  FAIL  ' + label + (extra ? '  | ' + extra : '')); }
+}
+function jsonResponse(obj, status = 200) {
+  const text = JSON.stringify(obj);
+  return {
+    ok: status >= 200 && status < 300, status,
+    statusText: status === 200 ? 'OK' : 'Error',
+    text: async () => text,
+  };
+}
+
+(async () => {
+  const results = __el('scan-results');
+  const diffSlot = __el('scan-diff-modal-body');
+  const diffModal = __el('scan-diff-modal');
+  const log = __el('log-container');
+
+  console.log('--- 1. evidence line on scan rows ---------------------------------');
+  renderScanResults([
+    { ip: '10.1.10.15', device_type: 'Roku TV', tv_type: 'roku',
+      open_ports: [8060], vulnerable: true, severity: 'HIGH',
+      fingerprint_source: 'ports', oui_family: 'roku',
+      oui_corroborates: true, firmware_version: '16.0.4',
+      cves_patched_by_version: ['CVE-2023-42787', 'CVE-2024-36210',
+                                'CVE-2025-20878'],
+      cves: [{ id: 'CVE-2017-13077', severity: 'MEDIUM' }] },
+    { ip: '10.1.10.25', device_type: 'Chromecast / Google TV',
+      tv_type: 'chromecast', open_ports: [8009, 5555], vulnerable: true,
+      severity: 'HIGH', fingerprint_source: 'ports',
+      oui_family: 'android-tv', oui_corroborates: false,
+      cves: [{ id: 'CVE-2023-42794', severity: 'MEDIUM' }] },
+    { ip: '10.1.10.99', device_type: 'Roku TV (probable, OUI)',
+      open_ports: [515], vulnerable: false,
+      fingerprint_source: 'oui', oui_family: 'roku' },
+  ]);
+  const html = results.innerHTML;
+  ok(html.includes('fw 16.0.4'), 'firmware version shown', html.slice(0, 120));
+  ok(html.includes('3 patched'), 'patched-out count shown');
+  ok(html.includes('OUI &#10003;'.replace('&#10003;', String.fromCharCode(10003)))
+     || html.includes('OUI'), 'OUI corroboration shown');
+  ok(html.includes('android-tv') && html.includes('chromecast'),
+     'OUI disagreement names both families');
+  ok(html.includes('probable (OUI)'), 'OUI-only labeled probable');
+  const rokuRow = html.split('10.1.10.15')[1] || '';
+  ok(!rokuRow.split('</tr>')[0].includes('1 patched'),
+     'patched count not attached to the wrong row');
+  ok(!html.includes('undefined') && !html.includes('null'),
+     'no undefined/null leaked into evidence line');
+
+  console.log('--- 2. compareScans happy path ------------------------------------');
+  globalThis.__fetchImpl = async () => jsonResponse({
+    runs: [{ scan_id: 'run-1', count: 3 }, { scan_id: 'run-2', count: 4 }],
+    base: 0, compare: 1,
+    diff: {
+      new: [{ ip: '10.1.10.142', device_type: 'Hisense VIDAA TV',
+              vulnerable: true, severity: 'CRITICAL' }],
+      removed: [{ ip: '10.1.10.15', device_type: 'Roku TV',
+                  vulnerable: true, severity: 'HIGH' }],
+      changed: [{ ip: '10.1.10.8', changes: {
+        severity: { from: 'CRITICAL', to: 'HIGH' },
+        open_ports: { from: [22, 80, 8080], to: [80, 8080] } } }],
+      unchanged: 5,
+    },
+  });
+  diffSlot.innerHTML = '';
+  await compareScans();
+  ok(diffModal.classList.added.includes('active'), 'diff modal shown');
+  const d = diffSlot.innerHTML;
+  ok(d.includes('New devices (1)') && d.includes('10.1.10.142'),
+     'new device listed');
+  ok(d.includes('Removed devices (1)') && d.includes('10.1.10.15'),
+     'removed device listed');
+  ok(d.includes('Changed devices (1)') && d.includes('severity'),
+     'changed device with field name');
+  ok(d.includes('CRITICAL'), 'from/to values rendered');
+  ok(d.includes('5 unchanged'), 'unchanged count rendered');
+  ok(log.children.some(c => String(c.innerHTML).includes('Scan diff: 1 new, 1 removed, 1 changed')),
+     'diff summary logged');
+  ok(__el('scan-diff-btn').textContent === 'Compare', 'button label restored');
+  ok(__el('scan-diff-btn').disabled === false, 'button re-enabled');
+
+  console.log('--- 3. compareScans with fewer than two runs ----------------------');
+  globalThis.__fetchImpl = async () => jsonResponse(
+    { error: 'need at least two scan runs', runs: 1 });
+  diffSlot.innerHTML = '';
+  await compareScans();
+  ok(diffModal.classList.added.includes('active'), 'diff modal shown on error');
+  ok(diffSlot.innerHTML.includes('need at least two scan runs'),
+     'fewer-than-two-runs explained in the modal', diffSlot.innerHTML.slice(0, 120));
+  ok(log.children.some(c => String(c.innerHTML).includes('Scan comparison failed')),
+     'failure logged');
+  ok(__el('scan-diff-btn').disabled === false, 'button re-enabled after error');
+
+  console.log('--- 4. exportScanHistory ------------------------------------------');
+  let exportUrl = null;
+  globalThis.__fetchImpl = async (url) => {
+    exportUrl = url;
+    return { ok: true, status: 200, text: async () => '{"finding_count": 0}' };
+  };
+  globalThis.URL.createObjectURL = () => 'blob:fake';
+  globalThis.URL.revokeObjectURL = () => {};
+  await exportScanHistory();
+  ok(exportUrl === '/api/scans/export', 'export hits /api/scans/export',
+     String(exportUrl));
+  ok(log.children.some(c => String(c.innerHTML).includes('Scan history exported')),
+     'export logged');
+
+  console.log(failures ? `\n${failures} FAILURE(S)` : '\nall checks passed');
+  process.exit(failures ? 1 : 0);
+})().catch(e => { console.error(e); process.exit(2); });
+"""
+
+
+def test_dashboard_scan_diff_evidence_and_export_flows():
+    proc = _run_node(PRELUDE + "\n" + _dashboard_script() + "\n"
+                     + SCAN_DIFF_POSTLUDE)
+    output = proc.stdout + proc.stderr
+    assert proc.returncode == 0, output
+    assert "all checks passed" in output, output
+    assert "[unhandledRejection]" not in output, output
+    assert "FAIL" not in proc.stdout, proc.stdout

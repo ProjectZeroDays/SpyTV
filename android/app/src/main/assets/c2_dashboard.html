@@ -840,7 +840,6 @@
   <div class="nav-item" role="tab" tabindex="0" aria-selected="false" onclick="switchTab('exploits')">Exploits</div>
   <div class="nav-item" role="tab" tabindex="0" aria-selected="false" onclick="switchTab('patches')">Patches</div>
   <div class="nav-item" role="tab" tabindex="0" aria-selected="false" onclick="switchTab('audit')">Audit</div>
-  <div class="nav-item" role="tab" tabindex="0" aria-selected="false" onclick="switchTab('logs')">Logs</div>
   <div class="nav-item" role="tab" tabindex="0" aria-selected="false" onclick="switchTab('settings')">Settings</div>
   <div class="nav-item" role="tab" tabindex="0" aria-selected="false" onclick="switchTab('server')">Server Info</div>
 </nav>
@@ -917,10 +916,17 @@
             <button class="btn" onclick="clearScanResults()" data-tooltip="Clear scan results">Clear</button>
           </div>
           <div class="form-group" style="flex:0">
+            <button class="btn" id="scan-diff-btn" onclick="compareScans()" data-tooltip="Compare the last two scan runs: new, removed, and changed devices">Compare</button>
+          </div>
+          <div class="form-group" style="flex:0">
+            <button class="btn" onclick="exportScanHistory()" data-tooltip="Download the full scan history as deterministic JSON">Export</button>
+          </div>
+          <div class="form-group" style="flex:0">
             <button class="btn btn-success" id="autonomous-btn" onclick="startAutonomous()" data-tooltip="Autonomous mode: scan, verify, exploit, register every vulnerable TV">&#9889; Autonomous</button>
           </div>
         </div>
         <div id="check-result" class="check-result" hidden></div>
+        <div id="scan-diff" hidden></div>
         <div id="scan-results"></div>
       </div>
     </div>
@@ -1106,21 +1112,7 @@
     </div>
   </div>
 
-  <!-- Logs Tab -->
-  <div id="tab-logs" class="tab-content">
-    <div class="card">
-      <div class="card-header">
-        <span class="card-title">C2 Activity Logs</span>
-      </div>
-      <div class="card-body">
-        <div class="controls" style="margin-bottom:16px">
-          <button class="btn" onclick="loadLogs()" data-tooltip="Refresh logs">Refresh</button>
-          <button class="btn" onclick="clearLogs()" data-tooltip="Clear logs">Clear Logs</button>
-        </div>
-        <div id="logs-results" class="log-container" style="max-height:none"></div>
-      </div>
-    </div>
-  </div>
+  <!-- Logs Tab (removed — header 'View Logs' opens the log viewer modal) -->
 
   <!-- Settings Tab -->
   <div id="tab-settings" class="tab-content">
@@ -1130,24 +1122,8 @@
       </div>
       <div class="card-body">
         <div class="settings-group">
-          <div class="card-header"><span class="card-title">C2 Server</span></div>
+          <div class="card-header"><span class="card-title">Engagement Defaults</span></div>
           <div class="settings-body">
-            <div class="setting-row">
-              <span class="setting-key">C2 Host</span>
-              <span class="setting-value" id="s-c2-host">—</span>
-            </div>
-            <div class="setting-row">
-              <span class="setting-key">C2 Port</span>
-              <span class="setting-value" id="s-c2-port">—</span>
-            </div>
-            <div class="setting-row">
-              <span class="setting-key">Local IP</span>
-              <span class="setting-value" id="s-local-ip">—</span>
-            </div>
-            <div class="setting-row">
-              <span class="setting-key">P2P Mode</span>
-              <span class="setting-value" id="s-p2p-mode">Active</span>
-            </div>
             <div class="setting-row">
               <span class="setting-key">Auto-update CVEs</span>
               <div class="setting-toggle on" id="s-auto-update" onclick="toggleSetting(this,'auto_update_cves')"></div>
@@ -1183,6 +1159,27 @@
       </div>
       <div class="card-body">
         <div class="server-info" id="server-info"></div>
+        <div class="settings-group" style="margin-top:16px">
+          <div class="card-header"><span class="card-title">C2 Server (read-only)</span></div>
+          <div class="settings-body">
+            <div class="setting-row">
+              <span class="setting-key">C2 Host</span>
+              <span class="setting-value" id="srv-c2-host">—</span>
+            </div>
+            <div class="setting-row">
+              <span class="setting-key">C2 Port</span>
+              <span class="setting-value" id="srv-c2-port">—</span>
+            </div>
+            <div class="setting-row">
+              <span class="setting-key">Local IP</span>
+              <span class="setting-value" id="srv-local-ip">—</span>
+            </div>
+            <div class="setting-row">
+              <span class="setting-key">P2P Mode</span>
+              <span class="setting-value" id="srv-p2p-mode">—</span>
+            </div>
+          </div>
+        </div>
         <div class="controls" style="margin-top:20px">
           <button class="btn btn-danger" onclick="killAllConnections()" data-tooltip="Close every tracked connection">&#9861; Kill All Connections</button>
         </div>
@@ -1479,6 +1476,19 @@
   </div>
 </div>
 
+<div id="scan-diff-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="scan-diff-modal-title">
+  <div class="modal" style="max-width:760px;width:94vw">
+    <div class="modal-header">
+      <h3 class="modal-title" id="scan-diff-modal-title">Scan Comparison</h3>
+      <button class="btn btn-sm" onclick="document.getElementById('scan-diff-modal').classList.remove('active')" data-tooltip="Close">&#10005;</button>
+    </div>
+    <div class="modal-body" id="scan-diff-modal-body" style="max-height:70vh;overflow:auto"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="document.getElementById('scan-diff-modal').classList.remove('active')">Close</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const API = (location.protocol === 'file:')
   ? 'http://127.0.0.1:' + (new URLSearchParams(location.search).get('port') || 9443)
@@ -1542,7 +1552,7 @@ function addLog(msg) {
 const API_BUDGETS = [
   [/^\/api\/cve\/patch/, 600000],
   [/^\/api\/(scan\b|exploit)/, 300000],
-  [/^\/api\/(patch|cve|implant|devices\/tv)/, 300000],
+  [/^\/api\/(patch|cve|implant|devices\/tv|autonomous)/, 300000],
 ];
 
 function apiTimeoutFor(path) {
@@ -1810,14 +1820,22 @@ async function loadServerInfo() {
 async function loadSettings() {
   try {
     const s = await api('/api/settings');
-    document.getElementById('s-c2-host').textContent = s.c2_host || '—';
-    document.getElementById('s-c2-port').textContent = s.c2_port || '—';
-    document.getElementById('s-local-ip').textContent = s.local_ip || '—';
-    document.getElementById('s-p2p-mode').textContent = s.mode || 'p2p';
+    // Server facts (host/port/IP/mode) were moved to the Server Info tab —
+    // populate those IDs. Settings tab keeps only the editable knobs.
+    const setIf = (id, v) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = (v === null || v === undefined || v === '') ? '—' : v;
+    };
+    setIf('srv-c2-host', s.c2_host);
+    setIf('srv-c2-port', s.c2_port);
+    setIf('srv-local-ip', s.local_ip);
+    setIf('srv-p2p-mode', s.mode || 'p2p');
     const toggle = document.getElementById('s-auto-update');
-    toggle.className = 'setting-toggle ' + (s.auto_update_cves ? 'on' : '');
-    document.getElementById('s-exploit-timeout').value = s.exploit_timeout_s || 90;
-    document.getElementById('s-patch-timeout').value = s.patch_timeout_s || 300;
+    if (toggle) toggle.className = 'setting-toggle ' + (s.auto_update_cves ? 'on' : '');
+    const et = document.getElementById('s-exploit-timeout');
+    if (et) et.value = s.exploit_timeout_s || 90;
+    const pt = document.getElementById('s-patch-timeout');
+    if (pt) pt.value = s.patch_timeout_s || 300;
     renderP2PList(s.p2p_peers || []);
   } catch (e) { /* non-fatal */ }
 }
@@ -2348,7 +2366,7 @@ function renderScanResults(results) {
           return `
           <tr>
             <td class="mono">${r.ip}</td>
-            <td>${escapeHtml(deviceLabel)}</td>
+            <td>${escapeHtml(deviceLabel)}${evidenceLine(r)}</td>
             <td class="mono">${(r.open_ports || []).join(', ')}</td>
             <td><div class="cve-chips" style="margin-top:0">${chips}</div></td>
             <td>${status}</td>
@@ -2436,6 +2454,121 @@ function saveScanResults() {
 function clearScanResults() {
   document.getElementById('scan-results').innerHTML = '';
   addLog('Scan results cleared');
+}
+
+function evidenceLine(r) {
+  /* Second identity line under the device type: how the device was
+   * identified, whether the MAC vendor agrees, and what firmware proven
+   * patched. Empty when the finding carries no enrichment — old C2s and
+   * autonomous summaries simply show nothing extra. */
+  const bits = [];
+  if (r.fingerprint_source === 'http' && r.fingerprint_evidence) {
+    bits.push(`<span data-tooltip="HTTP fingerprint: ${escapeHtml(r.fingerprint_evidence)}">identified via HTTP</span>`);
+  } else if (r.fingerprint_source === 'oui') {
+    bits.push('<span data-tooltip="MAC vendor prefix only — vendor known, model not proven">probable (OUI)</span>');
+  } else if (r.fingerprint_source === 'ports') {
+    bits.push('<span data-tooltip="Matched by open signature ports">ports</span>');
+  }
+  if (r.oui_family) {
+    if (r.oui_corroborates === true) {
+      bits.push(`<span style="color:var(--success)" data-tooltip="MAC vendor prefix agrees with the port-based family (${escapeHtml(r.oui_family)})">OUI &#10003;</span>`);
+    } else if (r.oui_corroborates === false) {
+      bits.push(`<span style="color:var(--warning)" data-tooltip="MAC says ${escapeHtml(r.oui_family)} but the ports say ${escapeHtml(r.tv_type || 'unidentified')} — identity uncertain, verify before acting">OUI &#9888;</span>`);
+    }
+  }
+  if (r.firmware_version) {
+    bits.push(`<span data-tooltip="Firmware version read from the device">fw ${escapeHtml(r.firmware_version)}</span>`);
+  }
+  if (r.cves_patched_by_version && r.cves_patched_by_version.length) {
+    bits.push(`<span data-tooltip="Proven fixed at this version: ${escapeHtml(r.cves_patched_by_version.join(', '))}">${r.cves_patched_by_version.length} patched</span>`);
+  }
+  if (!bits.length) return '';
+  return `<div style="color:var(--text-muted);font-size:11px;margin-top:2px">${bits.join(' &middot; ')}</div>`;
+}
+
+async function compareScans() {
+  /* Diff the last two scan runs (GET /api/scans/diff). The panel shows what
+   * appeared, vanished, or changed — the "did the fleet get better after
+   * patching?" view. */
+  const btn = document.getElementById('scan-diff-btn');
+  const slot = document.getElementById('scan-diff');
+  if (btn) { btn.disabled = true; btn.textContent = 'Comparing…'; }
+  try {
+    const data = await api('/api/scans/diff');
+    if (data && data.error) throw new Error(data.error);
+    renderScanDiff(data);
+    const d = data.diff || {};
+    addLog(`Scan diff: ${(d.new || []).length} new, ${(d.removed || []).length} removed, ${(d.changed || []).length} changed`);
+  } catch (e) {
+    const msg = (e && e.message) || String(e);
+    const modalBody = document.getElementById('scan-diff-modal-body');
+    const modal = document.getElementById('scan-diff-modal');
+    if (modalBody && modal) {
+      modalBody.innerHTML = `<div class="alert alert-warning">Scan comparison unavailable: ${escapeHtml(msg)}<div style="margin-top:8px;font-size:11px;color:var(--text-muted)">Usually means there aren't two scan runs in history yet — run a scan, then another, and retry.</div></div>`;
+      modal.classList.add('active');
+    }
+    addLog(`Scan comparison failed: ${msg}`);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Compare'; }
+  }
+}
+
+function renderScanDiff(data) {
+  const modalBody = document.getElementById('scan-diff-modal-body');
+  const modal = document.getElementById('scan-diff-modal');
+  if (!modalBody || !modal) return;
+  const d = (data && data.diff) || {};
+  const runs = (data && data.runs) || [];
+  const row = (r) => `<tr><td class="mono">${escapeHtml(r.ip || '?')}</td>` +
+    `<td>${escapeHtml(r.device_type || r.tv_type || '—')}</td>` +
+    `<td>${r.vulnerable ? '<span class="badge badge-warning">' + escapeHtml(r.severity || 'Vulnerable') + '</span>' : '<span class="badge badge-muted">Not confirmed</span>'}</td></tr>`;
+  const changedRows = (d.changed || []).map(c => {
+    const bits = Object.entries(c.changes || {}).map(([k, v]) =>
+      `${escapeHtml(k)}: ${escapeHtml(String((v && v.from) !== undefined ? v.from : '—'))} &rarr; ${escapeHtml(String((v && v.to) !== undefined ? v.to : '—'))}`).join('; ');
+    return `<tr><td class="mono">${escapeHtml(c.ip)}</td><td colspan="2">${bits}</td></tr>`;
+  }).join('');
+  const section = (title, rowsHtml, count) => `
+    <div style="margin-top:10px">
+      <div style="font-size:12px;font-weight:600">${title} (${count})</div>
+      ${count ? `<table class="table" style="margin-top:4px"><tbody>${rowsHtml}</tbody></table>` : '<div style="color:var(--text-muted);font-size:11px">none</div>'}
+    </div>`;
+  const baseN = runs.length >= 2 ? (data.base + 1) : '?';
+  const compareN = runs.length >= 2 ? (data.compare + 1) : '?';
+  modalBody.innerHTML = `
+    <div class="alert alert-info" style="margin-bottom:10px">
+      <div style="font-size:12px;font-weight:600">Scan comparison — run ${baseN} vs run ${compareN}${runs.length ? ` of ${runs.length}` : ''}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:6px;line-height:1.5">
+        "Removed" means a device appeared in the previous run but not this one. That usually
+        means the second scan didn't reach the IP — a narrower CIDR, a timeout, or the device
+        went offline mid-scan — not that it was un-exploited. Check the scan range and try again.
+      </div>
+    </div>
+    ${section('New devices', (d.new || []).map(row).join(''), (d.new || []).length)}
+    ${section('Removed devices', (d.removed || []).map(row).join(''), (d.removed || []).length)}
+    ${section('Changed devices', changedRows, (d.changed || []).length)}
+    ${d.unchanged !== undefined ? `<div style="color:var(--text-muted);font-size:11px;margin-top:6px">${d.unchanged} unchanged</div>` : ''}
+  `;
+  modal.classList.add('active');
+}
+
+async function exportScanHistory() {
+  /* Server-side history export (GET /api/scans/export): the full finding
+   * archive as deterministic JSON, not just the current table view. */
+  try {
+    const resp = await fetch(API + '/api/scans/export');
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const text = await resp.text();
+    const blob = new Blob([text], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'spytv-scans.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    addLog('Scan history exported (spytv-scans.json)');
+  } catch (e) {
+    addLog('Scan history export failed: ' + ((e && e.message) || e));
+  }
 }
 
 // ===== Payload generator =====
@@ -3390,11 +3523,27 @@ async function poll() {
   await loadCVEs();
   await loadNetInfo();   // auto-detect local subnet mask → CIDR
   restoreEngagement();
-  // Show the walkthrough automatically on first launch only.
-  try {
-    const seen = localStorage.getItem('spytv_walkthrough_done');
-    if (!seen) setTimeout(() => startWalkthrough(false), 900);
-  } catch (e) { setTimeout(() => startWalkthrough(false), 900); }
+  // Walkthrough: show only when the server has NOT previously marked it done.
+  // localStorage alone doesn't survive Electron WebView reloads or APK
+  // reinstalls, so we gate on server-side state first.
+  fetch(API + '/api/walkthrough/state')
+    .then((r) => (r.ok ? r.json() : { done: false }))
+    .then((state) => {
+      if (state && state.done) return;
+      try {
+        const seen = localStorage.getItem('spytv_walkthrough_done');
+        if (seen) return;
+      } catch (e) { /* storage unavailable */ }
+      setTimeout(() => startWalkthrough(false), 900);
+    })
+    .catch(() => {
+      // Offline/file:// mode — fall back to localStorage behavior
+      try {
+        if (!localStorage.getItem('spytv_walkthrough_done')) {
+          setTimeout(() => startWalkthrough(false), 900);
+        }
+      } catch (e) { /* ignore */ }
+    });
   setInterval(() => loadFeed(true), 60000);
 })();
 
@@ -3695,9 +3844,24 @@ function startWalkthrough(force = false) {
   document.getElementById('walkthrough-modal').classList.add('active');
 }
 
+async function walkthroughMarkDone() {
+  try {
+    await fetch(API + '/api/walkthrough/done', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    try { localStorage.setItem('spytv_walkthrough_done', '1'); } catch (_) {}
+  } catch (e) {
+    // Server-side persistence is best-effort; localStorage is the fallback.
+  }
+}
+
 function walkthroughSkip() {
-  try { localStorage.setItem('spytv_walkthrough_done', '1'); } catch (e) {}
+  try {
+    localStorage.setItem('spytv_walkthrough_done', '1');
+  } catch (e) {}
   document.getElementById('walkthrough-modal').classList.remove('active');
+  walkthroughMarkDone();
   addLog('Walkthrough skipped');
 }
 
