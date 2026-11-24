@@ -660,7 +660,7 @@ def test_open_ports_alone_do_not_make_a_host_vulnerable(monkeypatch):
 
     monkeypatch.setattr(c2_ops, "scan_network", _fake_scan_network)
     monkeypatch.setattr(c2_ops, "probe_many",
-                        lambda jobs, on_progress=None: [False] * len(jobs))
+                        lambda jobs, on_progress=None, **kw: [False] * len(jobs))
 
     results = c2_ops.perform_scan("10.1.10.0/24", _NoFamilyScanner())
 
@@ -701,7 +701,7 @@ def test_a_matched_family_still_counts_as_vulnerable(monkeypatch):
 
     monkeypatch.setattr(c2_ops, "scan_network", _fake_scan_network)
     monkeypatch.setattr(c2_ops, "probe_many",
-                        lambda jobs, on_progress=None: [False] * len(jobs))
+                        lambda jobs, on_progress=None, **kw: [False] * len(jobs))
 
     results = c2_ops.perform_scan("10.2.0.0/24", _TizenScanner())
 
@@ -711,3 +711,67 @@ def test_a_matched_family_still_counts_as_vulnerable(monkeypatch):
     assert finding["device_type"] == "Samsung Tizen TV", finding
     assert finding["cve_ids"] == ["CVE-2023-0001"], finding
     assert finding["severity"] == "HIGH", finding
+
+
+def test_cve_only_finding_gets_device_type_and_address_order(monkeypatch):
+    """Live-run report (10.1.10.0/24): TVs the generic pass missed but the CVE
+    sweep found were appended raw — `name` present, `device_type` missing, so
+    the dashboard rendered blank device types — and landed at the end of the
+    list, out of address order."""
+    import c2_ops
+
+    def _fake_scan_network(cidr=None, progress_cb=None):
+        if progress_cb:
+            progress_cb(1.0)
+        return [{"ip": "10.1.10.37", "open_ports": [80, 8080],
+                 "device_type": "Unknown", "vulnerable": False,
+                 "detected": True},
+                {"ip": "10.1.10.9", "open_ports": [8080],
+                 "device_type": "Unknown", "vulnerable": False,
+                 "detected": True}]
+
+    raw_cve_finding = {
+        "ip": "10.1.10.8", "mac": "AA:BB:CC:DD:EE:FF", "tv_type": "lg-webos",
+        "name": "LG webOS TV", "open_ports": [3000, 3001],
+        "bluetooth": False, "ssh": False,
+        "cves": [{"id": "CVE-2024-23339", "severity": "CRITICAL"}],
+        "vulnerable": True, "patch_available": True,
+    }
+
+    class _Scanner:
+        def scan_network(self, cidr=None, progress_cb=None):
+            if progress_cb:
+                progress_cb(1.0)
+            return [raw_cve_finding]
+
+        def detect_tv_type(self, ip, open_ports):
+            return None, None
+
+    monkeypatch.setattr(c2_ops, "scan_network", _fake_scan_network)
+    monkeypatch.setattr(c2_ops, "probe_many",
+                        lambda jobs, on_progress=None, **kw: [False] * len(jobs))
+
+    results = c2_ops.perform_scan("10.1.10.0/24", _Scanner())
+
+    assert [r["ip"] for r in results] == ["10.1.10.8", "10.1.10.9",
+                                          "10.1.10.37"], results
+    late = results[0]
+    assert late["device_type"] == "LG webOS TV", late
+    assert late["tv_type"] == "lg-webos", late
+    assert late["vulnerable"] is True, late
+    assert late["severity"] == "CRITICAL", late
+
+
+def test_generic_https_host_is_not_a_chromecast():
+    """Live-run false positive: the scanner host itself (10.1.10.239, ports
+    80+8443 — the C2's own HTTPS listener) classified as "Chromecast / Google
+    TV" and flagged vulnerable with the full CVE bundle, because the signature
+    was [8009, 8443, 5555] matched with any(). 8443 is generic HTTPS; the
+    distinctive cast port is 8009."""
+    from core.cve_scanner import CVEScanner
+
+    scanner = CVEScanner()
+    tv_type, info = scanner.detect_tv_type("10.1.10.239", [80, 8443])
+    assert tv_type is None and info is None, (tv_type, info)
+    tv_type, info = scanner.detect_tv_type("10.1.10.239", [8009])
+    assert tv_type == "chromecast", tv_type

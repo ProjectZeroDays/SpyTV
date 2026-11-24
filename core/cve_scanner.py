@@ -11,6 +11,10 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from colorama import Fore, Style
 
+from core import fingerprint as _fp
+from core.liveness import live_hosts
+from core.version_probe import fetch_device_version
+
 # Safety cap shared by every network scan (see c2_ops.scan_network):
 # never enumerate more than this many hosts from a supplied CIDR.
 MAX_SCAN_HOSTS = 1024
@@ -55,7 +59,7 @@ def probe_port(ip, port, timeout=0.3):
 
 
 def probe_many(jobs, workers=SCAN_WORKERS, on_progress=None,
-               per_host=PER_HOST_WORKERS):
+               per_host=PER_HOST_WORKERS, cache=None):
     """Probe ``(ip, port)`` jobs concurrently and return results in job order.
 
     Parallelism is spread across hosts, never across the ports of a single
@@ -65,13 +69,35 @@ def probe_many(jobs, workers=SCAN_WORKERS, on_progress=None,
 
     ``on_progress(done, total)`` fires only on the calling thread, so callers
     can push it straight through to the UI without extra locking.
+
+    ``cache`` is an optional shared ``{(ip, port): bool}`` mapping. Jobs
+    already present are not re-probed (the audit's generic pass and CVE
+    sweep overlap heavily), and every new result is stored for later passes.
     """
-    results = [False] * len(jobs)
     if not jobs:
         if on_progress:
             on_progress(0, 0)
-        return results
-    workers = max(1, min(int(workers), len(jobs)))
+        return []
+
+    if cache is None:
+        cache = {}
+        fresh = list(range(len(jobs)))
+        results = [None] * len(jobs)
+    else:
+        results = [None] * len(jobs)
+        fresh = []
+        for i, job in enumerate(jobs):
+            if job in cache:
+                results[i] = bool(cache[job])
+            else:
+                fresh.append(i)
+
+    total = len(jobs)
+    done = total - len(fresh)
+    if on_progress and done:
+        on_progress(done, total)
+
+    workers = max(1, min(int(workers), len(fresh)))
     per_host = max(1, int(per_host))
 
     # One semaphore per address, created up front so the workers never race to
@@ -83,8 +109,9 @@ def probe_many(jobs, workers=SCAN_WORKERS, on_progress=None,
 
     # Port-major: with a host-major list the first `workers` jobs all belong to
     # the first few addresses, so every pool thread sits on the same device and
-    # the caps leave most of the pool idle.
-    order = sorted(range(len(jobs)), key=lambda i: (jobs[i][1], jobs[i][0]))
+    # the caps leave most of the pool idle. Cached jobs are excluded — their
+    # results are already in place and counted in `done`.
+    order = sorted(fresh, key=lambda i: (jobs[i][1], jobs[i][0]))
 
     def _run(idx):
         ip, port = jobs[idx]
@@ -93,13 +120,15 @@ def probe_many(jobs, workers=SCAN_WORKERS, on_progress=None,
 
     with ThreadPoolExecutor(max_workers=workers) as pool:
         pending = {pool.submit(_run, idx): idx for idx in order}
-        done = 0
         for fut in as_completed(pending):
-            results[pending[fut]] = bool(fut.result())
+            idx = pending[fut]
+            result = bool(fut.result())
+            results[idx] = result
+            cache[jobs[idx]] = result
             done += 1
             if on_progress:
-                on_progress(done, len(jobs))
-    return results
+                on_progress(done, total)
+    return [bool(r) for r in results]
 
 # Known CVE database for smart TVs
 TV_CVE_DATABASE = {
@@ -262,12 +291,17 @@ TV_CVE_DATABASE = {
             {"id": "CVE-2022-0847", "severity": "HIGH", "score": 7.8, "component": "Linux kernel pipe buffer", "fixed_in": "Linux kernel 5.16.11 / 5.15.25 / 5.10.102"},
             {"id": "CVE-2016-5195", "severity": "HIGH", "score": 7.0, "component": "Linux kernel COW", "fixed_in": "Linux kernel 4.8.3"},
         ],
-        "ports": [8009, 8443, 5555],
+        "ports": [8009],
         "mac_prefixes": ["F4:F5:D8", "54:60:09", "3C:8A:1A"],
         "bluetooth": True,
         "ssh": False,
     },
 }
+
+# Distinctiveness weight per signature port (shared ports count for less in
+# best_family_match). Built once from the database so weights always agree
+# with the data.
+_PORT_USAGE = _fp.port_usage_counts(TV_CVE_DATABASE)
 
 
 class CVEScanner:
@@ -277,11 +311,26 @@ class CVEScanner:
         self.findings = []
 
     def detect_tv_type(self, ip, open_ports):
-        """Detect TV type based on open ports."""
-        for tv_type, info in TV_CVE_DATABASE.items():
-            if any(p in open_ports for p in info["ports"]):
-                return tv_type, info
-        return None, None
+        """Detect TV type based on open ports.
+
+        Scored matching (core.fingerprint.best_family_match): distinctive
+        ports outweigh shared ones, a family's primary port counts double,
+        and a candidate needs score >= 1.0 to win. The old dict-order
+        ``any()`` match let one generic port (22, 8080, formerly 8443)
+        claim a host for whichever family listed it first.
+        """
+        return _fp.best_family_match(open_ports, TV_CVE_DATABASE,
+                                     _PORT_USAGE)
+
+    def classify_by_oui(self, mac):
+        """Family matching the MAC's vendor prefix, or None."""
+        return _fp.classify_by_oui(mac, TV_CVE_DATABASE)
+
+    def http_fingerprint(self, ip, open_ports):
+        return _fp.http_fingerprint(ip, open_ports)
+
+    def fetch_version(self, ip, tv_type):
+        return fetch_device_version(ip, tv_type)
 
     def get_mac_address(self, ip):
         """Get MAC address from ARP table."""
@@ -328,6 +377,7 @@ class CVEScanner:
             return None
 
         mac = self.get_mac_address(ip)
+        oui_family = _fp.classify_by_oui(mac, TV_CVE_DATABASE)
         bluetooth = info.get("bluetooth", False)
         ssh = self.check_ssh(ip)
 
@@ -341,6 +391,7 @@ class CVEScanner:
             "mac": mac,
             "tv_type": tv_type,
             "name": info["name"],
+            "oui_family": oui_family,
             "open_ports": open_ports,
             "bluetooth": bluetooth,
             "ssh": ssh,
@@ -349,12 +400,18 @@ class CVEScanner:
             "patch_available": all(cve.get("fixed_in") for cve in relevant_cves),
         }
 
-    def scan_network(self, cidr=None, progress_cb=None):
+    def scan_network(self, cidr=None, progress_cb=None, probe_cache=None):
         """Scan network and return all TV findings.
 
         ``progress_cb(fraction)`` (optional) receives 0.0 → 1.0 across this
         pass so callers can show movement while it runs instead of freezing on
         a single percentage until the whole sweep is done.
+
+        ``probe_cache`` (optional) is a shared ``{(ip, port): bool}`` dict so
+        overlapping passes don't re-probe the same port on the same host.
+        Live-host pre-seeding (core.liveness) skips the TCP sweep entirely
+        for addresses that never answered ICMP/ARP — safely, because a
+        pre-seed failure falls back to probing the full range.
         """
         if cidr is None:
             import socket as s
@@ -374,6 +431,9 @@ class CVEScanner:
         hosts = list(network.hosts())
         if len(hosts) > MAX_SCAN_HOSTS:
             hosts = hosts[:MAX_SCAN_HOSTS]
+        live = live_hosts(network)
+        if live:
+            hosts = [h for h in hosts if str(h) in live]
         tv_ports = set()
         for info in TV_CVE_DATABASE.values():
             tv_ports.update(info["ports"])
@@ -389,7 +449,7 @@ class CVEScanner:
             if progress_cb and total:
                 progress_cb(done / total)
 
-        probes = probe_many(jobs, on_progress=_report)
+        probes = probe_many(jobs, on_progress=_report, cache=probe_cache)
 
         findings = []
         for i, ip in enumerate(ips):

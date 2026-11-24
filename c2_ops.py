@@ -15,8 +15,11 @@ import subprocess
 import sys
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 from core.cve_scanner import MAX_SCAN_HOSTS, TV_CVE_DATABASE, probe_many
+from core.fingerprint import filter_cves_for_version
+from core.liveness import live_hosts, read_arp_table_map
 
 REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
 GENERATED_EXPLOITS_DIR = os.path.join(REPO_ROOT, "data", "exploits", "generated")
@@ -71,13 +74,18 @@ def probe_ports(ip, ports=None, timeout=0.3):
     return open_ports
 
 
-def scan_network(cidr=None, progress_cb=None):
+def scan_network(cidr=None, progress_cb=None, probe_cache=None):
     """Scan local network for vulnerable TVs using port scanning.
 
     ``progress_cb(fraction)`` (optional) receives 0.0 → 1.0 across this pass.
     Probing runs through a bounded pool (``probe_many``) because sequential
     0.3s timeouts on hosts that never answer took minutes per /24 — which is
     what left the engagement bar sitting at 5% with no visible movement.
+
+    ``probe_cache`` (optional) is a shared ``{(ip, port): bool}`` dict so the
+    CVE sweep doesn't re-probe ports this pass already settled. Live-host
+    pre-seeding (ICMP + ARP, core.liveness) skips TCP entirely for hosts
+    that answer neither; a pre-seed failure falls back to the full range.
     """
     if cidr is None:
         cidr = _default_cidr()
@@ -92,7 +100,10 @@ def scan_network(cidr=None, progress_cb=None):
         print(f"[scan] {cidr} covers {len(hosts)} hosts — capping at "
               f"{MAX_SCAN_HOSTS} (MAX_SCAN_HOSTS)")
         hosts = hosts[:MAX_SCAN_HOSTS]
-    tv_ports = [5555, 22, 80, 554, 8080, 1900, 7676, 3000, 8060, 36669, 8009, 49152]
+    live = live_hosts(network)
+    if live:
+        hosts = [h for h in hosts if str(h) in live]
+    tv_ports = list(GENERIC_TV_PORTS)
 
     ips = [str(host) for host in hosts]
     jobs = [(ip, port) for ip in ips for port in tv_ports]
@@ -101,7 +112,7 @@ def scan_network(cidr=None, progress_cb=None):
         if progress_cb and total:
             progress_cb(done / total)
 
-    probes = probe_many(jobs, on_progress=_report)
+    probes = probe_many(jobs, on_progress=_report, cache=probe_cache)
 
     for i, ip in enumerate(ips):
         base = i * len(tv_ports)
@@ -181,7 +192,23 @@ def perform_scan(cidr, scanner, progress_cb=None):
             report_fraction((done / total) if total else 0.0)
         return report
 
-    results = scan_network(cidr, progress_cb=_fraction_cb(0.0, W_GENERIC))
+    def _accepts(fn, param):
+        """True when ``fn`` takes ``param`` (stub scan fakes often don't)."""
+        try:
+            return param in inspect.signature(fn).parameters
+        except (TypeError, ValueError):
+            return False
+
+    # Shared across all three passes below: the generic probe, the per-host
+    # enrichment, and the CVE sweep all touch the same (ip, port) pairs, and
+    # a closed port stays closed for the whole run.
+    probe_cache = {}
+
+    scan_kwargs = {}
+    if _accepts(scan_network, "probe_cache"):
+        scan_kwargs["probe_cache"] = probe_cache
+    results = scan_network(cidr, progress_cb=_fraction_cb(0.0, W_GENERIC),
+                           **scan_kwargs)
 
     # Enrich with CVE-database matching: add the vulnerability signature
     # ports for every known TV family so those TVs are discovered too, then
@@ -193,28 +220,41 @@ def perform_scan(cidr, scanner, progress_cb=None):
                    if p not in (5555, 22, 80, 8080, 8060, 36669)]
     if results and extra_ports:
         jobs = [(r["ip"], port) for r in results for port in extra_ports]
+        settled = set(probe_cache.keys())
         probes = probe_many(jobs,
-                            on_progress=_counts_cb(W_GENERIC, W_EXTRA))
+                            on_progress=_counts_cb(W_GENERIC, W_EXTRA),
+                            cache=probe_cache)
+        # A single flaky positive here can flip a device's whole identity
+        # (live run: one phantom open on 24825/7345 turned a Hisense TV
+        # into a Vizio). Ports settled earlier this run are trusted; fresh
+        # positives get one confirming re-probe before they count.
+        fresh_open = [jobs[i] for i, ok in enumerate(probes)
+                      if ok and jobs[i] not in settled]
+        if fresh_open:
+            confirm = probe_many(fresh_open, cache=probe_cache)
+            confirmed = {fresh_open[i] for i, ok in enumerate(confirm) if ok}
+        else:
+            confirmed = set()
         for i, r in enumerate(results):
             base = i * len(extra_ports)
             for j, port in enumerate(extra_ports):
-                if probes[base + j] and port not in r["open_ports"]:
-                    r["open_ports"].append(port)
+                job = (r["ip"], port)
+                if probes[base + j] and (job in settled or job in confirmed):
+                    if port not in r["open_ports"]:
+                        r["open_ports"].append(port)
 
     # CVE-scan pass over the whole range (picks up families the generic
     # pass missed, e.g. Samsung 26101 / LG 30000 / Hisense 56789).
-    # Sniff the signature rather than catching TypeError, so a TypeError
-    # raised INSIDE the scanner isn't silently retried as "no progress arg".
+    # Sniff each optional parameter rather than catching TypeError, so a
+    # TypeError raised INSIDE the scanner isn't silently retried as "no arg".
+    cve_kwargs = {}
+    if _accepts(scanner.scan_network, "progress_cb"):
+        cve_kwargs["progress_cb"] = _fraction_cb(
+            W_GENERIC + W_EXTRA, 1 - W_GENERIC - W_EXTRA)
+    if _accepts(scanner.scan_network, "probe_cache"):
+        cve_kwargs["probe_cache"] = probe_cache
     try:
-        takes_progress = "progress_cb" in inspect.signature(
-            scanner.scan_network).parameters
-    except (TypeError, ValueError):
-        takes_progress = False
-    try:
-        cve_findings = (scanner.scan_network(
-            cidr, progress_cb=_fraction_cb(W_GENERIC + W_EXTRA,
-                                           1 - W_GENERIC - W_EXTRA))
-            if takes_progress else scanner.scan_network(cidr))
+        cve_findings = scanner.scan_network(cidr, **cve_kwargs)
     except Exception:
         cve_findings = []
     by_ip = {r["ip"]: r for r in results}
@@ -228,6 +268,7 @@ def perform_scan(cidr, scanner, progress_cb=None):
             tgt["bluetooth"] = f.get("bluetooth", False)
             tgt["ssh"] = f.get("ssh", False)
             tgt["patch_available"] = f.get("patch_available", False)
+            tgt["oui_family"] = f.get("oui_family")
             for port in f["open_ports"]:
                 if port not in tgt["open_ports"]:
                     tgt["open_ports"].append(port)
@@ -252,35 +293,137 @@ def finalize_findings(results, scanner):
     type or cve"* came from: the flag was set by discovery and never revised,
     so a host with nothing but port 80 on it kept ``vulnerable: true`` while
     carrying ``device_type: "Unknown"`` and no ``cves`` at all.
+
+    Per-finding enrichment (MAC lookup, port/OUI/HTTP identification, version
+    fetch) runs across a small thread pool — serially it added tens of
+    seconds to every scan, one arp subprocess and HTTP timeout at a time.
+    Each finding is an independent dict, so the only shared reads are the
+    batch-loaded ARP map and the scanner's read-only classifiers.
     """
-    for r in results:
-        r.setdefault("detected", bool(r.get("open_ports")))
+    try:
+        arp_map = read_arp_table_map()
+    except Exception:  # noqa: BLE001 — MAC backfill degrades, never breaks
+        arp_map = {}
 
-        # No CVE list yet — ask whether the open ports match a known family.
-        if not r.get("cves"):
-            tv_type, info = scanner.detect_tv_type(r["ip"], r.get("open_ports", []))
-            if info:
-                r["tv_type"] = tv_type
-                r["name"] = info["name"]
-                r["cves"] = info["cves"]
-                r["device_type"] = info["name"]
+    def _work(r):
+        _finalize_one(r, scanner, arp_map)
 
-        if r.get("cves"):
-            r["vulnerable"] = True
-            r["cve_ids"] = [c["id"] for c in r["cves"]]
-            # Computed for BOTH sources: family detection used to skip this, so
-            # a device found only by its signature port got cve_ids but no
-            # severity and the table could not show how bad it was.
-            r["severity"] = max(
-                (c.get("severity") or "LOW" for c in r["cves"]),
-                key=lambda s: ["LOW", "MEDIUM", "HIGH", "CRITICAL"].index(s)
-                if s in ("LOW", "MEDIUM", "HIGH", "CRITICAL") else 0)
-        else:
-            # Nothing matched: say so instead of inheriting discovery's guess.
-            r["vulnerable"] = False
-            r.setdefault("device_type", "Unknown")
+    if len(results) > 4:
+        with ThreadPoolExecutor(max_workers=16) as pool:
+            list(pool.map(_work, results))
+    else:
+        for r in results:
+            _work(r)
 
+    # Deterministic report order: CVE-sweep findings appended after the
+    # generic pass used to pile up at the end, out of address order.
+    def _ip_key(r):
+        try:
+            return tuple(int(p) for p in r["ip"].split("."))
+        except (AttributeError, KeyError, ValueError):
+            return ()
+
+    results.sort(key=_ip_key)
     return results
+
+
+def _finalize_one(r, scanner, arp_map):
+    """Identify one finding and decide its verdict. Never raises — an
+    enrichment step that fails (no MAC, no HTTP answer, no version) simply
+    leaves that field unset and the verdict falls back to 'not proven'."""
+    r.setdefault("detected", bool(r.get("open_ports")))
+
+    # Backfill the MAC so the OUI signal below works the same for
+    # generic-pass and CVE-pass discoveries: batch ARP table first, then
+    # the scanner's own lookup for whatever the table missed.
+    if not r.get("mac"):
+        mac = arp_map.get(r["ip"])
+        if not mac and hasattr(scanner, "get_mac_address"):
+            mac = scanner.get_mac_address(r["ip"])
+        r["mac"] = mac or "Unknown"
+
+    # No CVE list yet — ask whether the open ports match a known family.
+    if not r.get("cves"):
+        tv_type, info = scanner.detect_tv_type(r["ip"], r.get("open_ports", []))
+        if info:
+            r["tv_type"] = tv_type
+            r["name"] = info["name"]
+            r["cves"] = info["cves"]
+            r["device_type"] = info["name"]
+            r["fingerprint_source"] = "ports"
+
+    # OUI corroboration: the vendor prefix of the ARP-derived MAC is a
+    # second, independent identity signal. It flags agreement/disagreement
+    # with the port-based family, and names hosts ports couldn't — but an
+    # OUI alone identifies a VENDOR, not a model or firmware, so it never
+    # attaches a CVE bundle by itself (a Samsung laptop carries Samsung's
+    # prefixes too).
+    oui_family = r.get("oui_family")
+    if not oui_family and hasattr(scanner, "classify_by_oui"):
+        oui_family = scanner.classify_by_oui(r.get("mac"))
+        r["oui_family"] = oui_family
+    if oui_family and not r.get("tv_type"):
+        info = TV_CVE_DATABASE.get(oui_family)
+        if info and r.get("device_type") in (None, "", "Unknown"):
+            r["device_type"] = "%s (probable, OUI)" % info["name"]
+            r["fingerprint_source"] = "oui"
+    if oui_family:
+        r["oui_corroborates"] = (oui_family == r.get("tv_type"))
+
+    # HTTP fallback: a host neither ports nor OUI could place gets one
+    # small GET per open HTTP-ish port (Roku ECP, webOS /api/system,
+    # Tizen /api/v2, Server-header tokens) before we give up on it.
+    if not r.get("cves") and hasattr(scanner, "http_fingerprint"):
+        hit = scanner.http_fingerprint(r["ip"], r.get("open_ports", []))
+        if hit:
+            info = TV_CVE_DATABASE.get(hit["family"])
+            if info:
+                r["tv_type"] = hit["family"]
+                r["device_type"] = info["name"]
+                r.setdefault("name", info["name"])
+                r["cves"] = info["cves"]
+                r["fingerprint_source"] = "http"
+                r["fingerprint_evidence"] = "%s (%s)" % (
+                    hit["evidence"], hit["source"])
+
+    # CVE-pass findings identified themselves inside scan_host before
+    # merging; attribute the source they came from.
+    if r.get("tv_type") and "fingerprint_source" not in r:
+        r["fingerprint_source"] = "ports"
+
+    if r.get("cves"):
+        # Findings the CVE sweep added carry `name` but not
+        # `device_type` (scan_host() never sets it); the dashboard and
+        # reports key on device_type.
+        r.setdefault("device_type", r.get("name") or "Unknown")
+
+        # Version-aware filtering: when the family exposes its firmware
+        # version and a CVE's fixed_in proves that version patched it,
+        # the CVE comes off the list (fail-closed — anything ambiguous
+        # stays). Nothing here invents version data it didn't verify.
+        if hasattr(scanner, "fetch_version"):
+            version = scanner.fetch_version(r["ip"], r.get("tv_type"))
+            if version:
+                r["firmware_version"] = version
+                kept, patched = filter_cves_for_version(
+                    r["cves"], version, r.get("tv_type"))
+                if patched:
+                    r["cves"] = kept
+                    r["cves_patched_by_version"] = [c["id"] for c in patched]
+
+        r["vulnerable"] = True
+        r["cve_ids"] = [c["id"] for c in r["cves"]]
+        # Computed for BOTH sources: family detection used to skip this, so
+        # a device found only by its signature port got cve_ids but no
+        # severity and the table could not show how bad it was.
+        r["severity"] = max(
+            (c.get("severity") or "LOW" for c in r["cves"]),
+            key=lambda s: ["LOW", "MEDIUM", "HIGH", "CRITICAL"].index(s)
+            if s in ("LOW", "MEDIUM", "HIGH", "CRITICAL") else 0)
+    else:
+        # Nothing matched: say so instead of inheriting discovery's guess.
+        r["vulnerable"] = False
+        r.setdefault("device_type", "Unknown")
 
 
 def _load_cve_exploit_registry():
@@ -561,3 +704,45 @@ def kill_all_connections(target_ips=None):
     return {"sockets_closed": closed, "tools_terminated": terminated,
             "remaining_established": remaining, "verified": verified,
             "detail": "; ".join(detail), "verified_at": utc_now_iso()}
+
+
+def _ip_sort_key(r):
+    try:
+        return tuple(int(p) for p in r["ip"].split("."))
+    except (AttributeError, KeyError, ValueError):
+        return ()
+
+
+def diff_findings(previous, current):
+    """Scan-over-scan diff: what appeared, vanished, or changed between two
+    finding lists (by IP). The unit the dashboard renders and the answer to
+    *"did the fleet get better after patching?"*.
+
+    ``previous``/``current`` are finding lists of any vintage (full scan
+    results, thinned autonomous summaries) — only the common identity and
+    verdict fields are compared. Entries of ``new``/``removed`` are the
+    full findings; ``changed`` carries per-field from/to pairs.
+    """
+    prev = {r.get("ip"): r for r in (previous or []) if r.get("ip")}
+    curr = {r.get("ip"): r for r in (current or []) if r.get("ip")}
+    fields = ("device_type", "vulnerable", "severity")
+    changed = []
+    for ip in prev.keys() & curr.keys():
+        a, b = prev[ip], curr[ip]
+        delta = {f: {"from": a.get(f), "to": b.get(f)}
+                 for f in fields if a.get(f) != b.get(f)}
+        if set(a.get("open_ports", [])) != set(b.get("open_ports", [])):
+            delta["open_ports"] = {
+                "from": sorted(a.get("open_ports", [])),
+                "to": sorted(b.get("open_ports", [])),
+            }
+        if delta:
+            changed.append({"ip": ip, "changes": delta})
+    return {
+        "new": sorted((curr[i] for i in curr.keys() - prev.keys()),
+                      key=_ip_sort_key),
+        "removed": sorted((prev[i] for i in prev.keys() - curr.keys()),
+                          key=_ip_sort_key),
+        "changed": sorted(changed, key=lambda c: _ip_sort_key(c)),
+        "unchanged": len(prev.keys() & curr.keys()) - len(changed),
+    }

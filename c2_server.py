@@ -35,8 +35,9 @@ import c2_audit
 from c2_audit import (AuditEngagement, PatchEngagement, validate_client,
                       build_authorization_pdf, authorization_record_hash)
 from c2_ops import (utc_now_iso, scan_network, perform_scan, check_target,
-                    execute_patches, kill_all_connections, run_exploit,
-                    exploit_availability, run_autonomous)
+                    diff_findings, execute_patches, kill_all_connections,
+                    run_exploit, exploit_availability, run_autonomous)
+from core.scan_export import export_findings_json
 try:
     from core.auto_update import check_async as _au_check_async, status as _au_status
 except Exception:
@@ -813,6 +814,10 @@ class C2Handler(BaseHTTPRequestHandler):
             self.serve_commands()
         elif path == "/api/scans":
             self.serve_scans()
+        elif path == "/api/scans/diff":
+            self.serve_scans_diff(parse_qs(parsed.query))
+        elif path == "/api/scans/export":
+            self.serve_scans_export()
         elif path == "/api/cves":
             self.serve_cves()
         elif path == "/api/cve/feed":
@@ -835,6 +840,8 @@ class C2Handler(BaseHTTPRequestHandler):
             self.serve_engagement_report("patch")
         elif path == "/api/local_ip":
             self.send_json(200, {"ip": get_local_ip()})
+        elif path == "/api/walkthrough/state":
+            self.serve_walkthrough_state()
         elif path == "/api/host_info":
             self.serve_host_info()
         elif path == "/api/ai-keys":
@@ -894,6 +901,8 @@ class C2Handler(BaseHTTPRequestHandler):
             self.serve_cve_patch_generate()
         elif path == "/api/ai-keys":
             self.serve_ai_keys_save()
+        elif path == "/api/walkthrough/done":
+            self.handle_walkthrough_done()
         elif path == "/api/check":
             self.handle_check()
         elif path == "/api/exploit":
@@ -991,6 +1000,71 @@ class C2Handler(BaseHTTPRequestHandler):
     def serve_scans(self):
         with scans_lock:
             self.send_json(200, scans)
+
+    def _scan_runs(self):
+        """Group the flat findings history into runs, oldest first.
+
+        Every run stamps its findings with a shared ``scan_id``; findings
+        recorded before that existed (or by old builds) all belong to one
+        implicit "legacy" run.
+        """
+        runs = []
+        index = {}
+        with scans_lock:
+            snapshot = list(scans)
+        for f in snapshot:
+            sid = f.get("scan_id") or "legacy"
+            if sid not in index:
+                index[sid] = {"scan_id": sid, "count": 0,
+                              "first_seen": f.get("scanned_at")}
+                runs.append(index[sid])
+            index[sid]["count"] += 1
+        return runs, index
+
+    def serve_scans_diff(self, query):
+        """GET /api/scans/diff?base=N&compare=N — diff two runs of the scan
+        history. Defaults to the two most recent runs."""
+        runs, index = self._scan_runs()
+        if len(runs) < 2:
+            self.send_json(400, {"error": "need at least two scan runs",
+                                 "runs": len(runs)})
+            return
+
+        def _idx(name, default):
+            try:
+                i = int(query.get(name, [default])[0])
+            except (TypeError, ValueError):
+                i = default
+            return max(0, min(i, len(runs) - 1))
+
+        base = _idx("base", len(runs) - 2)
+        compare = _idx("compare", len(runs) - 1)
+        with scans_lock:
+            findings = list(scans)
+        base_findings = [f for f in findings
+                         if (f.get("scan_id") or "legacy")
+                         == runs[base]["scan_id"]]
+        compare_findings = [f for f in findings
+                            if (f.get("scan_id") or "legacy")
+                            == runs[compare]["scan_id"]]
+        self.send_json(200, {
+            "runs": runs, "base": base, "compare": compare,
+            "diff": diff_findings(base_findings, compare_findings),
+        })
+
+    def serve_scans_export(self):
+        """GET /api/scans/export — deterministic JSON of the full history."""
+        with scans_lock:
+            snapshot = list(scans)
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Disposition",
+                         'attachment; filename="spytv-scans.json"')
+        body = export_findings_json(snapshot,
+                                    generated_at=utc_now_iso()).encode()
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
     def serve_logo(self):
         try:
@@ -1456,6 +1530,10 @@ class C2Handler(BaseHTTPRequestHandler):
             # the Scan button and the Audit engagement stay in lockstep.
             results = perform_scan(cidr, cve_scanner)
 
+            # Tag the run so /api/scans/diff can group findings into scans.
+            scan_id = utc_now_iso()
+            for r in results:
+                r["scan_id"] = scan_id
             record_scan_results(results)
 
             self.send_json(200, {"status": "ok", "found": len(results), "results": results})
@@ -1582,11 +1660,13 @@ class C2Handler(BaseHTTPRequestHandler):
             cidr = str(data.get("cidr") or "").strip() or None
             summary = run_autonomous(
                 cidr, cve_scanner, self._register_autonomous_device)
-            record_scan_results(
-                [{"ip": v["ip"], "tv_type": v["tv_type"],
-                  "cves": [{"id": cid} for cid in v["cves"]],
-                  "source": "autonomous"}
-                 for v in summary["vulnerable"]])
+            scan_id = utc_now_iso()
+            autonomous_findings = [{"ip": v["ip"], "tv_type": v["tv_type"],
+                                    "cves": [{"id": cid} for cid in v["cves"]],
+                                    "source": "autonomous",
+                                    "scan_id": scan_id}
+                                   for v in summary["vulnerable"]]
+            record_scan_results(autonomous_findings)
             self.send_json(200, {"status": "ok", **summary})
         except json.JSONDecodeError as e:
             self.send_json(400, {"error": str(e)})
@@ -2172,6 +2252,41 @@ class C2Handler(BaseHTTPRequestHandler):
             with open(settings_path, "w", encoding="utf-8") as f:
                 json.dump(existing, f, indent=2)
             self.send_json(200, {"status": "ok", "settings": existing})
+        except Exception as e:
+            self.send_json(500, {"error": str(e)})
+
+    # ===== Walkthrough state (dashboard tour) =============================
+    #
+    # Server-side persistence for "first launch" state. Without this, every
+    # Electron reload (which can clear WebView localStorage) and every APK
+    # reinstall re-shows the walkthrough as if it were the first time —
+    # which looked like the dashboard was broken.
+    WALKTHROUGH_FILE = os.path.join("c2_data", "walkthrough.json")
+
+    def _read_walkthrough_state(self):
+        try:
+            with open(self.WALKTHROUGH_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                return {"done": bool(data.get("done")), "completed_at": data.get("completed_at")}
+        except (IOError, json.JSONDecodeError):
+            pass
+        return {"done": False, "completed_at": None}
+
+    def serve_walkthrough_state(self):
+        """GET /api/walkthrough/state — report whether the tour has run."""
+        try:
+            self.send_json(200, self._read_walkthrough_state())
+        except Exception as e:
+            self.send_json(500, {"error": str(e)})
+
+    def handle_walkthrough_done(self):
+        """POST /api/walkthrough/done — mark the tour as complete."""
+        try:
+            os.makedirs("c2_data", exist_ok=True)
+            with open(self.WALKTHROUGH_FILE, "w", encoding="utf-8") as f:
+                json.dump({"done": True, "completed_at": utc_now_iso()}, f, indent=2)
+            self.send_json(200, {"status": "ok", "done": True})
         except Exception as e:
             self.send_json(500, {"error": str(e)})
 

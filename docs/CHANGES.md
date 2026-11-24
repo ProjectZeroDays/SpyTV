@@ -1,4 +1,75 @@
-﻿## [2026-11-18] — SpyTV v4.6.0: C2 Control Console + Deterministic Exploit Fallback
+## [2026-11-22] — Dashboard/EXE stability + docs overhaul
+
+### Fixed
+- **EXE no longer opens a console window** when spawning the C2 server (`windowsHide: true`); server output still streams into the app's built-in terminal panel.
+- **Desktop dashboard no longer opens blank** on first launch. Root cause: renderer hardcoded the dashboard iframe to port 8443 while the spawned server listens on 9443. The renderer now reads the real port from the main process.
+
+### Improvements
+- **C2 Server read-only facts** (host, port, local IP, P2P mode) moved from the Settings tab to the Server Info tab; Settings now shows only editable engagement defaults. This makes "what is the server actually running on" a Server Info page concern, not a Settings one.
+- **Scan diff results render in a modal** instead of a hidden inline div in the middle of the Network Scan form — no more giant whitespace gap, and an explainer note clarifies that "removed" means "second scan didn't reach those IPs" rather than "device was un-exploited."
+- **Autonomous mode timeout raised** from 30s to 5 minutes, so the autonomous scan/exploit patch flow has time to finish.
+- **Walkthrough tour only shows on first launch** and persists across desktop restarts — no more popup overlay blocking the dashboard every time the app opens.
+- **Logs tab removed** from the navigation. The View Logs modal in the header is the canonical way to view the C2 activity log; the redundant tab is gone.
+
+### New endpoints
+- `GET /api/walkthrough/state` — has the first-run tour already been seen server-side
+- `POST /api/walkthrough/done` — mark the tour complete server-side
+- `GET /api/update/check` — compare current version against the latest release tag
+- `POST /api/update/check` (force) — same, but bypass the six-hour cache
+
+### Docs & packaging
+- 14 real screenshots in `docs/screenshots/` covering every dashboard tab and the packaged web/EXE/APK binaries.
+- `docs/TROUBLESHOOTING.md` and `docs/WIKI.md` updated for the new port-default, the walkthrough persistence model, the packaged-mode layout, and the new Settings/Server Info split.
+- NSIS installer gained a license page and an optional Python-dependencies section.
+
+---
+
+## [2026-11-21] — Scanner accuracy & verdict honesty: scored fingerprinting, OUI corroboration, version-aware CVEs, scan diffing
+
+### Fingerprinting (core/fingerprint.py — new)
+- **Scored port matching** replaces dict-order `any()`: signature ports weighted by distinctiveness (a port shared by N families scores 1/N), plus a full point when a family *primary* port is open; a candidate needs score >= 1.0. A lone generic port (22, formerly 8443) can no longer claim a host; distinctive ports outrank shared ones (8009 beats 5555). Primary ports declared in `FAMILY_PRIMARY_PORTS`.
+- **OUI corroboration** uses the MAC `scan_host` already collected: `data/oui_prefixes.json` (new, ~2,100 real IEEE assignments harvested from standards-oui.ieee.org) merged with the inline `mac_prefixes`. Every finding gains `oui_family` + `oui_corroborates` (agreement flag — live run surfaced three Chromecast-port/Android-OUI disagreements the old code hid). MAC compare normalizes hyphen/colon/no-separator formats. OUI *alone* labels a device "(probable, OUI)" and never attaches CVEs — an OUI proves vendor, not model/firmware.
+- **HTTP fallback fingerprinting** for unidentified hosts: one small GET per open HTTP-ish port against Roku ECP `/query/device-info`, webOS `/api/system`, Tizen `/api/v2`, and Server-header/body tokens. Loopback integration test proves the path against a real listener.
+
+### Version-aware verdicts
+- `core/version_probe.py` (new): unauthenticated firmware fetch per family (Roku ECP, webOS 3000, Tizen 8001); `filter_cves_for_version` drops a CVE **only** when its `fixed_in` names the same vendor family with exactly one parseable version and the device sorts at/above it — fail-closed on branch lists, unparsable versions, and unrelated components (a TV firmware string must never wash out a "Samba 4.6.4" CVE). Live run: 10 firmware versions read, 24 CVEs proven-patched and dropped (Rokus 6 -> 3 each).
+
+### Speed (core/liveness.py — new)
+- **Live-host pre-seed**: parallel ICMP sweep + ARP table before TCP probing; scanners only TCP-probe hosts that answered. Any failure or empty result falls back to the full range — pre-seeding can never see less than before.
+- **Shared probe cache** across generic pass, enrichment, and CVE sweep (`probe_many(..., cache=)`); overlapping (ip, port) pairs are probed once per scan.
+- **Parallel finalize**: per-finding enrichment (batched ARP-map MAC lookup, HTTP probes, version fetches) runs on a 16-thread pool instead of serially — was the dominant scan cost after the probe passes.
+- **Enrichment positives double-confirmed**: one flaky open port flipped 10.1.10.142 Hisense<->Vizio between runs; fresh positives now get a confirming re-probe before joining the identity.
+
+### Scan workflow
+- **Scan-over-scan diff**: `c2_ops.diff_findings` + `GET /api/scans/diff?base=N&compare=N` (defaults to last two runs). Findings are stamped with a per-run `scan_id` at record time; diff reports new / removed / changed (per-field from/to) / unchanged — the "did the fleet get better after patching" view.
+- **Deterministic export**: `GET /api/scans/export` + `core/scan_export.py` — same input -> same bytes (sorted, key-ordered, no embedded wall clock unless passed), MACs normalized.
+
+### Dashboard (c2_dashboard.html — web + Android asset stay byte-identical)
+- **Scan evidence per row**: under the device type, the dashboard now shows how identity was established (ports / HTTP / probable-OUI), a green OUI check when the MAC vendor agrees with the port family and an amber warning naming both families when they disagree, the firmware version read from the device, and how many CVEs that firmware proves patched (hover for the CVE ids).
+- **Compare button** (`GET /api/scans/diff`): renders new / removed / changed devices (per-field from &rarr; to) between the last two runs, plus an unchanged count — with the fewer-than-two-runs case explained in the panel instead of a silent no-op.
+- **Export button**: downloads the full scan history as the deterministic JSON from `/api/scans/export`.
+- **Tests**: new Node-harness scenario set (evidence line, OUI agree/disagree, diff happy path + error path, export flow); `pytest tests/`: **185 pass, 0 fail**.
+
+### Verified
+- **185 pytest pass, 0 fail** (fingerprint scoring, OUI, fail-closed filter, probe cache, liveness fallback, diff, export determinism, diff endpoint, OUI-probable honesty, and a loopback integration test over real sockets).
+- Live 10.1.10.0/24 re-scan: 38 devices, 0 blank device types, sorted output, 37/38 MACs, 7 OUI-corroborated + 3 flagged disagreements, 10 firmware versions, 24 CVEs patched out, progress bar monotonic 0 -> 1.
+
+## [2026-11-21] — Desktop packaging: Linux .deb + macOS .dmg
+
+### Electron C2 Desktop Client
+- **Real Linux/macOS packages** — `electron/package.json` now targets `deb` (Linux) and `dmg` (macOS) via electron-builder; `npm run build:linux` / `build:mac` in `electron/`.
+- **Bundled Python C2** — `extraResources` ships `c2_server.py`, `core/`, `data/`, `c2_data/` and the dashboard into `resources/py` (with `ai_keys.json` and clips excluded so secrets never enter shipped packages). Before this, every shipped desktop build ran offline-only because `c2_server.py` wasn't packaged.
+- **Writable state in installed packages** — `main.js` resolves the bundled server and mirrors it into the per-user data dir on first launch (version-stamped), so `c2_data` works inside read-only `/opt`/`.app` installs; non-Windows hosts default to `python3`.
+- **Pure-Python deb packager** — `scripts/build_deb_py.py` builds a valid .deb (ar + control.tar.gz + data.tar.xz, postinst sets chrome-sandbox setuid) from the `linux-unpacked` tree; used automatically by `scripts/build_deb.sh` when electron-builder's fpm step fails (fpm crashes on Windows hosts with 0xC0000005). `scripts/verify_deb.py` checks archive structure, control metadata, path sanity, and md5sums.
+- **CI workflow** — `.github/workflows/build-desktop.yml` (workflow_dispatch + version tags) builds the .deb on ubuntu-latest and the .dmg on macos-latest (unsigned) and uploads both as artifacts; the .dmg cannot be built on non-Apple hosts.
+
+### Verification
+- `spytv-c2_4.6.1_amd64.deb` built and verified: 163 payload entries, 0 structural problems, all md5sums match; control metadata (Depends/maintainer/homepage) correct.
+- Desktop client version aligned with the release line: app/lockfile `4.6.1`, script `VERSION` defaults and README badge updated.
+- Boot simulation from the packaged layout: bundled server starts with cwd in a clean writable dir, imports resolve from `resources/py`, dashboard serves, `c2_data` created.
+- `main.js` and `package.json` syntax-checked.
+
+## [2026-11-18] — SpyTV v4.6.0: C2 Control Console + Deterministic Exploit Fallback
 
 ### Dashboard
 - **Native-protocol TV controls** per device row (power, volume, mute, D-pad, channel, app launch, screenshot) via `/api/tv/control` — Roku ECP / ADB / SDB / WoL; model/OS/firmware probe via `/api/tv/info`
