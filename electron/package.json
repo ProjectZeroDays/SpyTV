@@ -1,113 +1,116 @@
 {
-    "name": "spytv-c2",
-    "version": "4.6.1",
-    "description": "SpyTV C2 desktop client - Authenticated, Inc.",
-    "homepage": "https://github.com/ProjectZeroDays/SpyTV",
-    "main": "main.js",
-    "author": "Authenticated, Inc.",
-    "scripts": {
-        "start": "electron .",
-        "build": "electron-builder --win portable",
-        "build:win": "electron-builder --win portable",
-        "build:linux": "electron-builder --linux deb",
-        "build:mac": "electron-builder --mac dmg"
+  "name": "spytv-c2",
+  "version": "4.6.1",
+  "description": "SpyTV C2 desktop client - Authenticated, Inc.",
+  "homepage": "https://github.com/ProjectZeroDays/SpyTV",
+  "main": "main.js",
+  "author": "Authenticated, Inc.",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win portable",
+    "build:win": "electron-builder --win portable",
+    "build:linux": "electron-builder --linux deb",
+    "build:mac": "electron-builder --mac dmg"
+  },
+  "devDependencies": {
+    "electron": "^44.9.1",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.authenticated.spytv",
+    "productName": "SpyTV C2",
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "offline.html",
+      "icon.png"
+    ],
+    "extraResources": [
+      {
+        "from": "../c2_server.py",
+        "to": "py/c2_server.py"
+      },
+      {
+        "from": "../c2_cve_feed.py",
+        "to": "py/c2_cve_feed.py"
+      },
+      {
+        "from": "../c2_audit.py",
+        "to": "py/c2_audit.py"
+      },
+      {
+        "from": "../c2_ops.py",
+        "to": "py/c2_ops.py"
+      },
+      {
+        "from": "../c2_dashboard.html",
+        "to": "py/c2_dashboard.html"
+      },
+      {
+        "from": "../logo.png",
+        "to": "py/logo.png"
+      },
+      {
+        "from": "../requirements.txt",
+        "to": "py/requirements.txt"
+      },
+      {
+        "from": "../docs",
+        "to": "py/docs",
+        "filter": [
+          "**/*.md",
+          "!**/node_modules/**"
+        ]
+      },
+      {
+        "from": "../core",
+        "to": "py/core"
+      },
+      {
+        "from": "../c2_data",
+        "to": "py/c2_data",
+        "filter": [
+          "**/*",
+          "!ai_keys.json",
+          "!clips/**"
+        ]
+      },
+      {
+        "from": "../data",
+        "to": "py/data",
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**"
+        ]
+      }
+    ],
+    "directories": {
+      "output": "dist"
     },
-    "devDependencies": {
-        "electron": "^44.5.1",
-        "electron-builder": "^26.15.3"
+    "compression": "normal",
+    "npmRebuild": false,
+    "asar": false,
+    "win": {
+      "target": "portable",
+      "icon": "icon.png"
     },
-    "build": {
-        "appId": "com.authenticated.spytv",
-        "productName": "SpyTV C2",
-        "files": [
-            "main.js",
-            "preload.js",
-            "index.html",
-            "offline.html",
-            "icon.png"
-        ],
-        "extraResources": [
-            {
-                "from": "../c2_server.py",
-                "to": "py/c2_server.py"
-            },
-            {
-                "from": "../c2_cve_feed.py",
-                "to": "py/c2_cve_feed.py"
-            },
-            {
-                "from": "../c2_audit.py",
-                "to": "py/c2_audit.py"
-            },
-            {
-                "from": "../c2_ops.py",
-                "to": "py/c2_ops.py"
-            },
-            {
-                "from": "../c2_dashboard.html",
-                "to": "py/c2_dashboard.html"
-            },
-            {
-                "from": "../logo.png",
-                "to": "py/logo.png"
-            },
-            {
-                "from": "../requirements.txt",
-                "to": "py/requirements.txt"
-            },
-            {
-                "from": "../docs",
-                "to": "py/docs",
-                "filter": [
-                    "**/*.md",
-                    "!**/node_modules/**"
-                ]
-            },
-            {
-                "from": "../core",
-                "to": "py/core"
-            },
-            {
-                "from": "../c2_data",
-                "to": "py/c2_data",
-                "filter": [
-                    "**/*",
-                    "!ai_keys.json",
-                    "!clips/**"
-                ]
-            },
-            {
-                "from": "../data",
-                "to": "py/data",
-                "filter": [
-                    "**/*",
-                    "!**/__pycache__/**"
-                ]
-            }
-        ],
-        "directories": {
-            "output": "dist"
-        },
-        "compression": "normal",
-        "npmRebuild": false,
-        "asar": false,
-        "win": {
-            "target": "portable",
-            "icon": "icon.png"
-        },
-        "linux": {
-            "target": [
-                "deb"
-            ],
-            "icon": "icon.png",
-            "category": "Network",
-            "maintainer": "Authenticated, Inc."
-        },
-        "mac": {
-            "target": [
-                "dmg"
-            ],
-            "category": "public.app-category.utilities"
-        }
+    "linux": {
+      "target": [
+        "deb"
+      ],
+      "icon": "icon.png",
+      "category": "Network",
+      "maintainer": "Authenticated, Inc."
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.utilities"
     }
+  },
+  "overrides": {
+    "minimatch": "^11.0.1"
+  }
 }

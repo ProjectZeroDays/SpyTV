@@ -612,7 +612,7 @@ function jsonResponse(obj, status = 200) {
   });
   diffSlot.innerHTML = '';
   await compareScans();
-  ok(diffModal.classList.added.includes('active'), 'diff modal shown');
+  ok(diffModal.added.includes('active'), 'diff modal shown');
   const d = diffSlot.innerHTML;
   ok(d.includes('New devices (1)') && d.includes('10.1.10.142'),
      'new device listed');
@@ -632,7 +632,7 @@ function jsonResponse(obj, status = 200) {
     { error: 'need at least two scan runs', runs: 1 });
   diffSlot.innerHTML = '';
   await compareScans();
-  ok(diffModal.classList.added.includes('active'), 'diff modal shown on error');
+  ok(diffModal.added.includes('active'), 'diff modal shown on error');
   ok(diffSlot.innerHTML.includes('need at least two scan runs'),
      'fewer-than-two-runs explained in the modal', diffSlot.innerHTML.slice(0, 120));
   ok(log.children.some(c => String(c.innerHTML).includes('Scan comparison failed')),
