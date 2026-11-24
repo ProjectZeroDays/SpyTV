@@ -620,11 +620,27 @@
         appendTerminal(text);
       });
 
+      // Read the real C2 port from main once at startup. Before this, the
+      // iframe src was hardcoded to 8443 while main.js spawned the server on
+      // 9443 — which produced a blank dashboard and 404s on /docs/* even
+      // though the server was healthy.
+      let C2_BASE = 'http://127.0.0.1:9443';
+      (async () => {
+        try {
+          const info = await window.spytv.getServerInfo();
+          if (info && info.c2Port) {
+            C2_BASE = 'http://127.0.0.1:' + info.c2Port;
+          }
+        } catch (e) {
+          appendTerminal('[WARN] could not read c2Port from main, defaulting to 9443: ' + e.message);
+        }
+      })();
+
       const removeStatus = window.spytv.onServerStatus((status) => {
         if (status.online) {
           loadingEl.classList.add('hidden');
           offlineEl.style.display = 'none';
-          frame.src = 'http://127.0.0.1:8443/';
+          frame.src = C2_BASE + '/';
           setStatus(true, 'Server online');
         } else {
           loadingEl.classList.add('hidden');

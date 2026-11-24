@@ -1,0 +1,56 @@
+name: Desktop Packages
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+jobs:
+  linux-deb:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        working-directory: electron
+        run: npm ci
+
+      - name: Build .deb
+        working-directory: electron
+        run: npx electron-builder --linux deb
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: spytv-c2-deb
+          path: electron/dist/*.deb
+          if-no-files-found: error
+
+  mac-dmg:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        working-directory: electron
+        run: npm ci
+
+      - name: Build .dmg
+        working-directory: electron
+        run: npx electron-builder --mac dmg
+        env:
+          # No Apple signing certificate in CI — build unsigned.
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: spytv-c2-dmg
+          path: electron/dist/*.dmg
+          if-no-files-found: error

@@ -1,2 +1,3 @@
-﻿4aa567d67c85c8f199864ed034e0cc929e422c226619d529baf9699f80eb9f0b  SpyTV-C2-4.5.2-portable.exe
-ab766d45f551ea31d09a47617ba742d77f742bfdfe785248f56bc77f0ad6da9c  SpyTV.apk
+9638c0a5c4fd83848e5458f79c954defed14ba9f0873d35eea201955e40abbb7  SpyTV.apk
+62b9d6b47486cb8e55e51b6d86ef2fde39b62a2bef4189eadf773df801ec46de  SpyTV-C2-standalone.exe
+fdecc016b12a0be8d845be0ffac5a22e6c2651fbc5dd1b0b58b0ebf311d87bf9  SpyTV-C2-Setup.exe

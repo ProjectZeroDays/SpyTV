@@ -1,7 +1,7 @@
 # SpyTV — TV Security Assessment Platform
 
 [![Latest Release](https://img.shields.io/github/v/release/ProjectZeroDays/SpyTV?include_prereleases&label=release&color=blue)](https://github.com/ProjectZeroDays/SpyTV/releases/latest)
-[![Version 4.5.2](https://img.shields.io/badge/version-v4.5.2-brightgreen)](https://github.com/ProjectZeroDays/SpyTV/releases/tag/v4.5.2)
+[![Version 4.6.1](https://img.shields.io/badge/version-v4.6.1-brightgreen)](https://github.com/ProjectZeroDays/SpyTV/releases/tag/v4.6.1)
 [![License](https://img.shields.io/github/license/ProjectZeroDays/SpyTV)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-passing-green)](https://github.com/ProjectZeroDays/SpyTV/actions)
 [![Windows](https://img.shields.io/badge/platform-Windows-blue)](https://github.com/ProjectZeroDays/SpyTV/releases/latest)

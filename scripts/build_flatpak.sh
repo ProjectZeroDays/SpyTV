@@ -1,7 +1,7 @@
 #!/bin/bash
 # Build Flatpak for SpyTV C2
 # Requires: flatpak-builder (run in Linux VM)
-VERSION=${VERSION:-4.5.2}
+VERSION=${VERSION:-4.6.1}
 mkdir -p flatpak
 cat > flatpak/com.authenticated.spytv-c2.json <<EOF
 {

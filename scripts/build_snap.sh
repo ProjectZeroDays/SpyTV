@@ -1,7 +1,7 @@
 #!/bin/bash
 # Build Snap for SpyTV C2
 # Requires: snapcraft (run inside Ubuntu VM or snapcraft container)
-VERSION=${VERSION:-4.5.2}
+VERSION=${VERSION:-4.6.1}
 mkdir -p snap/meta
 cat > snap/snapcraft.yaml <<EOF
 name: spytv-c2

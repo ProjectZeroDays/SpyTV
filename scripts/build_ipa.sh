@@ -1,6 +1,6 @@
 #!/bin/bash
 # Build .ipa for iOS / iPad (requires macOS + Xcode in VM)
-VERSION=${VERSION:-4.5.2}
+VERSION=${VERSION:-4.6.1}
 echo "Building .ipa requires Xcode command-line tools (xcrun, xcodebuild)"
 echo "Run on macOS VM with Apple Developer account configured"
 # Electron does not support .ipa directly — wrap electron output or use Capacitor/Cordova

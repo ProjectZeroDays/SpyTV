@@ -1,23 +1,23 @@
 #!/bin/bash
-# Build .deb package for SpyTV C2 (Linux/VM)
-# Requires: dpkg-deb, fakeroot, electron-builder or manual packaging
+# Build .deb package for the SpyTV C2 desktop client.
+# Preferred: electron-builder (fpm). On hosts where fpm is broken
+# (electron-builder's fpm crashes on Windows with 0xC0000005), fall back to
+# the pure-Python packager, which consumes the linux-unpacked tree that
+# electron-builder produces before the packaging step fails.
 set -euo pipefail
-VERSION=${VERSION:-4.5.2}
-PKGDIR="build/deb/packages/SpyTV-c2_${VERSION}_amd64"
-mkdir -p "$PKGDIR/DEBIAN" "$PKGDIR/usr/share/SpyTV-c2" "$PKGDIR/usr/bin"
-cp -r electron/dist/win-unpacked/* "$PKGDIR/usr/share/SpyTV-c2/" 2>/dev/null || cp -r electron/dist/SpyTV\ C2\ 4.5.2.exe "$PKGDIR/usr/share/SpyTV-c2/" 2>/dev/null || echo "No electron dist; package Python C2 instead"
-# Fallback: package Python server as deb
-cp c2_server.py c2_dashboard.html run_c2.bat requirements.txt "$PKGDIR/usr/share/SpyTV-c2/" 2>/dev/null || true
-cat > "$PKGDIR/DEBIAN/control" <<EOF
-Package: spytv-c2
-Version: ${VERSION}
-Section: net
-Priority: optional
-Architecture: amd64
-Depends: python3, python3-yaml, python3-requests, python3-colorama
-Maintainer: Authenticated, Inc.
-Description: SpyTV C2 — TV Security Assessment Platform
- The full C2 server, dashboard, and defensive toolkit for
- smart-TV security assessment.
-EOF
-echo "Built .deb in $PKGDIR (run dpkg-deb --build $PKGDIR)"
+cd "$(dirname "$0")/.."
+VERSION=${VERSION:-4.6.1}
+
+cd electron
+if npx electron-builder --linux deb; then
+  echo ".deb written to electron/dist/"
+  exit 0
+fi
+cd ..
+echo "electron-builder fpm step failed; using Python packager" >&2
+if [ ! -f electron/dist/linux-unpacked/resources/py/c2_server.py ]; then
+  echo "electron/dist/linux-unpacked is missing — run 'npx electron-builder --linux deb' once first" >&2
+  exit 1
+fi
+python scripts/build_deb_py.py --root electron/dist/linux-unpacked \
+  --out "electron/dist/spytv-c2_${VERSION}_amd64.deb" --version "$VERSION"
