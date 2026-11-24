@@ -373,18 +373,24 @@ def _finalize_one(r, scanner, arp_map):
     # HTTP fallback: a host neither ports nor OUI could place gets one
     # small GET per open HTTP-ish port (Roku ECP, webOS /api/system,
     # Tizen /api/v2, Server-header tokens) before we give up on it.
-    if not r.get("cves") and hasattr(scanner, "http_fingerprint"):
-        hit = scanner.http_fingerprint(r["ip"], r.get("open_ports", []))
-        if hit:
-            info = TV_CVE_DATABASE.get(hit["family"])
-            if info:
-                r["tv_type"] = hit["family"]
-                r["device_type"] = info["name"]
-                r.setdefault("name", info["name"])
-                r["cves"] = info["cves"]
-                r["fingerprint_source"] = "http"
-                r["fingerprint_evidence"] = "%s (%s)" % (
-                    hit["evidence"], hit["source"])
+    # A confident HTTP signature hit (a real Roku answering its ECP
+    # device-info, for example) is stronger evidence than a port number
+    # alone, so it also runs when ports produced a weak match and
+    # overrides it — ports say "could be", the HTTP response says "is".
+    if hasattr(scanner, "http_fingerprint"):
+        httpish = [p for p in (r.get("open_ports") or []) if p in (80, 8080, 8443) or p >= 8000 or p in (3000, 18080, 56789)]
+        if not r.get("cves") or httpish:
+            hit = scanner.http_fingerprint(r["ip"], r.get("open_ports", []))
+            if hit:
+                info = TV_CVE_DATABASE.get(hit["family"])
+                if info:
+                    r["tv_type"] = hit["family"]
+                    r["device_type"] = info["name"]
+                    r["name"] = info["name"]
+                    r["cves"] = info["cves"]
+                    r["fingerprint_source"] = "http"
+                    r["fingerprint_evidence"] = "%s (%s)" % (
+                        hit["evidence"], hit["source"])
 
     # CVE-pass findings identified themselves inside scan_host before
     # merging; attribute the source they came from.
